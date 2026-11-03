@@ -484,7 +484,7 @@ adminRouter.get('/submissions', (req, res) => {
   const rows = db
     .prepare(
       `SELECT s.id, s.slug, s.total, s.tier, s.contact_status, s.created_at, s.claimed_at,
-              i.name, i.note, i.channel
+              s.slots, i.name, i.note, i.channel
        FROM submissions s JOIN invites i ON i.id = s.invite_id
        WHERE (? = '' OR i.name LIKE ? OR i.note LIKE ? OR i.channel LIKE ?)
          AND (? = '' OR s.contact_status = ?)
@@ -504,6 +504,7 @@ adminRouter.get('/submissions', (req, res) => {
       total: row.total,
       tier: row.tier,
       claimed: Boolean(row.claimed_at),
+      slots: parseJson<string[]>(row.slots, []),
       contactStatus: row.contact_status,
       createdAt: row.created_at,
       reportSlug: row.slug

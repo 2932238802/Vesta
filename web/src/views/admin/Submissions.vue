@@ -40,6 +40,7 @@
               <th>档位</th>
               <th>总分</th>
               <th>领取</th>
+              <th>希望时间</th>
               <th>联系状态</th>
               <th>提交时间</th>
               <th class="actions-col">操作</th>
@@ -56,6 +57,12 @@
               <td>
                 <span v-if="row.claimed" class="chip accent">已领取</span>
                 <span v-else class="quiet small">未领取</span>
+              </td>
+              <td class="slots">
+                <template v-if="row.slots.length">
+                  <span v-for="slot in row.slots" :key="slot">{{ slot }}</span>
+                </template>
+                <span v-else class="quiet small">—</span>
               </td>
               <td>
                 <span class="chip" :class="contactClass(row.contactStatus)">
@@ -205,6 +212,14 @@ onMounted(load)
   margin-top: 3px;
   font-size: 11.5px;
   color: var(--ink-3);
+}
+
+.slots {
+  display: grid;
+  gap: 2px;
+  min-width: 150px;
+  font-size: 12px;
+  color: var(--ink-2);
 }
 
 .row-actions {

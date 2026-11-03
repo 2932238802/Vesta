@@ -2,6 +2,15 @@
   <div class="report-page" :style="themeStyle">
     <header class="bar">
       <div class="actions">
+        <button
+          v-if="payload"
+          class="btn quiet"
+          type="button"
+          :disabled="exporting"
+          @click="saveImage"
+        >
+          {{ exporting ? '正在生成' : '保存图片' }}
+        </button>
         <button class="btn quiet" type="button" @click="copyLink">复制链接</button>
         <button v-if="payload" class="btn quiet" type="button" @click="print">打印 / 保存</button>
       </div>
@@ -30,7 +39,7 @@
     </main>
 
     <main v-else class="wrap fade-in">
-      <div class="sheet">
+      <div ref="sheetEl" class="sheet">
         <ReportBlocks :payload="payload" />
       </div>
 
@@ -83,12 +92,26 @@
     <Transition name="toast">
       <div v-if="toast" class="toast">{{ toast }}</div>
     </Transition>
+
+    <div v-if="shot" class="shot-mask" @click.self="shot = ''">
+      <div class="shot-panel">
+        <p class="shot-hint">长按图片可保存到相册；电脑上也可以直接下载</p>
+        <div class="shot-frame">
+          <img :src="shot" alt="报告图片" />
+        </div>
+        <div class="shot-actions">
+          <a class="btn" :href="shot" :download="`vesta-report-${slug}.png`">下载图片</a>
+          <button class="btn ghost" type="button" @click="shot = ''">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { toPng } from 'html-to-image'
 import type { ReportPayload } from '@shared/types'
 import { api } from '@/api'
 import ReportBlocks from '@/components/ReportBlocks.vue'
@@ -108,6 +131,9 @@ const agree = ref(false)
 const claiming = ref(false)
 const claimError = ref('')
 const toast = ref('')
+const sheetEl = ref<HTMLElement | null>(null)
+const exporting = ref(false)
+const shot = ref('')
 
 let pollTimer: number | undefined
 let slowTimer: number | undefined
@@ -225,6 +251,25 @@ async function copyLink() {
 
 function print() {
   window.print()
+}
+
+async function saveImage() {
+  if (!sheetEl.value || exporting.value) return
+  exporting.value = true
+  try {
+    if (document.fonts) await document.fonts.ready
+    const dataUrl = await toPng(sheetEl.value, {
+      pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+      backgroundColor: payload.value?.theme.paper ?? '#f7f4ed',
+      cacheBust: true,
+      style: { margin: '0', borderRadius: '0' }
+    })
+    shot.value = dataUrl
+  } catch {
+    flash('生成图片失败，可以改用“打印 / 保存”')
+  } finally {
+    exporting.value = false
+  }
 }
 
 function flash(message: string) {
@@ -425,6 +470,61 @@ function flash(message: string) {
   font-size: 22px;
   color: var(--ink);
   margin-bottom: 12px;
+}
+
+.shot-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(20, 19, 16, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.shot-panel {
+  width: 100%;
+  max-width: 640px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--surface);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+
+.shot-hint {
+  font-size: 12px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.shot-frame {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-radius: 12px;
+  background: var(--paper);
+  text-align: center;
+}
+
+.shot-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.shot-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.shot-actions .btn {
+  flex: 1;
+  text-align: center;
 }
 
 .toast-enter-active,

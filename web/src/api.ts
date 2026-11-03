@@ -299,6 +299,7 @@ export interface AdminSubmissionSummary {
   total: number
   tier: string
   claimed: boolean
+  slots: string[]
   contactStatus: string
   createdAt: string
   reportSlug: string
