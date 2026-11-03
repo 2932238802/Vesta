@@ -123,6 +123,19 @@ export function setSetting(key: string, value: string): void {
   ).run(key, value)
 }
 
+// 后台同一时间只保留一个有效登录会话，存在 settings 里以便重启后仍然有效。
+export function getActiveAdminSession(): string | null {
+  return getSetting('admin_session')
+}
+
+export function setActiveAdminSession(sessionId: string): void {
+  setSetting('admin_session', sessionId)
+}
+
+export function clearActiveAdminSession(): void {
+  db.prepare("DELETE FROM settings WHERE key = 'admin_session'").run()
+}
+
 export function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${crypto.randomBytes(4).toString('hex')}`
 }

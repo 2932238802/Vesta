@@ -8,6 +8,7 @@ import { validateAnswers, validateSurvey, validateTemplate } from '../../../shar
 import { config } from '../env'
 import { checkCredentials, createToken, noStore, requireAdmin } from '../auth'
 import {
+  clearActiveAdminSession,
   db,
   getActiveSurvey,
   getReportSkill,
@@ -51,6 +52,12 @@ adminRouter.use(requireAdmin())
 
 adminRouter.get('/me', (req, res) => {
   res.json({ user: { username: res.locals.admin } })
+})
+
+adminRouter.post('/logout', (req, res) => {
+  noStore(res)
+  clearActiveAdminSession()
+  res.json({ ok: true })
 })
 
 interface InviteRow {

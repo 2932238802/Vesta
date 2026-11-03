@@ -54,8 +54,8 @@ export const config = {
   // 只有部署在 Nginx 等反向代理后面时才信任 X-Forwarded-For；
   // 直接对公网监听时必须关闭，否则限流可以伪造请求头绕过。
   trustProxy: read('TRUST_PROXY') === 'true',
-  // 登录有效期，单位秒
-  sessionTtl: Number(read('SESSION_TTL') ?? 60 * 60 * 8),
+  // 登录有效期，单位秒；默认 30 天，登录状态会保留在浏览器里
+  sessionTtl: Number(read('SESSION_TTL') ?? 60 * 60 * 24 * 30),
   deepseekApiKey: read('DEEPSEEK_API_KEY'),
   deepseekBaseUrl: read('DEEPSEEK_BASE_URL') ?? 'https://api.deepseek.com',
   deepseekModel: read('DEEPSEEK_MODEL') ?? 'deepseek-chat',

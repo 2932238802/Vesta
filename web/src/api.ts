@@ -55,7 +55,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     if (response.status === 401 && options.auth) {
       clearToken()
       if (!location.pathname.startsWith('/admin/login')) {
-        location.href = '/admin/login'
+        location.href = '/admin/login?expired=1'
       }
     }
     const message =
@@ -94,6 +94,9 @@ export const api = {
   },
   me() {
     return request<{ user: { username: string } }>('/api/admin/me', { auth: true })
+  },
+  logout() {
+    return request<{ ok: true }>('/api/admin/logout', { method: 'POST', auth: true })
   },
   overview() {
     return request<Overview>('/api/admin/overview', { auth: true })

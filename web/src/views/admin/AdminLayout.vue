@@ -44,7 +44,12 @@ onMounted(async () => {
   }
 })
 
-function logout() {
+async function logout() {
+  try {
+    await api.logout()
+  } catch {
+    // 会话已失效时也继续清理本地登录状态
+  }
   clearToken()
   router.replace('/admin/login')
 }

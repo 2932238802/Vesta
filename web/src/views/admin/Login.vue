@@ -38,13 +38,15 @@
         <button class="btn wide" type="submit" :disabled="loading">
           {{ loading ? '正在登录' : '进入后台' }}
         </button>
+
+        <p class="login-note">登录状态会保留 30 天；同一时间只能一台设备登录。</p>
       </form>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, setToken } from '@/api'
 
@@ -54,6 +56,12 @@ const username = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref('')
+
+onMounted(() => {
+  if (route.query.expired === '1') {
+    error.value = '登录已失效，或账号已在其他设备登录，请重新登录'
+  }
+})
 
 async function submit() {
   if (!username.value.trim() || !password.value) {
@@ -117,6 +125,13 @@ async function submit() {
   font-size: 26px;
   font-weight: 600;
   margin-top: -6px;
+}
+
+.login-note {
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--ink-3);
+  text-align: center;
 }
 
 @media (max-width: 820px) {

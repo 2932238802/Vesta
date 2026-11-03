@@ -1,10 +1,12 @@
 import crypto from 'node:crypto'
 import type { RequestHandler, Response } from 'express'
 import { config } from './env'
+import { getActiveAdminSession, setActiveAdminSession } from './db'
 
 interface TokenPayload {
   sub: string
   exp: number
+  sid: string
 }
 
 function sign(data: string): string {
@@ -12,9 +14,13 @@ function sign(data: string): string {
 }
 
 export function createToken(username: string): string {
+  // 每次登录生成新的会话 id 并落库，旧设备上的 token 会立即失效。
+  const sid = crypto.randomBytes(18).toString('base64url')
+  setActiveAdminSession(sid)
   const payload: TokenPayload = {
     sub: username,
-    exp: Math.floor(Date.now() / 1000) + config.sessionTtl
+    exp: Math.floor(Date.now() / 1000) + config.sessionTtl,
+    sid
   }
   const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
   return `${body}.${sign(body)}`
@@ -33,6 +39,7 @@ export function verifyToken(token: string | undefined): TokenPayload | null {
   try {
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as TokenPayload
     if (!payload?.sub || typeof payload.exp !== 'number') return null
+    if (typeof payload.sid !== 'string' || !payload.sid) return null
     if (payload.exp * 1000 <= Date.now()) return null
     return payload
   } catch {
@@ -57,6 +64,10 @@ export function requireAdmin(): RequestHandler {
     const payload = verifyToken(token)
     if (!payload) {
       res.status(401).json({ error: '登录已失效，请重新登录' })
+      return
+    }
+    if (payload.sid !== getActiveAdminSession()) {
+      res.status(401).json({ error: '账号已在其他设备登录，请重新登录' })
       return
     }
     res.locals.admin = payload.sub
