@@ -9,6 +9,7 @@
         <RouterLink to="/admin" exact-active-class="on">概览</RouterLink>
         <RouterLink to="/admin/invites" active-class="on">邀请链接</RouterLink>
         <RouterLink to="/admin/submissions" active-class="on">答卷与名单</RouterLink>
+        <RouterLink to="/admin/appointments" active-class="on">咨询时间预约</RouterLink>
         <RouterLink to="/admin/survey" active-class="on">问卷</RouterLink>
         <RouterLink to="/admin/report" active-class="on">报告</RouterLink>
         <RouterLink to="/admin/skill" active-class="on">分析 Skill</RouterLink>

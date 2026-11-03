@@ -10,6 +10,7 @@ import AdminLayout from './views/admin/AdminLayout.vue'
 import Dashboard from './views/admin/Dashboard.vue'
 import Invites from './views/admin/Invites.vue'
 import Submissions from './views/admin/Submissions.vue'
+import Appointments from './views/admin/Appointments.vue'
 import SubmissionDetail from './views/admin/SubmissionDetail.vue'
 import SurveyEditor from './views/admin/SurveyEditor.vue'
 import ReportEditor from './views/admin/ReportEditor.vue'
@@ -43,6 +44,7 @@ export const router = createRouter({
         { path: '', name: 'admin-dashboard', component: Dashboard },
         { path: 'invites', name: 'admin-invites', component: Invites },
         { path: 'submissions', name: 'admin-submissions', component: Submissions },
+        { path: 'appointments', name: 'admin-appointments', component: Appointments },
         { path: 'submissions/:id', name: 'admin-submission', component: SubmissionDetail },
         { path: 'survey', name: 'admin-survey', component: SurveyEditor },
         { path: 'report', name: 'admin-report', component: ReportEditor },

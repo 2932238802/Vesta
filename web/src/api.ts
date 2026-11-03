@@ -134,6 +134,15 @@ export const api = {
       { auth: true }
     )
   },
+  appointments(params: { q?: string; contactStatus?: string } = {}) {
+    return request<{ appointments: AdminAppointment[] }>(
+      `/api/admin/appointments${query({
+        q: params.q,
+        contactStatus: params.contactStatus
+      })}`,
+      { auth: true }
+    )
+  },
   submission(id: string) {
     return request<AdminSubmissionDetail>(`/api/admin/submissions/${id}`, { auth: true })
   },
@@ -303,6 +312,22 @@ export interface AdminSubmissionSummary {
   contactStatus: string
   createdAt: string
   reportSlug: string
+}
+
+export interface AdminAppointment {
+  id: string
+  name: string
+  note: string
+  channel: string
+  wechat: string
+  slots: string[]
+  contactStatus: string
+  adminNotes: string
+  claimedAt: string | null
+  createdAt: string
+  reportSlug: string
+  total: number
+  tier: string
 }
 
 export interface AdminSubmissionDetail {

@@ -512,6 +512,44 @@ adminRouter.get('/submissions', (req, res) => {
   })
 })
 
+adminRouter.get('/appointments', (req, res) => {
+  noStore(res)
+  const q = clampString(req.query.q, 80)
+  const contactStatus = clampString(req.query.contactStatus, 20)
+  const rows = db
+    .prepare(
+      `SELECT s.id, s.slug, s.total, s.tier, s.contact_status, s.created_at, s.claimed_at,
+              s.slots, s.wechat_enc, s.admin_notes, i.name, i.note, i.channel
+       FROM submissions s JOIN invites i ON i.id = s.invite_id
+       WHERE s.claimed_at IS NOT NULL
+         AND (? = '' OR i.name LIKE ? OR i.note LIKE ? OR i.channel LIKE ?)
+         AND (? = '' OR s.contact_status = ?)
+       ORDER BY s.claimed_at DESC LIMIT 300`
+    )
+    .all(q, `%${q}%`, `%${q}%`, `%${q}%`, contactStatus, contactStatus) as Record<
+    string,
+    unknown
+  >[]
+
+  res.json({
+    appointments: rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      note: row.note,
+      channel: row.channel,
+      wechat: row.wechat_enc ? decryptText(String(row.wechat_enc)) : '',
+      slots: parseJson<string[]>(row.slots, []),
+      contactStatus: row.contact_status,
+      adminNotes: row.admin_notes,
+      claimedAt: row.claimed_at,
+      createdAt: row.created_at,
+      reportSlug: row.slug,
+      total: row.total,
+      tier: row.tier
+    }))
+  })
+})
+
 adminRouter.get('/submissions/:id', (req, res) => {
   noStore(res)
   const row = db.prepare('SELECT * FROM submissions WHERE id = ?').get(req.params.id) as
