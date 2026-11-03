@@ -1,0 +1,340 @@
+import type { ReportPayload, ReportResponse, ReportTemplate, Survey } from '@shared/types'
+
+export type { Answers, Question, ReportPayload, ReportResponse, ReportTemplate, Survey } from '@shared/types'
+
+const TOKEN_KEY = 'vesta.admin.token'
+
+export function getToken(): string {
+  return localStorage.getItem(TOKEN_KEY) ?? ''
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token)
+}
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY)
+}
+
+export class ApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
+interface RequestOptions {
+  method?: string
+  body?: unknown
+  auth?: boolean
+}
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const headers: Record<string, string> = {}
+  if (options.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (options.auth) headers.Authorization = `Bearer ${getToken()}`
+
+  const response = await fetch(path, {
+    method: options.method ?? 'GET',
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body)
+  })
+
+  let data: unknown = null
+  const text = await response.text()
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      data = { error: text }
+    }
+  }
+
+  if (!response.ok) {
+    if (response.status === 401 && options.auth) {
+      clearToken()
+      if (!location.pathname.startsWith('/admin/login')) {
+        location.href = '/admin/login'
+      }
+    }
+    const message =
+      data && typeof data === 'object' && 'error' in data
+        ? String((data as { error: unknown }).error)
+        : '请求失败'
+    throw new ApiError(message, response.status)
+  }
+
+  return data as T
+}
+
+function query(params: Record<string, string | undefined>): string {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value) search.set(key, value)
+  }
+  const text = search.toString()
+  return text ? `?${text}` : ''
+}
+
+export interface InvitePayload {
+  name: string
+  note: string
+  survey: Survey
+  submitted: boolean
+  reportSlug: string | null
+}
+
+export const api = {
+  login(username: string, password: string) {
+    return request<{ token: string; user: { username: string } }>('/api/admin/login', {
+      method: 'POST',
+      body: { username, password }
+    })
+  },
+  me() {
+    return request<{ user: { username: string } }>('/api/admin/me', { auth: true })
+  },
+  overview() {
+    return request<Overview>('/api/admin/overview', { auth: true })
+  },
+  invites(params: { q?: string; status?: string } = {}) {
+    return request<{ invites: AdminInvite[] }>(
+      `/api/admin/invites${query({ q: params.q, status: params.status })}`,
+      { auth: true }
+    )
+  },
+  createInvites(body: {
+    names?: string[]
+    name?: string
+    note?: string
+    channel?: string
+    expiresAt?: string
+  }) {
+    return request<{ invites: { id: string; name: string; token: string; path: string }[] }>(
+      '/api/admin/invites',
+      { method: 'POST', body, auth: true }
+    )
+  },
+  deleteInvite(id: string) {
+    return request<{ ok: true }>(`/api/admin/invites/${id}`, { method: 'DELETE', auth: true })
+  },
+  rotateInvite(id: string) {
+    return request<{ token: string; path: string }>(`/api/admin/invites/${id}/rotate`, {
+      method: 'POST',
+      auth: true
+    })
+  },
+  submissions(params: { q?: string; contactStatus?: string } = {}) {
+    return request<{ submissions: AdminSubmissionSummary[] }>(
+      `/api/admin/submissions${query({
+        q: params.q,
+        contactStatus: params.contactStatus
+      })}`,
+      { auth: true }
+    )
+  },
+  submission(id: string) {
+    return request<AdminSubmissionDetail>(`/api/admin/submissions/${id}`, { auth: true })
+  },
+  patchSubmission(
+    id: string,
+    body: {
+      contactStatus?: string
+      adminNotes?: string
+      overrides?: { diagnosis?: string; closing?: string }
+    }
+  ) {
+    return request<{ ok: true }>(`/api/admin/submissions/${id}`, {
+      method: 'PATCH',
+      body,
+      auth: true
+    })
+  },
+  survey() {
+    return request<{ survey: Survey; versions: number }>('/api/admin/survey', { auth: true })
+  },
+  saveSurvey(survey: Survey) {
+    return request<{ survey: Survey }>('/api/admin/survey', {
+      method: 'PUT',
+      body: { survey },
+      auth: true
+    })
+  },
+  template() {
+    return request<{ template: ReportTemplate }>('/api/admin/template', { auth: true })
+  },
+  saveTemplate(template: ReportTemplate) {
+    return request<{ template: ReportTemplate }>('/api/admin/template', {
+      method: 'PUT',
+      body: { template },
+      auth: true
+    })
+  },
+  skill() {
+    return request<{
+      skill: string
+      defaultSkill: string
+      ai: { configured: boolean; searchConfigured: boolean; model: string }
+    }>('/api/admin/skill', { auth: true })
+  },
+  saveSkill(skill: string) {
+    return request<{ skill: string }>('/api/admin/skill', {
+      method: 'PUT',
+      body: { skill },
+      auth: true
+    })
+  },
+  regenerateReport(id: string) {
+    return request<{ ok: true }>(`/api/admin/submissions/${id}/report`, {
+      method: 'POST',
+      auth: true
+    })
+  },
+  previewReport(body: { template?: ReportTemplate; survey?: Survey }) {
+    return request<ReportPayload>('/api/admin/report/preview', {
+      method: 'POST',
+      body,
+      auth: true
+    })
+  },
+  async exportSubmissions(q: string) {
+    const response = await fetch(
+      `/api/admin/submissions/export.csv${query({ q })}`,
+      { headers: { Authorization: `Bearer ${getToken()}` } }
+    )
+    if (!response.ok) throw new ApiError('导出失败', response.status)
+    return response.blob()
+  },
+  getInvite(token: string) {
+    return request<InvitePayload>(`/api/invite/${encodeURIComponent(token)}`)
+  },
+  submit(token: string, answers: Record<string, unknown>, timing: Record<string, number>) {
+    return request<{ slug: string }>(`/api/invite/${encodeURIComponent(token)}/submit`, {
+      method: 'POST',
+      body: { answers, timing }
+    })
+  },
+  getReport(slug: string, poll = false) {
+    const suffix = poll ? '?poll=1' : ''
+    return request<ReportResponse>(`/api/report/${encodeURIComponent(slug)}${suffix}`)
+  },
+  claim(slug: string, body: { wechat: string; slots: string[]; agree: boolean }) {
+    return request<{ ok: true }>(`/api/report/${encodeURIComponent(slug)}/claim`, {
+      method: 'POST',
+      body
+    })
+  }
+}
+
+export function track(token: string, type: string, payload: Record<string, unknown> = {}) {
+  fetch('/api/events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, events: [{ type, payload }] }),
+    keepalive: true
+  }).catch(() => undefined)
+}
+
+export interface Overview {
+  stats: {
+    invites: number
+    opened: number
+    submitted: number
+    claimed: number
+    pending: number
+    completion: number
+  }
+  funnel: {
+    started: number
+    groups: { id: string; code: string; title: string; completed: number }[]
+  }
+  daily: { date: string; count: number }[]
+  questions: {
+    code: string
+    title: string
+    avgSeconds: number | null
+    answered: number
+    answeredRate: number
+    dropoff: number
+    dropoffRate: number
+  }[]
+  recent: {
+    id: string
+    name: string
+    note: string
+    channel: string
+    total: number
+    tier: string
+    claimed: boolean
+    contactStatus: string
+    createdAt: string
+    reportPath: string
+  }[]
+}
+
+export interface AdminInvite {
+  id: string
+  token: string
+  name: string
+  note: string
+  channel: string
+  status: string
+  createdAt: string
+  openedAt: string | null
+  submittedAt: string | null
+  expiresAt: string | null
+  reportSlug: string | null
+  reportPath: string | null
+  total: number | null
+  tier: string | null
+  claimed: boolean
+}
+
+export interface AdminSubmissionSummary {
+  id: string
+  name: string
+  note: string
+  channel: string
+  total: number
+  tier: string
+  claimed: boolean
+  contactStatus: string
+  createdAt: string
+  reportSlug: string
+}
+
+export interface AdminSubmissionDetail {
+  id: string
+  name: string
+  note: string
+  channel: string
+  createdAt: string
+  reportPath: string
+  total: number
+  tier: string
+  scores: {
+    total: number
+    tier: string
+    dimensions: { key: string; name: string; weight: number; score: number }[]
+  }
+  answers: {
+    id: string
+    code: string
+    title: string
+    group: string
+    value: string
+    raw: unknown
+  }[]
+  groups: { id: string; code: string; title: string }[]
+  claimed: boolean
+  wechat: string
+  slots: string[]
+  contactStatus: string
+  adminNotes: string
+  overrides: { diagnosis?: string; closing?: string }
+  aiStatus: string
+  aiError: string
+  aiAttempts: number
+  aiMeta: Record<string, unknown>
+}

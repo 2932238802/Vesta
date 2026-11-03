@@ -1,0 +1,20 @@
+[Unit]
+Description=Vesta survey service
+After=network.target
+
+[Service]
+Type=simple
+User=__RUN_USER__
+Group=__RUN_USER__
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=__APP_DIR__/.env
+Environment=NODE_ENV=production
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=__NODE__ __APP_DIR__/node_modules/tsx/dist/cli.mjs __APP_DIR__/server/src/index.ts
+Restart=always
+RestartSec=3
+# 只允许写数据目录
+ReadWritePaths=__APP_DIR__/data
+
+[Install]
+WantedBy=multi-user.target
