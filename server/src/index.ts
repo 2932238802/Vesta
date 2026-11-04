@@ -86,6 +86,17 @@ const server = app.listen(config.port, () => {
   console.log(`数据目录 ${config.dataDir}`)
 })
 
+server.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(
+      `[server] 端口 ${config.port} 已被占用。请停止占用该端口的旧服务，或换一个端口后重试。`
+    )
+  } else {
+    console.error('[server] 启动失败', error)
+  }
+  process.exit(1)
+})
+
 function shutdown() {
   server.close(() => process.exit(0))
   setTimeout(() => process.exit(0), 5000).unref()
