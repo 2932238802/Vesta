@@ -58,7 +58,7 @@ export const defaultTemplate: ReportTemplate = {
       }
     },
     radar: {
-      title: '八项现状',
+      title: '九项现状',
       subtitle: '满分 100，按你自己打的分换算，不是能力排名'
     },
     strengths: {
@@ -201,6 +201,17 @@ export const defaultTemplate: ReportTemplate = {
         when: '这周先列清楚'
       },
       action30: '把必须靠家里的部分逐条写下来，每条准备一个自己能做到的替代方案'
+    },
+    b9: {
+      strength: '你的英语能直接用于读材料、写邮件和沟通，这在求职和升学里都是能加分的硬条件',
+      gap: {
+        what: '一项能在目标场景里直接用上的英语能力',
+        how: '先做一次分项测评，读、写、听、说各测一项，找出最低的一项；再按目标单位的要求决定补证书还是补实际使用',
+        when: '这周内完成测评，三十天内补最弱的一项'
+      },
+      action30: '找一套和目标相关的英文材料或真题，做一次分项测评，记录四项分数和最低项',
+      consistency:
+        '你在「英语能力」上给自己打了 {{self}} 分，但你的证书情况是 {{evidence}}，这两个说的是同一件事吗'
     }
   }
 }

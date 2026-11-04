@@ -256,7 +256,7 @@
 
         <section class="card section-card">
           <header class="section-head">
-            <h2>八项现状</h2>
+            <h2>九项现状</h2>
           </header>
           <div class="form-grid">
             <label class="field">
@@ -743,7 +743,7 @@ import { useUnsavedChanges } from '@/useUnsavedChanges'
 const MODULE_LABELS: Record<ModuleKey, string> = {
   hero: '一句话诊断',
   target: '目标与距离',
-  radar: '八维雷达图',
+  radar: '九维雷达图',
   strengths: '三项最高分',
   gaps: '三项最低分',
   consistency: '自评与行为对照',

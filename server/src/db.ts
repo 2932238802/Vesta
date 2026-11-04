@@ -269,6 +269,46 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
     changed = true
   }
 
+  // 英语从“学业基础”里拆出来，成为独立维度 b9。
+  const b9 = canonical.find((q) => q.id === 'b9')
+  if (b9 && !questions.some((q) => q.id === 'b9')) {
+    insertAfter(questions, 'b8', b9)
+    changed = true
+  }
+
+  const d3 = questions.find((q) => q.id === 'd3')
+  if (d3 && d3.dimension === 'b2') {
+    d3.dimension = 'b9'
+    changed = true
+  }
+
+  const c2Question = questions.find((q) => q.id === 'c2')
+  if (
+    c2Question?.type === 'matrix' &&
+    Array.isArray(c2Question.rows) &&
+    !c2Question.rows.some((row) => row.id === 'c2_6')
+  ) {
+    c2Question.rows.push({ id: 'c2_6', label: '英语', dimension: 'b9' })
+    changed = true
+  }
+
+  if (!survey.dimensions.some((dimension) => dimension.key === 'b9')) {
+    const oldDefaultWeights: Record<string, number> = { b2: 15, b4: 12, b5: 12, b6: 16 }
+    const newDefaultWeights: Record<string, number> = { b2: 8, b4: 11, b5: 11, b6: 15 }
+    const matchesOldDefaults = Object.entries(oldDefaultWeights).every(
+      ([key, weight]) =>
+        survey.dimensions.find((dimension) => dimension.key === key)?.weight === weight
+    )
+    if (matchesOldDefaults) {
+      for (const dimension of survey.dimensions) {
+        const nextWeight = newDefaultWeights[dimension.key]
+        if (typeof nextWeight === 'number') dimension.weight = nextWeight
+      }
+    }
+    survey.dimensions.push({ key: 'b9', name: '英语能力', weight: 10 })
+    changed = true
+  }
+
   const a10 = questions.find((q) => q.id === 'a10')
   const canonicalA10 = canonical.find((q) => q.id === 'a10')
   if (a10 && canonicalA10?.options) {
@@ -277,6 +317,15 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
       a10.options = canonicalA10.options
       a10.otherLabel = canonicalA10.otherLabel
       a10.otherPlaceholder = canonicalA10.otherPlaceholder
+      changed = true
+    }
+    const englishGoal = a10.options?.find((option) => option.label === '英语考试或使用')
+    if (englishGoal) {
+      englishGoal.label = '四六级雅思准备'
+      changed = true
+    }
+    if (a10.notePlaceholder === '例：明年 3 月前拿到六级 500 分；没想清楚也可以写「不知道」') {
+      delete a10.notePlaceholder
       changed = true
     }
   }
@@ -463,6 +512,14 @@ function upgradeTemplate(template: ReportTemplate): { template: ReportTemplate; 
     }
   }
 
+  // 英语成为独立维度后，旧模板需要补上 b9 的话术，雷达图标题也从八项改为九项。
+  if (!next.dimensions.b9) {
+    next.dimensions.b9 = defaultTemplate.dimensions.b9
+  }
+  if (next.copy.radar?.title === '八项现状') {
+    next.copy.radar.title = defaultTemplate.copy.radar.title
+  }
+
   return {
     template: next,
     changed: JSON.stringify(next) !== before
@@ -471,7 +528,9 @@ function upgradeTemplate(template: ReportTemplate): { template: ReportTemplate; 
 
 // 未改过的默认 Skill 才自动升级；管理员自己编辑过的内容保持原样。
 const LEGACY_SKILL_HASHES = new Set([
-  '76d1851d6dcf5cb6a41f50e2f8f9890fdb2733f7f848b9193efcaca0ade62349'
+  '76d1851d6dcf5cb6a41f50e2f8f9890fdb2733f7f848b9193efcaca0ade62349',
+  // v0.1 的默认 Skill：把英语放在“条件项”位置，已被新规则替换。
+  '9671baff4538eef9fcda41afa77a77ddeb92c046189abc6bf16306df0ce1858e'
 ])
 
 function migrateReportSkill(): void {

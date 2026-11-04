@@ -177,12 +177,11 @@ export const defaultSurvey: Survey = {
       type: 'choiceText',
       required: true,
       noteLabel: '希望何时、得到什么结果',
-      notePlaceholder: '例：明年 3 月前拿到六级 500 分；没想清楚也可以写「不知道」',
       otherLabel: '你的目标',
       otherPlaceholder: '写清你要做什么',
       options: choice('a10', [
         ['课程成绩', null],
-        ['英语考试或使用', null],
+        ['四六级雅思准备', null],
         ['转专业或跨专业准备', null],
         ['作品项目竞赛', null],
         ['实习求职', null],
@@ -311,6 +310,23 @@ export const defaultSurvey: Survey = {
       '家里愿意支持合理的学习投入和外出实习',
       'b8'
     ),
+    {
+      id: 'b9',
+      code: 'B9',
+      groupId: 'b',
+      title: '英语实际使用能力',
+      hint: '只评实际使用，不看你考到几级',
+      type: 'single',
+      display: 'rating',
+      required: true,
+      dimension: 'b9',
+      role: 'self',
+      anchors: {
+        low: '看英文资料基本靠翻译软件，开口说不成句，没写过英文邮件或材料',
+        high: '能直接读英文文档或论文，能写工作邮件和报告，能用英语开会或面试'
+      },
+      options: rating('b9')
+    },
 
     {
       id: 'c1',
@@ -345,7 +361,8 @@ export const defaultSurvey: Survey = {
         { id: 'c2_2', label: '方法', dimension: 'b5' },
         { id: 'c2_3', label: '信息', dimension: 'b7' },
         { id: 'c2_4', label: '资源', dimension: 'b3' },
-        { id: 'c2_5', label: '有人监督', dimension: 'b6' }
+        { id: 'c2_5', label: '有人监督', dimension: 'b6' },
+        { id: 'c2_6', label: '英语', dimension: 'b9' }
       ]
     },
     {
@@ -387,7 +404,7 @@ export const defaultSurvey: Survey = {
       title: '你的四六级',
       type: 'single',
       required: true,
-      dimension: 'b2',
+      dimension: 'b9',
       role: 'behavior',
       options: choice('d3', [
         ['都没过，也没准备', 1],
@@ -430,13 +447,14 @@ export const defaultSurvey: Survey = {
   ],
   dimensions: [
     { key: 'b1', name: '方向清晰度', weight: 15 },
-    { key: 'b2', name: '学业基础', weight: 15 },
+    { key: 'b2', name: '学业基础', weight: 8 },
     { key: 'b3', name: '实践积累', weight: 15 },
-    { key: 'b4', name: '技能储备', weight: 12 },
-    { key: 'b5', name: '方法意识', weight: 12 },
-    { key: 'b6', name: '执行力', weight: 16 },
+    { key: 'b4', name: '技能储备', weight: 11 },
+    { key: 'b5', name: '方法意识', weight: 11 },
+    { key: 'b6', name: '执行力', weight: 15 },
     { key: 'b7', name: '信息与环境', weight: 8 },
-    { key: 'b8', name: '家庭支持', weight: 7 }
+    { key: 'b8', name: '家庭支持', weight: 7 },
+    { key: 'b9', name: '英语能力', weight: 10 }
   ],
   tiers: [
     { tier: 'A', min: 80, label: '已经在做对的事，缺的是放大', line: '该做的你已经在做，接下来是把长板放大，让别人一眼看见' },
