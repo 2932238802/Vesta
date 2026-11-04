@@ -69,7 +69,6 @@
       </div>
 
       <div class="result-actions">
-        <button class="btn ghost" type="button" @click="copyAll">复制全部链接</button>
         <RouterLink class="btn" to="/admin/submissions">去答卷与名单查看</RouterLink>
       </div>
     </section>
@@ -157,11 +156,7 @@ async function copy(text: string) {
     document.execCommand('copy')
     document.body.removeChild(area)
   }
-  flash('已复制')
-}
-
-function copyAll() {
-  void copy(created.value.map((item) => `${item.name} ${item.url}`).join('\n'))
+  flash('链接已复制')
 }
 
 function flash(message: string) {
