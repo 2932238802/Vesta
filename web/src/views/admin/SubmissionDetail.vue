@@ -3,7 +3,12 @@
     <RouterLink class="back" to="/admin/submissions">← 返回答卷列表</RouterLink>
 
     <div v-if="loading" class="card empty">正在读取答卷</div>
-    <div v-else-if="error" class="card empty">{{ error }}</div>
+    <div v-else-if="error" class="card empty">
+      {{ error }}
+      <div class="empty-action">
+        <button class="btn ghost small" type="button" @click="load">重新读取</button>
+      </div>
+    </div>
 
     <template v-else-if="detail">
       <header class="head">
@@ -175,7 +180,7 @@ const aiLabels: Record<string, string> = {
   pending: '排队中',
   running: '生成中',
   ready: '已生成',
-  failed: '模板兜底'
+  failed: '生成失败'
 }
 
 const aiLabel = computed(() => aiLabels[detail.value?.aiStatus ?? ''] ?? '未知')
@@ -219,7 +224,9 @@ function answersOf(groupId: string) {
   return detail.value.answers.filter((answer) => answer.group === group.title)
 }
 
-onMounted(async () => {
+async function load() {
+  loading.value = true
+  error.value = ''
   try {
     const result = await api.submission(id)
     detail.value = result
@@ -233,7 +240,9 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(load)
 
 async function save() {
   saving.value = true

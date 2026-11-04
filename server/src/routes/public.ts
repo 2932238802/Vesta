@@ -284,22 +284,22 @@ publicRouter.get(
           console.error('[ai-report] 报告内容无法渲染', submission.id, error)
           db.prepare(
             "UPDATE submissions SET ai_status = 'failed', ai_error = ? WHERE id = ?"
-          ).run('AI 报告内容损坏，已使用模板兜底', submission.id)
+          ).run('AI 报告内容损坏，当前显示基础内容', submission.id)
           status = 'failed'
-          statusError = 'AI 报告内容损坏，已使用模板兜底'
+          statusError = 'AI 报告内容损坏，当前显示基础内容'
         }
       } else {
         db.prepare(
           "UPDATE submissions SET ai_status = 'failed', ai_error = ? WHERE id = ?"
-        ).run('AI 报告内容缺失，已使用模板兜底', submission.id)
+        ).run('AI 报告内容缺失，当前显示基础内容', submission.id)
         status = 'failed'
-        statusError = 'AI 报告内容缺失，已使用模板兜底'
+        statusError = 'AI 报告内容缺失，当前显示基础内容'
       }
     }
 
     if (!isAiConfigured() && status !== 'ready' && status !== 'failed') {
       status = 'failed'
-      statusError = '未配置 DEEPSEEK_API_KEY，报告使用模板兜底'
+      statusError = 'AI 分析还没有配置，当前显示基础内容'
       db.prepare(
         "UPDATE submissions SET ai_status = 'failed', ai_error = ? WHERE id = ?"
       ).run(statusError, submission.id)
@@ -323,8 +323,8 @@ publicRouter.get(
         name,
         error:
           status === 'failed'
-            ? 'AI 报告暂时不可用，当前为模板报告'
-            : 'AI 未配置，当前为模板报告'
+            ? 'AI 分析暂未生成成功，当前显示基础内容。请联系管理员重新生成。'
+            : 'AI 分析还没有配置，当前显示基础内容。请联系管理员。'
       }
       res.json(response)
       return

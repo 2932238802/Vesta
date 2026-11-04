@@ -468,7 +468,7 @@ async function generate(submissionId: string): Promise<void> {
   if (!isAiConfigured()) {
     db.prepare(
       "UPDATE submissions SET ai_status = 'failed', ai_error = ?, ai_finished_at = ? WHERE id = ?"
-    ).run('未配置 DEEPSEEK_API_KEY，报告使用模板兜底', now(), submissionId)
+    ).run('AI 分析还没有配置', now(), submissionId)
     return
   }
 

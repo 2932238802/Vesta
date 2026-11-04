@@ -55,6 +55,29 @@ export const router = createRouter({
   ]
 })
 
+const PAGE_TITLES: Record<string, string> = {
+  root: '大学现状自评',
+  invite: '填写现状自评',
+  quiz: '正在填写 · 大学现状自评',
+  report: '你的报告 · 大学现状自评',
+  'admin-login': '登录 · 管理后台',
+  'admin-dashboard': '概览 · 管理后台',
+  'admin-invites': '邀请链接 · 管理后台',
+  'admin-submissions': '答卷与名单 · 管理后台',
+  'admin-appointments': '咨询预约 · 管理后台',
+  'admin-submission': '答卷详情 · 管理后台',
+  'admin-survey': '问卷设置 · 管理后台',
+  'admin-report': '报告设置 · 管理后台',
+  'admin-report-preview': '报告预览 · 管理后台',
+  'admin-skill': 'AI 分析规则 · 管理后台',
+  'not-found': '页面不存在'
+}
+
+router.afterEach((to) => {
+  document.title =
+    (typeof to.name === 'string' ? PAGE_TITLES[to.name] : undefined) ?? '大学现状自评'
+})
+
 router.beforeEach((to) => {
   if (to.meta.admin && !getToken()) {
     return { name: 'admin-login', query: { next: to.fullPath } }

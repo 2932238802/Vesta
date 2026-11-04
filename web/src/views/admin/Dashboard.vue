@@ -9,7 +9,12 @@
     </header>
 
     <div v-if="loading" class="card empty">正在读取数据</div>
-    <div v-else-if="error" class="card empty">{{ error }}</div>
+    <div v-else-if="error" class="card empty">
+      {{ error }}
+      <div class="empty-action">
+        <button class="btn ghost small" type="button" @click="load">重新读取</button>
+      </div>
+    </div>
 
     <template v-else-if="data">
       <section class="stat-grid">
@@ -143,7 +148,9 @@ const funnelRows = computed(() => {
   }))
 })
 
-onMounted(async () => {
+async function load() {
+  loading.value = true
+  error.value = ''
   try {
     data.value = await api.overview()
   } catch (err) {
@@ -151,7 +158,9 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(load)
 </script>
 
 <style scoped>

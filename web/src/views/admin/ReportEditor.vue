@@ -27,7 +27,7 @@
     <template v-else>
       <p v-if="error" class="notice">{{ error }}</p>
       <p class="ai-note">
-        AI 报告会替换主要分析文案；这里保留标题、标签和失败时的兜底。分析角度在
+        AI 报告会替换主要分析文案；AI 暂未生成成功时，这里的内容会作为基础展示。分析角度在
         <RouterLink to="/admin/skill">AI 分析规则</RouterLink> 调整。
       </p>
 
@@ -174,7 +174,7 @@
               />
             </label>
             <label class="field full">
-              <span>缺岗位时的兜底名称</span>
+              <span>未填岗位时显示</span>
               <input
                 v-model="template.copy.target.missingRole"
                 class="input"
@@ -294,7 +294,7 @@
               />
             </label>
             <label class="field full">
-              <span>单项兜底文案</span>
+              <span>单项默认文案</span>
               <input
                 v-model="template.copy.strengths.item"
                 class="input"
@@ -354,7 +354,7 @@
               />
             </label>
             <label class="field full">
-              <span>单项兜底文案</span>
+              <span>单项默认文案</span>
               <textarea
                 v-model="template.copy.consistency.item"
                 class="textarea"
@@ -486,7 +486,7 @@
           </div>
           <div class="fallback">
             <div class="fallback-head">
-              <span>兜底动作</span>
+              <span>默认动作</span>
               <button class="btn quiet small" type="button" @click="addFallback">+ 加一条</button>
             </div>
             <div

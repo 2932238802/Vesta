@@ -39,6 +39,7 @@
     </main>
 
     <main v-else class="wrap fade-in">
+      <p v-if="reportNotice" class="notice report-notice">{{ reportNotice }}</p>
       <div ref="sheetEl" class="sheet">
         <ReportBlocks :payload="payload" />
       </div>
@@ -121,6 +122,7 @@ const slug = String(route.params.slug ?? '')
 const payload = ref<ReportPayload | null>(null)
 const loading = ref(true)
 const error = ref('')
+const reportNotice = ref('')
 const slow = ref(false)
 const pollNote = ref('')
 const claimed = ref(false)
@@ -174,6 +176,7 @@ async function load(poll = false) {
       payload.value = result.report
       claimed.value = result.report.claimed
     }
+    reportNotice.value = result.report ? (result.error ?? '') : ''
     error.value = ''
     if (result.status === 'pending' || result.status === 'running') {
       startPolling()
@@ -304,6 +307,11 @@ function flash(message: string) {
   max-width: 720px;
   margin: 0 auto;
   padding: 0 20px 60px;
+}
+
+.report-notice {
+  margin-bottom: 18px;
+  text-align: left;
 }
 
 .sheet {

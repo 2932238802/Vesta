@@ -79,6 +79,11 @@ svg {
   background: var(--accent-soft);
 }
 
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid rgba(47, 93, 70, 0.55);
+  outline-offset: 2px;
+}
+
 .container {
   width: 100%;
   max-width: 640px;
@@ -348,6 +353,10 @@ svg {
   text-align: center;
   color: var(--ink-3);
   font-size: 14px;
+}
+
+.empty-action {
+  margin-top: 16px;
 }
 
 .notice {

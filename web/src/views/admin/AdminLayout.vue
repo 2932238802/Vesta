@@ -5,7 +5,7 @@
         <RouterLink class="brand" to="/admin">管理后台</RouterLink>
       </div>
 
-      <nav class="nav">
+      <nav class="nav" aria-label="后台导航">
         <p class="nav-label">日常工作</p>
         <RouterLink to="/admin" exact-active-class="on">概览</RouterLink>
         <RouterLink to="/admin/invites" active-class="on">邀请链接</RouterLink>
@@ -152,9 +152,10 @@ async function logout() {
     z-index: 20;
     height: auto;
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: 1fr auto;
     align-items: center;
-    gap: 16px;
+    column-gap: 16px;
+    row-gap: 10px;
     padding: 14px 16px;
     border-right: 0;
     border-bottom: 1px solid var(--line);
@@ -163,11 +164,13 @@ async function logout() {
   }
 
   .nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
     margin-top: 0;
     display: flex;
     gap: 2px;
-    overflow-x: auto;
-    scrollbar-width: none;
+    flex-wrap: wrap;
+    overflow: visible;
   }
 
   .nav-label,
@@ -175,17 +178,15 @@ async function logout() {
     display: none;
   }
 
-  .nav::-webkit-scrollbar {
-    display: none;
-  }
-
   .nav a {
     white-space: nowrap;
-    padding: 7px 10px;
+    padding: 8px 10px;
     font-size: 12.5px;
   }
 
   .account {
+    grid-column: 2;
+    grid-row: 1;
     margin: 0;
     padding: 0;
     border: 0;

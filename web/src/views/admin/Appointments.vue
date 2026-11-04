@@ -15,7 +15,12 @@
 
     <section class="card table-card">
       <div v-if="loading" class="empty">正在读取</div>
-      <div v-else-if="error" class="empty">{{ error }}</div>
+      <div v-else-if="error" class="empty">
+        {{ error }}
+        <div class="empty-action">
+          <button class="btn ghost small" type="button" @click="load">重新读取</button>
+        </div>
+      </div>
       <div v-else-if="appointments.length === 0" class="empty">
         还没有人预约咨询时间
         <p class="quiet tiny empty-note">学员在报告底部提交时间段后，会出现在这里</p>

@@ -81,7 +81,12 @@
 
     <section class="card table-card">
       <div v-if="loading" class="empty">正在读取</div>
-      <div v-else-if="error" class="empty">{{ error }}</div>
+      <div v-else-if="error" class="empty">
+        {{ error }}
+        <div class="empty-action">
+          <button class="btn ghost small" type="button" @click="load">重新读取</button>
+        </div>
+      </div>
       <div v-else-if="roster.length === 0" class="empty">
         {{ emptyText }}
         <div v-if="selectedDates.size" class="empty-action">
