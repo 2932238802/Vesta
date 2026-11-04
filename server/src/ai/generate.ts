@@ -9,6 +9,7 @@ import { buildReport, answerLabel } from '../../../shared/src/report'
 import { computeScores, tierRuleOf } from '../../../shared/src/scoring'
 import {
   findBannedPhrase,
+  mergeAiContent,
   normalizeAiContent,
   type AiReportContent
 } from '../../../shared/src/ai'
@@ -56,6 +57,11 @@ type StrengthsBlock = Extract<ReportBlock, { type: 'strengths' }>
 type GapsBlock = Extract<ReportBlock, { type: 'gaps' }>
 
 const running = new Set<string>()
+const retryTimers = new Map<string, NodeJS.Timeout>()
+const MAX_AI_ATTEMPTS = 4
+const RETRY_DELAYS_MS = [5_000, 15_000, 30_000]
+
+type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 
 export function isAiConfigured(): boolean {
   return Boolean(config.deepseekApiKey)
@@ -78,6 +84,47 @@ function errorMessage(error: unknown): string {
     return error.message.replace(/\s+/g, ' ').trim().slice(0, 500)
   }
   return 'AI 生成失败'
+}
+
+function isRetryableError(message: string): boolean {
+  if (message.includes('未配置 DEEPSEEK_API_KEY')) return false
+  return !/DeepSeek 请求失败（(400|401|402|403|404|422)/.test(message)
+}
+
+function contentProblems(
+  content: AiReportContent,
+  input: {
+    strengthKeys: string[]
+    gapKeys: string[]
+    requiresConsistency: boolean
+  }
+): string[] {
+  const problems: string[] = []
+  if (!content.hero.summary) problems.push('hero.summary 一句话诊断')
+  if (!content.target.cityNote) problems.push('target.cityNote 城市与岗位分析')
+  if (!content.target.salaryNote) problems.push('target.salaryNote 薪资对照')
+  if (!content.target.closing) problems.push('target.closing 下一步核实事项')
+  for (const key of input.strengthKeys) {
+    if (!content.strengths.some((item) => item.key === key)) {
+      problems.push(`strengths 缺少维度 ${key}`)
+    }
+  }
+  for (const key of input.gapKeys) {
+    if (!content.gaps.some((item) => item.key === key)) {
+      problems.push(`gaps 缺少维度 ${key}`)
+    }
+  }
+  if (input.requiresConsistency && !content.consistency?.paragraphs.length) {
+    problems.push('consistency 自评与行为对照')
+  }
+  if (content.cognition.paragraphs.length < 2) {
+    problems.push('cognition.paragraphs 至少需要两段')
+  }
+  if (content.actions.items.length < 3) {
+    problems.push('actions.items 至少需要三条')
+  }
+  if (!content.actions.closing) problems.push('actions.closing 收尾')
+  return problems
 }
 
 function textFields(value: unknown): string[] {
@@ -182,9 +229,13 @@ const OUTPUT_CONTRACT = `## 输出结构（必须遵守）
 }
 
 硬性规则：
+- hero、target、cognition、actions 的每一段分析都必须由你根据本次资料重写，不得照抄模板或只做填空题。
+- target.cityNote、salaryNote、closing 三个字段都必须填写。
 - strengths 必须覆盖【本次优势维度】里的每一个 key，每个 key 一条，key 原样使用，不能改写。
 - gaps 必须覆盖【本次优先补足维度】里的每一个 key，每个 key 一条，key 原样使用，不能改写。
+- cognition.paragraphs 必须写 2—5 段，结合本次选择和最低分维度分析，不能只复述题目。
 - actions.items 必须正好 3 条，按先后顺序排列，每条都要能在 30 天内开始。
+- actions.closing 必须填写一句具体的收尾，不能空着。
 - consistency 只有确实存在“自评与行为明显矛盾”时才写成 { "intro": "...", "paragraphs": ["..."], "closing": "..." }，否则写 null。
 - sources 只能使用【检索结果】里出现过的 URL，最多 5 条；没有检索结果就写空数组 []。不得编造 URL、标题、政策、薪资或时间。
 - 所有内容用中文，纯文本，不要 Markdown 标题、列表符号、表情或代码块。
@@ -321,49 +372,79 @@ ${searchError || (results.length ? `共 ${results.length} 条可用结果` : '�
 
 请按 Skill 的要求分析，并且只输出规定的 JSON 对象。`
 
-  const messages = [
+  const messages: ChatMessage[] = [
     {
-      role: 'system' as const,
+      role: 'system',
       content: `${getReportSkill()}\n\n---\n\n${OUTPUT_CONTRACT}`
     },
-    { role: 'user' as const, content: userPrompt }
+    { role: 'user', content: userPrompt }
   ]
 
-  let rawText = await askDeepSeek(messages)
-  let raw: unknown
-  try {
-    raw = parseJsonObject(rawText)
-  } catch {
-    const repair = [
-      ...messages,
-      { role: 'assistant' as const, content: rawText.slice(0, 4000) },
-      {
-        role: 'user' as const,
-        content: '上一条不是合法 JSON。请严格按输出结构，只输出一个合法 JSON 对象，不要代码块。'
-      }
-    ]
-    rawText = await askDeepSeek(repair)
-    raw = parseJsonObject(rawText)
+  async function requestJson(history: ChatMessage[]): Promise<unknown> {
+    const rawText = await askDeepSeek(history)
+    try {
+      return parseJsonObject(rawText)
+    } catch {
+      const repair: ChatMessage[] = [
+        ...history,
+        { role: 'assistant', content: rawText.slice(0, 4000) },
+        {
+          role: 'user',
+          content: '上一条不是合法 JSON。请严格按输出结构，只输出一个合法 JSON 对象，不要代码块。'
+        }
+      ]
+      return parseJsonObject(await askDeepSeek(repair))
+    }
   }
 
-  const content = normalizeAiContent(raw, {
+  const normalizeOptions = {
     strengthKeys,
     gapKeys,
     allowedSources: sourceList
-  })
+  }
+  let content = normalizeAiContent(await requestJson(messages), normalizeOptions)
+  const requiresConsistency = base.blocks.some((block) => block.type === 'consistency')
 
-  if (!content.hero.summary) throw new Error('AI 没有返回一句话诊断')
-  if (strengthKeys.length > 0 && content.strengths.length === 0) {
-    throw new Error('AI 没有返回优势分析')
+  for (let pass = 0; pass < 2; pass += 1) {
+    const problems = contentProblems(content, {
+      strengthKeys,
+      gapKeys,
+      requiresConsistency
+    })
+    const banned = findBannedPhrase(content)
+    if (problems.length === 0 && !banned) break
+
+    const feedback = [
+      '你上一次输出的报告内容有以下问题，需要修正：',
+      ...problems.map((item) => `- ${item}`),
+      banned ? `- 出现了禁用表述「${banned}」，必须换一种具体、克制的说法重写` : '',
+      '请保留已经正确的分析，补全所有缺失字段，并重新输出完整 JSON。',
+      '不要使用模板式套话，所有分析必须基于本次回答、分数和目标重新写。'
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    const repairedRaw = await requestJson([
+      ...messages,
+      { role: 'assistant', content: JSON.stringify(content).slice(0, 12_000) },
+      { role: 'user', content: feedback }
+    ])
+    const repaired = normalizeAiContent(repairedRaw, normalizeOptions)
+    content = mergeAiContent(repaired, content)
   }
-  if (gapKeys.length > 0 && content.gaps.length === 0) {
-    throw new Error('AI 没有返回优先补足项')
+
+  const problems = contentProblems(content, {
+    strengthKeys,
+    gapKeys,
+    requiresConsistency
+  })
+  if (problems.length > 0) {
+    throw new Error(`AI 报告内容仍不完整：${problems[0]}`)
   }
-  if (content.actions.items.length === 0) throw new Error('AI 没有返回行动建议')
 
   const banned = findBannedPhrase(content)
   if (banned) {
-    throw new Error(`AI 报告出现禁用表述「${banned}」，已回退到模板，请重新生成`)
+    throw new Error(`AI 报告出现禁用表述「${banned}」`)
   }
 
   return {
@@ -436,17 +517,47 @@ async function generate(submissionId: string): Promise<void> {
     })
   } catch (error) {
     const message = errorMessage(error)
+    const attempt = row.ai_attempts + 1
+    if (attempt < MAX_AI_ATTEMPTS && isRetryableError(message)) {
+      const delay = RETRY_DELAYS_MS[Math.min(attempt - 1, RETRY_DELAYS_MS.length - 1)]
+      const retryMessage = `第 ${attempt} 次 AI 分析未完成，将自动重试：${message}`
+      db.prepare(
+        `UPDATE submissions
+         SET ai_status = 'pending', ai_error = ?, ai_finished_at = ?
+         WHERE id = ?`
+      ).run(retryMessage, now(), submissionId)
+      recordEvent(row.invite_id, 'ai_report_retry', { message, attempt, delay })
+      console.warn('[ai-report] 自动重试', submissionId, retryMessage)
+      scheduleReportGeneration(submissionId, delay)
+      return
+    }
+
     db.prepare(
       `UPDATE submissions
        SET ai_status = 'failed', ai_error = ?, ai_finished_at = ?
        WHERE id = ?`
     ).run(message, now(), submissionId)
-    recordEvent(row.invite_id, 'ai_report_failed', { message })
+    recordEvent(row.invite_id, 'ai_report_failed', { message, attempt })
     console.error('[ai-report]', submissionId, message)
   }
 }
 
+function scheduleReportGeneration(submissionId: string, delay: number): void {
+  if (retryTimers.has(submissionId)) return
+  const timer = setTimeout(() => {
+    retryTimers.delete(submissionId)
+    startReportGeneration(submissionId)
+  }, delay)
+  timer.unref?.()
+  retryTimers.set(submissionId, timer)
+}
+
 export function startReportGeneration(submissionId: string): void {
+  const timer = retryTimers.get(submissionId)
+  if (timer) {
+    clearTimeout(timer)
+    retryTimers.delete(submissionId)
+  }
   if (running.has(submissionId)) return
   running.add(submissionId)
   void generate(submissionId)
@@ -458,6 +569,8 @@ export function ensureReportGeneration(input: {
   id: string
   status: string
   startedAt: string | null
+  finishedAt: string | null
+  attempts: number
   error: string
 }): boolean {
   if (!isAiConfigured() || input.status === 'ready') return false
@@ -470,11 +583,11 @@ export function ensureReportGeneration(input: {
   }
 
   if (input.status === 'failed') {
-    if (input.error.includes('未配置 DEEPSEEK_API_KEY')) {
-      startReportGeneration(input.id)
-      return true
-    }
-    return false
+    if (input.attempts >= MAX_AI_ATTEMPTS) return false
+    const finished = input.finishedAt ? Date.parse(input.finishedAt) : 0
+    if (finished && Date.now() - finished < 5_000) return false
+    startReportGeneration(input.id)
+    return true
   }
 
   startReportGeneration(input.id)

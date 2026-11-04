@@ -309,6 +309,8 @@ publicRouter.get(
       id: submission.id,
       status,
       startedAt: submission.ai_started_at,
+      finishedAt: submission.ai_finished_at,
+      attempts: submission.ai_attempts,
       error: statusError
     })
     if (started) status = 'running'

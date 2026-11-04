@@ -289,6 +289,55 @@ export function findBannedPhrase(content: AiReportContent): string | null {
   return null
 }
 
+export function mergeAiContent(
+  primary: AiReportContent,
+  fallback: AiReportContent
+): AiReportContent {
+  const strengths = [...primary.strengths]
+  for (const item of fallback.strengths) {
+    if (!strengths.some((entry) => entry.key === item.key)) strengths.push(item)
+  }
+
+  const gaps = [...primary.gaps]
+  for (const item of fallback.gaps) {
+    if (!gaps.some((entry) => entry.key === item.key)) gaps.push(item)
+  }
+
+  const actionItems: string[] = []
+  for (const item of [...primary.actions.items, ...fallback.actions.items]) {
+    if (item && !actionItems.includes(item)) actionItems.push(item)
+    if (actionItems.length >= 4) break
+  }
+
+  return {
+    hero: {
+      summary: primary.hero.summary || fallback.hero.summary,
+      tierLine: primary.hero.tierLine || fallback.hero.tierLine
+    },
+    target: {
+      cityNote: primary.target.cityNote || fallback.target.cityNote,
+      salaryNote: primary.target.salaryNote || fallback.target.salaryNote,
+      closing: primary.target.closing || fallback.target.closing
+    },
+    strengths,
+    gaps,
+    consistency:
+      primary.consistency?.paragraphs.length
+        ? primary.consistency
+        : fallback.consistency,
+    cognition: {
+      paragraphs: primary.cognition.paragraphs.length
+        ? primary.cognition.paragraphs
+        : fallback.cognition.paragraphs
+    },
+    actions: {
+      items: actionItems,
+      closing: primary.actions.closing || fallback.actions.closing
+    },
+    sources: primary.sources.length ? primary.sources : fallback.sources
+  }
+}
+
 export function buildAiReport(
   input: AiReportInput & { content: AiReportContent }
 ): ReportPayload {
