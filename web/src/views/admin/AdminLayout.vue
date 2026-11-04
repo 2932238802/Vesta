@@ -6,13 +6,15 @@
       </div>
 
       <nav class="nav">
+        <p class="nav-label">日常工作</p>
         <RouterLink to="/admin" exact-active-class="on">概览</RouterLink>
         <RouterLink to="/admin/invites" active-class="on">邀请链接</RouterLink>
         <RouterLink to="/admin/submissions" active-class="on">答卷与名单</RouterLink>
-        <RouterLink to="/admin/appointments" active-class="on">咨询时间预约</RouterLink>
-        <RouterLink to="/admin/survey" active-class="on">问卷</RouterLink>
-        <RouterLink to="/admin/report" active-class="on">报告</RouterLink>
-        <RouterLink to="/admin/skill" active-class="on">分析 Skill</RouterLink>
+        <RouterLink to="/admin/appointments" active-class="on">咨询预约</RouterLink>
+        <p class="nav-label second">内容设置</p>
+        <RouterLink to="/admin/survey" active-class="on">问卷设置</RouterLink>
+        <RouterLink to="/admin/report" active-class="on">报告设置</RouterLink>
+        <RouterLink to="/admin/skill" active-class="on">AI 分析规则</RouterLink>
       </nav>
 
       <div class="account">
@@ -91,6 +93,18 @@ async function logout() {
   gap: 2px;
 }
 
+.nav-label {
+  padding: 0 12px;
+  margin-bottom: 5px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+.nav-label.second {
+  margin-top: 18px;
+}
+
 .nav a {
   padding: 10px 12px;
   border-radius: 9px;
@@ -154,6 +168,11 @@ async function logout() {
     gap: 2px;
     overflow-x: auto;
     scrollbar-width: none;
+  }
+
+  .nav-label,
+  .nav-label.second {
+    display: none;
   }
 
   .nav::-webkit-scrollbar {

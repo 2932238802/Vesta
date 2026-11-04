@@ -13,24 +13,30 @@
 
     <template v-else-if="data">
       <section class="stat-grid">
-        <article class="card stat">
+        <RouterLink class="card stat" to="/admin/invites">
           <p class="stat-label">已生成链接</p>
           <p class="stat-value">{{ data.stats.invites }}</p>
           <p class="stat-meta">待填写 {{ data.stats.pending }}</p>
-        </article>
-        <article class="card stat">
+          <span class="stat-link">去生成链接 →</span>
+        </RouterLink>
+        <RouterLink class="card stat" to="/admin/submissions">
           <p class="stat-label">已提交</p>
           <p class="stat-value">{{ data.stats.submitted }}</p>
           <p class="stat-meta">打开 {{ data.stats.opened }}</p>
-        </article>
-        <article class="card stat">
+          <span class="stat-link">查看名单 →</span>
+        </RouterLink>
+        <RouterLink class="card stat" to="/admin/submissions?category=unsubmitted">
           <p class="stat-label">完成率</p>
           <p class="stat-value">{{ data.stats.completion }}<small>%</small></p>
-        </article>
-        <article class="card stat">
+          <p class="stat-meta">还有 {{ data.stats.pending }} 人未填写</p>
+          <span class="stat-link">去催填 →</span>
+        </RouterLink>
+        <RouterLink class="card stat" to="/admin/appointments">
           <p class="stat-label">已领取规划</p>
           <p class="stat-value">{{ data.stats.claimed }}</p>
-        </article>
+          <p class="stat-meta">安排联系和咨询时间</p>
+          <span class="stat-link">查看预约 →</span>
+        </RouterLink>
       </section>
 
       <div class="split">
@@ -172,7 +178,15 @@ onMounted(async () => {
 }
 
 .stat {
+  display: block;
   padding: 20px 22px 18px;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stat:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(30, 28, 22, 0.045);
 }
 
 .stat-label {
@@ -200,6 +214,13 @@ onMounted(async () => {
   margin-top: 12px;
   font-size: 11.5px;
   color: var(--ink-3);
+}
+
+.stat-link {
+  display: inline-block;
+  margin-top: 15px;
+  font-size: 11.5px;
+  color: var(--accent);
 }
 
 .split {

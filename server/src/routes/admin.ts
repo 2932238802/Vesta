@@ -169,6 +169,13 @@ function rosterCategoryMatches(category: string, stage: RosterStage): boolean {
   return category === stage
 }
 
+function localDateKey(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
 function inviteStatus(row: InviteRow, slug: string | null): string {
   if (slug) return 'submitted'
   if (row.expires_at && row.expires_at <= now()) return 'expired'
@@ -571,8 +578,13 @@ adminRouter.get('/roster', (req, res) => {
   const q = clampString(req.query.q, 80)
   const requested = clampString(req.query.category, 20)
   const category = ROSTER_CATEGORIES.has(requested) ? requested : ''
-  const from = clampString(req.query.from, 40)
-  const to = clampString(req.query.to, 40)
+  const selectedDates = new Set(
+    clampString(req.query.dates, 2000)
+      .split(',')
+      .map((date) => date.trim())
+      .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+      .slice(0, 120)
+  )
   const rows = db
     .prepare(
       `SELECT i.id AS invite_id, i.token, i.name, i.note, i.channel,
@@ -580,24 +592,38 @@ adminRouter.get('/roster', (req, res) => {
               s.id AS submission_id, s.slug, s.total, s.tier, s.claimed_at, s.slots,
               s.contact_status, s.created_at AS submission_created_at
        FROM invites i LEFT JOIN submissions s ON s.invite_id = i.id
-       WHERE (? = '' OR i.name LIKE ? OR i.note LIKE ? OR i.channel LIKE ?)
-         AND (? = '' OR COALESCE(s.created_at, i.created_at) >= ?)
-         AND (? = '' OR COALESCE(s.created_at, i.created_at) < ?)
        ORDER BY COALESCE(s.created_at, i.created_at) DESC LIMIT 1000`
     )
-    .all(
-      q,
-      `%${q}%`,
-      `%${q}%`,
-      `%${q}%`,
-      from,
-      from,
-      to,
-      to
-    ) as unknown as RosterRow[]
+    .all() as unknown as RosterRow[]
 
+  const prepared = rows.map((row) => ({
+    row,
+    stage: rosterStage(row),
+    date: localDateKey(row.invite_created_at)
+  }))
+
+  const dateCounts = new Map<string, number>()
+  for (const item of prepared) {
+    if (!item.date) continue
+    dateCounts.set(item.date, (dateCounts.get(item.date) ?? 0) + 1)
+  }
+
+  const needle = q.toLocaleLowerCase()
+  const queryFiltered = needle
+    ? prepared.filter(({ row }) =>
+        [row.name, row.note, row.channel].some((value) =>
+          String(value ?? '')
+            .toLocaleLowerCase()
+            .includes(needle)
+        )
+      )
+    : prepared
+
+  const dateFiltered = selectedDates.size
+    ? queryFiltered.filter((item) => selectedDates.has(item.date))
+    : queryFiltered
   const counts: Record<string, number> = {
-    all: rows.length,
+    all: dateFiltered.length,
     unsubmitted: 0,
     pending: 0,
     opened: 0,
@@ -609,39 +635,46 @@ adminRouter.get('/roster', (req, res) => {
     done: 0
   }
 
-  const roster = rows.map((row) => {
-    const stage = rosterStage(row)
-    counts[stage] += 1
-    if (stage === 'pending' || stage === 'opened' || stage === 'expired') {
+  for (const item of dateFiltered) {
+    counts[item.stage] += 1
+    if (item.stage === 'pending' || item.stage === 'opened' || item.stage === 'expired') {
       counts.unsubmitted += 1
     }
-    return {
-      id: row.invite_id,
-      inviteId: row.invite_id,
-      submissionId: row.submission_id,
-      token: row.token,
-      name: row.name,
-      note: row.note,
-      channel: row.channel,
-      stage,
-      inviteCreatedAt: row.invite_created_at,
-      openedAt: row.opened_at,
-      submittedAt: row.submitted_at ?? row.submission_created_at,
-      expiresAt: row.expires_at,
-      total: row.total,
-      tier: row.tier,
-      claimed: Boolean(row.claimed_at),
-      slots: parseJson<string[]>(row.slots, []),
-      contactStatus: row.contact_status,
-      reportSlug: row.slug,
-      reportPath: row.slug ? `/r/${row.slug}` : null,
-      detailPath: row.submission_id ? `/admin/submissions/${row.submission_id}` : null
-    }
-  })
+  }
+
+  const roster = dateFiltered
+    .filter((item) => rosterCategoryMatches(category, item.stage))
+    .map(({ row, stage }) => {
+      return {
+        id: row.invite_id,
+        inviteId: row.invite_id,
+        submissionId: row.submission_id,
+        token: row.token,
+        name: row.name,
+        note: row.note,
+        channel: row.channel,
+        stage,
+        inviteCreatedAt: row.invite_created_at,
+        openedAt: row.opened_at,
+        submittedAt: row.submitted_at ?? row.submission_created_at,
+        expiresAt: row.expires_at,
+        total: row.total,
+        tier: row.tier,
+        claimed: Boolean(row.claimed_at),
+        slots: parseJson<string[]>(row.slots, []),
+        contactStatus: row.contact_status,
+        reportSlug: row.slug,
+        reportPath: row.slug ? `/r/${row.slug}` : null,
+        detailPath: row.submission_id ? `/admin/submissions/${row.submission_id}` : null
+      }
+    })
 
   res.json({
-    roster: roster.filter((row) => rosterCategoryMatches(category, row.stage)),
-    counts
+    roster,
+    counts,
+    dates: [...dateCounts.entries()]
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => b.date.localeCompare(a.date))
   })
 })
 

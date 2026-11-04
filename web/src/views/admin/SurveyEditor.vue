@@ -485,6 +485,7 @@ import { validateSurvey } from '@shared/validate'
 import { api } from '@/api'
 import Modal from '@/components/Modal.vue'
 import QuestionField from '@/components/QuestionField.vue'
+import { useUnsavedChanges } from '@/useUnsavedChanges'
 
 const survey = ref<Survey | null>(null)
 const versions = ref(0)
@@ -511,6 +512,8 @@ const selectedGroup = computed(() => {
 const dirty = computed(
   () => Boolean(survey.value) && JSON.stringify(survey.value) !== initialJson.value
 )
+
+useUnsavedChanges(dirty, '问卷还有未保存的修改，确定离开？')
 
 function questionsOf(groupId: string): Question[] {
   return survey.value?.questions.filter((q) => q.groupId === groupId) ?? []

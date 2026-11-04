@@ -28,7 +28,7 @@
       <p v-if="error" class="notice">{{ error }}</p>
       <p class="ai-note">
         AI 报告会替换主要分析文案；这里保留标题、标签和失败时的兜底。分析角度在
-        <RouterLink to="/admin/skill">分析 Skill</RouterLink> 调整。
+        <RouterLink to="/admin/skill">AI 分析规则</RouterLink> 调整。
       </p>
 
       <div class="tabs">
@@ -738,6 +738,7 @@ import { validateTemplate } from '@shared/validate'
 import { api } from '@/api'
 import Modal from '@/components/Modal.vue'
 import ReportBlocks from '@/components/ReportBlocks.vue'
+import { useUnsavedChanges } from '@/useUnsavedChanges'
 
 const MODULE_LABELS: Record<ModuleKey, string> = {
   hero: '一句话诊断',
@@ -774,6 +775,8 @@ const previewError = ref('')
 const dirty = computed(
   () => Boolean(template.value) && JSON.stringify(template.value) !== initialJson.value
 )
+
+useUnsavedChanges(dirty, '报告设置还有未保存的修改，确定离开？')
 
 const dimensionRows = computed(() => {
   const value = template.value

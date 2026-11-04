@@ -4,6 +4,7 @@
       <div>
         <p class="eyebrow">答卷与名单</p>
         <h1 class="page-title">谁填了，谁还没填</h1>
+        <p class="page-sub">所有邀请、填写、领取和联系状态都在这里。</p>
       </div>
       <button class="btn ghost" type="button" :disabled="exporting" @click="exportCsv">
         {{ exporting ? '正在导出' : '导出答卷 CSV' }}
@@ -26,21 +27,49 @@
       </button>
     </div>
 
+    <section class="card date-filter-card" aria-labelledby="date-filter-title">
+      <div class="date-filter-head">
+        <div>
+          <h2 id="date-filter-title" class="date-filter-title">邀请日期</h2>
+          <p class="date-filter-summary">{{ dateSummary }}</p>
+        </div>
+        <button
+          v-if="dateOptions.length"
+          class="btn ghost small date-all-btn"
+          type="button"
+          @click="toggleAllDates"
+        >
+          {{ allDatesSelected ? '清空日期' : '全选日期' }}
+        </button>
+      </div>
+
+      <div v-if="dateOptions.length" class="date-rail" role="group" aria-label="选择邀请日期">
+        <button
+          v-for="day in dateOptions"
+          :key="day.date"
+          class="date-block"
+          :class="{ on: selectedDates.has(day.date) }"
+          type="button"
+          :aria-pressed="selectedDates.has(day.date)"
+          :data-date-paint="day.date"
+          @pointerdown="startDatePaint($event, day.date)"
+          @click="handleDateClick($event, day.date)"
+          @dragstart.prevent
+        >
+          <span class="date-block-day">{{ dateLabel(day.date) }}</span>
+          <span class="date-block-meta">{{ weekdayLabel(day.date) }} · {{ day.count }} 人</span>
+        </button>
+      </div>
+      <p v-else class="date-filter-empty">还没有可以筛选的邀请日期。</p>
+      <p v-if="dateOptions.length && !allDatesSelected" class="date-filter-tip">
+        点一下选中，再点取消；按住并拖动可以连续选择。
+      </p>
+    </section>
+
     <div class="toolbar">
       <input v-model="q" class="input search" type="search" placeholder="搜索姓名、备注、渠道" />
-      <select v-model="dateRange" class="select date-filter">
-        <option value="">全部日期</option>
-        <option value="today">今天</option>
-        <option value="7d">近 7 天</option>
-        <option value="30d">近 30 天</option>
-        <option value="custom">自定义</option>
-      </select>
-      <template v-if="dateRange === 'custom'">
-        <input v-model="customFrom" class="input date-input" type="date" />
-        <span class="quiet small">至</span>
-        <input v-model="customTo" class="input date-input" type="date" />
-      </template>
       <span class="spacer" />
+      <span v-if="showDateTones" class="date-hint">表格颜色按邀请日期区分</span>
       <span class="quiet tiny">{{ roster.length }} 人</span>
     </div>
 
@@ -49,7 +78,12 @@
       <div v-else-if="error" class="empty">{{ error }}</div>
       <div v-else-if="roster.length === 0" class="empty">
         {{ emptyText }}
-        <div v-if="category !== 'unsubmitted' && category !== ''" class="empty-action">
+        <div v-if="selectedDates.size" class="empty-action">
+          <button class="btn ghost small" type="button" @click="clearDateFilter">
+            查看全部日期
+          </button>
+        </div>
+        <div v-else-if="category !== 'unsubmitted' && category !== ''" class="empty-action">
           <button class="btn ghost small" type="button" @click="category = ''">查看全部名单</button>
         </div>
         <div v-else-if="counts.all === 0" class="empty-action">
@@ -69,14 +103,30 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in roster" :key="row.id" :class="{ unsubmitted: !row.submissionId }">
+            <tr
+              v-for="row in roster"
+              :key="row.id"
+              :class="[rowTone(row), { unsubmitted: !row.submissionId }]"
+            >
               <td>
                 <div class="name">{{ row.name || '未命名' }}</div>
                 <div v-if="row.note" class="note">{{ row.note }}</div>
                 <div v-if="row.channel" class="note channel">{{ row.channel }}</div>
               </td>
               <td>
-                <span class="chip" :class="stageClass(row.stage)">{{ stageLabel(row.stage) }}</span>
+                <select
+                  v-if="row.submissionId && row.claimed"
+                  class="select status-select"
+                  :value="row.contactStatus ?? 'new'"
+                  :disabled="savingStatus === row.id"
+                  @change="changeStatus(row, $event)"
+                >
+                  <option value="new">待联系</option>
+                  <option value="contacted">已联系</option>
+                  <option value="scheduled">已约时间</option>
+                  <option value="done">已完成</option>
+                </select>
+                <span v-else class="chip" :class="stageClass(row.stage)">{{ stageLabel(row.stage) }}</span>
                 <div v-if="row.stage === 'unclaimed'" class="note">已提交，还没有领取规划</div>
               </td>
               <td>
@@ -98,7 +148,10 @@
               </td>
               <td>
                 <div class="date-stack">
-                  <div><span>邀请</span>{{ formatDate(row.inviteCreatedAt, false) }}</div>
+                  <div>
+                    <i class="date-dot" />
+                    <span>邀请</span>{{ formatDate(row.inviteCreatedAt, false) }}
+                  </div>
                   <div v-if="row.submittedAt"><span>提交</span>{{ formatDate(row.submittedAt, false) }}</div>
                   <div v-else-if="row.stage === 'expired'"><span>到期</span>{{ formatDate(row.expiresAt, false) }}</div>
                   <div v-else-if="row.openedAt"><span>打开</span>{{ formatDate(row.openedAt, false) }}</div>
@@ -144,9 +197,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
-import { api, type AdminRosterRow, type AdminRosterStage } from '@/api'
-import { dateRangeBounds, formatDate, type DateRangeKey } from '@/format'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
+import {
+  api,
+  type AdminRosterDateOption,
+  type AdminRosterRow,
+  type AdminRosterStage
+} from '@/api'
+import { formatDate } from '@/format'
 
 const tabs = [
   { key: '', label: '全部' },
@@ -169,22 +227,45 @@ const STAGE_LABELS: Record<AdminRosterStage, string> = {
   done: '已完成'
 }
 
+const TAB_KEYS = new Set<string>(tabs.map((item) => item.key))
+const route = useRoute()
+const router = useRouter()
+
+function categoryFromQuery(): string {
+  const value = typeof route.query.category === 'string' ? route.query.category : ''
+  return TAB_KEYS.has(value) ? value : ''
+}
+
 const roster = ref<AdminRosterRow[]>([])
 const counts = ref<Record<string, number>>({ all: 0 })
 const loading = ref(true)
 const error = ref('')
 const q = ref('')
-const category = ref('')
-const dateRange = ref<DateRangeKey>('')
-const customFrom = ref('')
-const customTo = ref('')
+const category = ref(categoryFromQuery())
+const dateOptions = ref<AdminRosterDateOption[]>([])
+const selectedDates = ref<Set<string>>(new Set())
 const exporting = ref(false)
 const toast = ref('')
-
+const savingStatus = ref('')
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined
+let dateTimer: ReturnType<typeof setTimeout> | undefined
+
+const allDatesSelected = computed(
+  () => dateOptions.value.length > 0 && selectedDates.value.size === dateOptions.value.length
+)
+const dateSummary = computed(() => {
+  if (dateOptions.value.length === 0) return '全部日期'
+  if (selectedDates.value.size === 0) return `全部日期 · ${dateOptions.value.length} 天`
+  if (allDatesSelected.value) return `已选全部 ${dateOptions.value.length} 个日期`
+  return `已选 ${selectedDates.value.size} 个日期`
+})
+const showDateTones = computed(
+  () => dateOptions.value.length > 1 && selectedDates.value.size !== 1
+)
 
 const emptyText = computed(() => {
+  if (selectedDates.value.size) return '所选日期里没有符合条件的记录'
   if (category.value === 'unsubmitted') return '没有未填写的邀请'
   if (category.value) return '这个分类下暂时没有记录'
   return '还没有邀请或答卷'
@@ -205,26 +286,61 @@ function stageClass(stage: AdminRosterStage): string {
   return ''
 }
 
+function rowTone(row: AdminRosterRow): string {
+  if (!showDateTones.value || !row.inviteCreatedAt) return ''
+  const day = localDateKey(row.inviteCreatedAt).replace(/-/g, '')
+  if (!day) return ''
+  return `date-tone-${Number(day) % 6}`
+}
+
+function localDateKey(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+function dateParts(value: string): { year: string; month: string; day: string } {
+  const [year = '', month = '', day = ''] = value.split('-')
+  return { year, month, day }
+}
+
+function dateLabel(value: string): string {
+  const parts = dateParts(value)
+  return `${parts.year}.${parts.month}.${parts.day}`
+}
+
+function weekdayLabel(value: string): string {
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return ''
+  return ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()]
+}
+
 function inviteUrl(token: string): string {
   return `${location.origin}/i/${token}`
 }
 
+let loadRequest = 0
+
 async function load() {
+  const requestId = ++loadRequest
   loading.value = true
   error.value = ''
   try {
-    const bounds = dateRangeBounds(dateRange.value, customFrom.value, customTo.value)
     const result = await api.roster({
       q: q.value.trim(),
       category: category.value,
-      ...bounds
+      dates: allDatesSelected.value ? undefined : [...selectedDates.value]
     })
+    if (requestId !== loadRequest) return
     roster.value = result.roster
     counts.value = result.counts
+    dateOptions.value = result.dates ?? []
   } catch (err) {
+    if (requestId !== loadRequest) return
     error.value = err instanceof Error ? err.message : '读取失败'
   } finally {
-    loading.value = false
+    if (requestId === loadRequest) loading.value = false
   }
 }
 
@@ -233,7 +349,84 @@ watch(q, () => {
   searchTimer = setTimeout(load, 280)
 })
 watch(category, load)
-watch([dateRange, customFrom, customTo], load)
+watch(category, (value) => {
+  const query = { ...route.query }
+  if (value) query.category = value
+  else delete query.category
+  void router.replace({ query })
+})
+watch(
+  () => route.query.category,
+  () => {
+    const next = categoryFromQuery()
+    if (next !== category.value) category.value = next
+  }
+)
+
+let paintMode: 'add' | 'remove' | null = null
+let lastPaintedDate = ''
+
+function setDateSelected(date: string, selected: boolean) {
+  const next = new Set(selectedDates.value)
+  if (selected) next.add(date)
+  else next.delete(date)
+  selectedDates.value = next
+}
+
+function startDatePaint(event: PointerEvent, date: string) {
+  if (event.button !== 0) return
+  event.preventDefault()
+  paintMode = selectedDates.value.has(date) ? 'remove' : 'add'
+  lastPaintedDate = date
+  setDateSelected(date, paintMode === 'add')
+  window.addEventListener('pointermove', moveDatePaint, { passive: false })
+  window.addEventListener('pointerup', stopDatePaint, { once: true })
+  window.addEventListener('pointercancel', stopDatePaint, { once: true })
+}
+
+function moveDatePaint(event: PointerEvent) {
+  if (!paintMode) return
+  event.preventDefault()
+  const element = document.elementFromPoint(event.clientX, event.clientY)
+  const target = element?.closest<HTMLElement>('[data-date-paint]')
+  const date = target?.dataset.datePaint
+  if (!date || date === lastPaintedDate) return
+  lastPaintedDate = date
+  setDateSelected(date, paintMode === 'add')
+}
+
+function stopDatePaint() {
+  if (!paintMode) return
+  paintMode = null
+  lastPaintedDate = ''
+  window.removeEventListener('pointermove', moveDatePaint)
+  window.removeEventListener('pointerup', stopDatePaint)
+  window.removeEventListener('pointercancel', stopDatePaint)
+  queueDateLoad()
+}
+
+function handleDateClick(event: MouseEvent, date: string) {
+  if (event.detail !== 0) return
+  setDateSelected(date, !selectedDates.value.has(date))
+  queueDateLoad()
+}
+
+function queueDateLoad() {
+  if (dateTimer) clearTimeout(dateTimer)
+  dateTimer = setTimeout(load, 100)
+}
+
+function toggleAllDates() {
+  selectedDates.value = allDatesSelected.value
+    ? new Set()
+    : new Set(dateOptions.value.map((day) => day.date))
+  queueDateLoad()
+}
+
+function clearDateFilter() {
+  selectedDates.value = new Set()
+  queueDateLoad()
+}
 
 async function writeClipboard(text: string): Promise<boolean> {
   try {
@@ -274,6 +467,26 @@ async function rotate(row: AdminRosterRow) {
     flash('已换新链接并复制')
   } catch (err) {
     flash(err instanceof Error ? err.message : '操作失败')
+  }
+}
+
+async function changeStatus(row: AdminRosterRow, event: Event) {
+  if (!row.submissionId) return
+  const target = event.target as HTMLSelectElement
+  const value = target.value
+  const previous = row.contactStatus ?? 'new'
+  if (value === previous) return
+
+  savingStatus.value = row.id
+  try {
+    await api.patchSubmission(row.submissionId, { contactStatus: value })
+    await load()
+    flash('联系状态已更新')
+  } catch (err) {
+    target.value = previous
+    flash(err instanceof Error ? err.message : '更新失败')
+  } finally {
+    savingStatus.value = ''
   }
 }
 
@@ -321,6 +534,12 @@ onMounted(load)
   font-size: 28px;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+.page-sub {
+  margin-top: 7px;
+  font-size: 12.5px;
+  color: var(--ink-3);
 }
 
 .category-tabs {
@@ -378,6 +597,119 @@ onMounted(load)
   background: rgba(47, 93, 70, 0.12);
 }
 
+.date-filter-card {
+  margin-bottom: 14px;
+  padding: 17px 18px 14px;
+}
+
+.date-filter-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.date-filter-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.date-filter-summary {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.date-all-btn {
+  flex: 0 0 auto;
+  margin-top: -3px;
+}
+
+.date-rail {
+  display: flex;
+  gap: 8px;
+  margin-top: 13px;
+  padding: 2px 1px 5px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  user-select: none;
+}
+
+.date-block {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 108px;
+  min-height: 58px;
+  padding: 9px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  touch-action: none;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease,
+    transform 0.1s ease;
+}
+
+.date-block:hover {
+  border-color: rgba(47, 93, 70, 0.4);
+  background: rgba(47, 93, 70, 0.045);
+}
+
+.date-block:active {
+  transform: scale(0.98);
+}
+
+.date-block.on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(47, 93, 70, 0.16);
+}
+
+.date-block.on:hover {
+  background: var(--accent);
+  filter: brightness(0.97);
+}
+
+.date-block-day {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.date-block-meta {
+  margin-top: 4px;
+  font-size: 10.5px;
+  line-height: 1.25;
+  color: var(--ink-3);
+}
+
+.date-block.on .date-block-meta {
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.date-filter-empty,
+.date-filter-tip {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.date-filter-empty {
+  margin-top: 12px;
+}
+
+.date-filter-tip {
+  margin-top: 7px;
+}
+
 .toolbar {
   display: flex;
   gap: 12px;
@@ -392,18 +724,10 @@ onMounted(load)
   padding: 0 14px;
 }
 
-.date-filter {
-  width: 128px;
-  height: 40px;
-  font-size: 13px;
-  padding: 0 10px;
-}
-
-.date-input {
-  width: 136px;
-  height: 40px;
-  font-size: 12.5px;
-  padding: 0 10px;
+.date-hint {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
 }
 
 .spacer {
@@ -447,6 +771,13 @@ onMounted(load)
   color: var(--ink-3);
 }
 
+.status-select {
+  width: 112px;
+  height: 32px;
+  font-size: 11.5px;
+  padding: 0 8px;
+}
+
 .date-stack {
   display: grid;
   gap: 2px;
@@ -468,8 +799,56 @@ onMounted(load)
   flex-wrap: wrap;
 }
 
-.unsubmitted td {
-  background: rgba(247, 244, 237, 0.32);
+.roster-table tbody tr td {
+  transition: background 0.15s ease;
+}
+
+.roster-table tbody tr td:first-child {
+  border-left: 3px solid var(--date-line, transparent);
+}
+
+.roster-table tbody tr.date-tone-0 {
+  --date-line: #6f927c;
+  --date-bg: #f4f7f3;
+}
+
+.roster-table tbody tr.date-tone-1 {
+  --date-line: #b18a4c;
+  --date-bg: #fbf6ec;
+}
+
+.roster-table tbody tr.date-tone-2 {
+  --date-line: #6f94a6;
+  --date-bg: #f1f6f8;
+}
+
+.roster-table tbody tr.date-tone-3 {
+  --date-line: #ad756b;
+  --date-bg: #faf2f0;
+}
+
+.roster-table tbody tr.date-tone-4 {
+  --date-line: #8e789e;
+  --date-bg: #f6f2f8;
+}
+
+.roster-table tbody tr.date-tone-5 {
+  --date-line: #9a8a63;
+  --date-bg: #f7f4eb;
+}
+
+.roster-table tbody tr[class*='date-tone-'] td {
+  background: var(--date-bg);
+}
+
+.date-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--date-line, var(--line-strong));
+  vertical-align: 1px;
 }
 
 .empty-action {
@@ -477,6 +856,18 @@ onMounted(load)
 }
 
 @media (max-width: 760px) {
+  .date-filter-card {
+    padding: 15px 14px 12px;
+  }
+
+  .date-filter-head {
+    align-items: center;
+  }
+
+  .date-block {
+    min-width: 100px;
+  }
+
   .toolbar {
     flex-wrap: wrap;
   }
@@ -488,6 +879,10 @@ onMounted(load)
   }
 
   .spacer {
+    display: none;
+  }
+
+  .date-hint {
     display: none;
   }
 }

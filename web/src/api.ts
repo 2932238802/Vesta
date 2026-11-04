@@ -142,13 +142,16 @@ export const api = {
       { auth: true }
     )
   },
-  roster(params: { q?: string; category?: string; from?: string; to?: string } = {}) {
-    return request<{ roster: AdminRosterRow[]; counts: Record<string, number> }>(
+  roster(params: { q?: string; category?: string; dates?: string[] } = {}) {
+    return request<{
+      roster: AdminRosterRow[]
+      counts: Record<string, number>
+      dates: AdminRosterDateOption[]
+    }>(
       `/api/admin/roster${query({
         q: params.q,
         category: params.category,
-        from: params.from,
-        to: params.to
+        dates: params.dates?.length ? params.dates.join(',') : undefined
       })}`,
       { auth: true }
     )
@@ -364,6 +367,11 @@ export interface AdminRosterRow {
   reportSlug: string | null
   reportPath: string | null
   detailPath: string | null
+}
+
+export interface AdminRosterDateOption {
+  date: string
+  count: number
 }
 
 export interface AdminAppointment {

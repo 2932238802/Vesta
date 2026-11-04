@@ -2,8 +2,8 @@
   <div class="skill-page">
     <header class="page-head">
       <div>
-        <p class="eyebrow">报告</p>
-        <h1 class="page-title">分析 Skill</h1>
+        <p class="eyebrow">内容设置</p>
+        <h1 class="page-title">AI 分析规则</h1>
       </div>
       <div class="head-actions">
         <span v-if="dirty" class="chip warn">未保存</span>
@@ -16,7 +16,7 @@
       </div>
     </header>
 
-    <div v-if="loading" class="card empty">正在读取 Skill</div>
+    <div v-if="loading" class="card empty">正在读取分析规则</div>
 
     <template v-else>
       <p v-if="error" class="notice">{{ error }}</p>
@@ -32,10 +32,14 @@
       </div>
 
       <p v-if="!ai.configured" class="hint">
-        在 .env 配置 DEEPSEEK_API_KEY 后，报告会由 AI 生成；未配置时使用模板报告。
+        还没有连接 AI。请联系技术人员配置后，报告才会由 AI 自动分析。
       </p>
       <p v-if="!ai.searchConfigured" class="hint">
-        再配置 BOCHA_API_KEY，才能联网核对城市、岗位和考试要求。
+        联网核对未开启；开启后才能核对城市、岗位和考试要求。
+      </p>
+
+      <p class="hint">
+        这是高级设置。不确定要改什么时，建议保持原样；修改只影响之后生成的报告。
       </p>
 
       <section class="card editor-card">
@@ -69,6 +73,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api } from '@/api'
+import { useUnsavedChanges } from '@/useUnsavedChanges'
 
 const skill = ref('')
 const initial = ref('')
@@ -80,6 +85,8 @@ const toast = ref('')
 const ai = reactive({ configured: false, searchConfigured: false, model: '' })
 
 const dirty = computed(() => skill.value !== initial.value)
+
+useUnsavedChanges(dirty, 'AI 分析规则还有未保存的修改，确定离开？')
 
 const outputExample = `{
   "hero": { "summary": "一句话诊断", "tierLine": "档位说明" },
