@@ -1,6 +1,11 @@
 import crypto from 'node:crypto'
 import { Router } from 'express'
-import type { Answers, ReportOverrides, ReportResponse } from '../../../shared/src/types'
+import type {
+  Answers,
+  ReportOverrides,
+  ReportPayload,
+  ReportResponse
+} from '../../../shared/src/types'
 import { computeScores } from '../../../shared/src/scoring'
 import { buildReport } from '../../../shared/src/report'
 import { buildAiReport } from '../../../shared/src/ai'
@@ -260,41 +265,47 @@ publicRouter.get(
     let status = submission.ai_status
     let statusError = submission.ai_error
 
-    if (submission.ai_status === 'ready') {
-      const content = readStoredContent(submission.ai_report)
-      if (content) {
-        try {
-          const payload = buildAiReport({
-            survey,
-            answers,
-            scores,
-            template,
-            name,
-            slug: submission.slug,
-            createdAt: submission.created_at,
-            claimed: Boolean(submission.claimed_at),
-            overrides,
-            content
-          })
-          recordView()
-          const response: ReportResponse = { status: 'ready', report: payload, name }
-          res.json(response)
-          return
-        } catch (error) {
-          console.error('[ai-report] 报告内容无法渲染', submission.id, error)
-          db.prepare(
-            "UPDATE submissions SET ai_status = 'failed', ai_error = ? WHERE id = ?"
-          ).run('AI 报告内容损坏，当前显示基础内容', submission.id)
-          status = 'failed'
-          statusError = 'AI 报告内容损坏，当前显示基础内容'
-        }
-      } else {
+    const storedContent = readStoredContent(submission.ai_report)
+    let storedPayload: ReportPayload | null = null
+    if (storedContent) {
+      try {
+        storedPayload = buildAiReport({
+          survey,
+          answers,
+          scores,
+          template,
+          name,
+          slug: submission.slug,
+          createdAt: submission.created_at,
+          claimed: Boolean(submission.claimed_at),
+          overrides,
+          content: storedContent
+        })
+      } catch (error) {
+        console.error('[ai-report] 报告内容无法渲染', submission.id, error)
+        status = 'failed'
+        statusError = 'AI 报告内容损坏，当前显示基础内容'
         db.prepare(
           "UPDATE submissions SET ai_status = 'failed', ai_error = ? WHERE id = ?"
-        ).run('AI 报告内容缺失，当前显示基础内容', submission.id)
-        status = 'failed'
-        statusError = 'AI 报告内容缺失，当前显示基础内容'
+        ).run(statusError, submission.id)
       }
+    }
+
+    if (submission.ai_status === 'ready' && storedPayload) {
+      recordView()
+      const response: ReportResponse = { status: 'ready', report: storedPayload, name }
+      res.json(response)
+      return
+    }
+
+    if (submission.ai_status === 'ready' && !storedPayload) {
+      status = 'failed'
+      statusError = storedContent
+        ? 'AI 报告内容损坏，当前显示基础内容'
+        : 'AI 报告内容缺失，当前显示基础内容'
+      db.prepare(
+        "UPDATE submissions SET ai_status = 'failed', ai_error = ? WHERE id = ?"
+      ).run(statusError, submission.id)
     }
 
     if (!isAiConfigured() && status !== 'ready' && status !== 'failed') {
@@ -317,14 +328,48 @@ publicRouter.get(
 
     if (status === 'failed' || !isAiConfigured()) {
       recordView()
+      if (storedPayload) {
+        const response: ReportResponse = {
+          status: 'failed',
+          report: storedPayload,
+          name,
+          notice: '本次更新没有成功，当前仍显示上一版报告。'
+        }
+        res.json(response)
+        return
+      }
       const response: ReportResponse = {
         status: 'failed',
         report: buildFallback(),
         name,
         error:
           status === 'failed'
-            ? 'AI 分析暂未生成成功，当前显示基础内容。请联系管理员重新生成。'
-            : 'AI 分析还没有配置，当前显示基础内容。请联系管理员。'
+            ? 'AI 分析暂未生成成功，当前显示基础版。把本页截图发给发链接的人，可以帮你重新生成。'
+            : '当前显示基础版。'
+      }
+      res.json(response)
+      return
+    }
+
+    if (storedPayload) {
+      recordView()
+      const response: ReportResponse = {
+        status: status === 'running' ? 'running' : 'pending',
+        report: storedPayload,
+        name,
+        notice: 'AI 深度版正在更新，当前先显示上一版，完成后会自动替换。'
+      }
+      res.json(response)
+      return
+    }
+
+    if (req.query.preview === '1') {
+      recordView()
+      const response: ReportResponse = {
+        status: status === 'running' ? 'running' : 'pending',
+        report: buildFallback(),
+        name,
+        notice: 'AI 深度版还在生成，当前先显示基础版，完成后会自动替换。'
       }
       res.json(response)
       return

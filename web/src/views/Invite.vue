@@ -14,12 +14,25 @@
       <p class="eyebrow">{{ invite.survey.title }}</p>
       <h1 class="serif">
         {{ greeting }}<br />
-        你离想去的工作，<br class="wide-break" />还差哪几步呢
+        你离想去的地方，<br class="wide-break" />还差哪几步
       </h1>
 
+      <div v-if="introLines.length" class="intro">
+        <p v-for="line in introLines" :key="line">{{ line }}</p>
+      </div>
+
+      <p class="meta">
+        {{ invite.survey.questions.length }} 道题 · 大约 {{ invite.survey.estimatedMinutes }} 分钟
+      </p>
+
       <button class="btn start" type="button" @click="start">
-        开始填写
+        {{ draftFilled > 0 ? '继续填写' : '开始填写' }}
       </button>
+
+      <p v-if="draftFilled > 0" class="draft">
+        上次填到第 {{ draftStep + 1 }} 组，已填 {{ draftFilled }} 题
+      </p>
+      <p class="privacy">答案用于生成这份报告</p>
     </main>
 
     <footer class="foot">
@@ -31,7 +44,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { api, track, type InvitePayload } from '@/api'
+import { api, track, type Answers, type InvitePayload } from '@/api'
+import { isEmptyValue } from '@shared/validate'
 
 const route = useRoute()
 const router = useRouter()
@@ -39,6 +53,8 @@ const token = String(route.params.token ?? '')
 const invite = ref<InvitePayload | null>(null)
 const loading = ref(true)
 const error = ref('')
+const draftFilled = ref(0)
+const draftStep = ref(0)
 const year = new Date().getFullYear()
 
 const greeting = computed(() => {
@@ -46,12 +62,47 @@ const greeting = computed(() => {
   return name ? `${name}，你好` : '你好'
 })
 
+const introLines = computed(
+  () =>
+    invite.value?.survey.intro
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean) ?? []
+)
+
+function readDraft() {
+  if (!invite.value) return
+  try {
+    const raw = localStorage.getItem(`vesta:draft:${token}`)
+    if (!raw) return
+    const draft = JSON.parse(raw) as {
+      surveyId?: string
+      answers?: Answers
+      step?: number
+    }
+    if (draft.surveyId !== invite.value.survey.id || !draft.answers) return
+    const filled = invite.value.survey.questions.filter(
+      (question) => !isEmptyValue(draft.answers?.[question.id])
+    ).length
+    if (filled === 0) return
+    draftFilled.value = filled
+    draftStep.value = Math.max(
+      0,
+      Math.min(Number(draft.step ?? 0), invite.value.survey.groups.length - 1)
+    )
+  } catch {
+    // 草稿不可用时从零开始
+  }
+}
+
 onMounted(async () => {
   try {
     invite.value = await api.getInvite(token)
     if (invite.value.submitted && invite.value.reportSlug) {
       router.replace(`/r/${invite.value.reportSlug}`)
+      return
     }
+    readDraft()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '链接无法打开'
   } finally {
@@ -102,17 +153,50 @@ h1 {
   letter-spacing: 0.01em;
 }
 
+.intro {
+  margin-top: 26px;
+  display: grid;
+  gap: 6px;
+  max-width: 26em;
+}
+
+.intro p {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink-2);
+}
+
+.meta {
+  margin-top: 18px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+
 .start {
   display: flex;
   width: min(340px, 100%);
   height: 58px;
-  margin: 44px auto 0;
+  margin: 34px auto 0;
   border-radius: 16px;
   font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.04em;
   box-shadow: 0 10px 24px rgba(47, 93, 70, 0.18);
   transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.draft {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.privacy {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
 }
 
 .start:hover:not(:disabled) {

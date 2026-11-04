@@ -79,7 +79,9 @@ export function decryptText(payload: string): string {
 }
 
 export function csvCell(value: unknown): string {
-  const text = value === null || value === undefined ? '' : String(value)
+  let text = value === null || value === undefined ? '' : String(value)
+  // 防止 Excel / WPS 把用户填写的内容当成公式执行。
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`
   if (/[",\n\r]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`
   }

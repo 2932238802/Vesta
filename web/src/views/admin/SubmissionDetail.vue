@@ -268,6 +268,13 @@ async function save() {
 
 async function regenerate() {
   if (!detail.value) return
+  if (
+    !window.confirm(
+      '重新生成会替换当前 AI 报告。生成期间链接仍显示上一版，新版本完成后再替换。继续吗？'
+    )
+  ) {
+    return
+  }
   regenerating.value = true
   try {
     await api.regenerateReport(id)

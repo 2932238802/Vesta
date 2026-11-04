@@ -28,6 +28,9 @@
           </span>
         </div>
         <p class="hero-line">{{ block.tierLine }}</p>
+        <a v-if="claimLink" class="hero-claim" href="#claim">
+          读完后，如果愿意，可以到末尾留一个方便的时间
+        </a>
       </template>
 
       <template v-else-if="block.type === 'target'">
@@ -198,7 +201,7 @@ import RadarChart from './RadarChart.vue'
 import ScoreBar from './ScoreBar.vue'
 import SectionHead from './SectionHead.vue'
 
-const props = defineProps<{ payload: ReportPayload }>()
+const props = defineProps<{ payload: ReportPayload; claimLink?: boolean }>()
 
 const dateText = computed(() => {
   const date = new Date(props.payload.createdAt)
@@ -316,6 +319,22 @@ const dateText = computed(() => {
   line-height: 1.8;
   color: var(--ink-2);
   max-width: 34em;
+}
+
+.hero-claim {
+  display: inline-block;
+  margin-top: 20px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  line-height: 1.7;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 4px;
+}
+
+.hero-claim:hover {
+  color: var(--accent);
+  text-decoration-color: currentColor;
 }
 
 .target-facts {
@@ -696,6 +715,10 @@ const dateText = computed(() => {
 @media print {
   .block {
     break-inside: avoid;
+  }
+
+  .hero-claim {
+    display: none;
   }
 }
 </style>

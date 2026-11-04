@@ -128,7 +128,36 @@ function factorScores(answers: Answers, scores: ScoreResult): FactorScore[] {
   })
 }
 
-function weightedPriority(dimensions: DimScore[], factors: FactorScore[]): DimScore[] {
+function needBoosts(survey: Survey, answers: Answers): Map<string, number> {
+  const question = survey.questions.find((q) => q.id === 'c2')
+  if (!question || question.type !== 'matrix') return new Map()
+  const value = answers.c2
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return new Map()
+
+  const record = value as Record<string, unknown>
+  // 新版 C2：1 = 最缺，5 = 不缺；旧版问卷极性相反，按 6 - 原始分换算。
+  const newPolarity = question.anchors?.high === '不缺'
+  const boosts = new Map<string, number>()
+
+  for (const row of question.rows ?? []) {
+    if (!row.dimension) continue
+    const raw = Number(record[row.id])
+    if (!Number.isFinite(raw)) continue
+    const lack = newPolarity ? raw : 6 - raw
+    if (lack < 1 || lack > 3) continue
+    // 只作为排序时的温和加成，不覆盖系统分数；最多把优先级提高 24%。
+    const boost = (4 - lack) * 0.08
+    boosts.set(row.dimension, Math.max(boosts.get(row.dimension) ?? 0, boost))
+  }
+
+  return boosts
+}
+
+function weightedPriority(
+  dimensions: DimScore[],
+  factors: FactorScore[],
+  needs: Map<string, number> = new Map()
+): DimScore[] {
   const weights = new Map<string, number>()
   for (const factor of factors) {
     for (const key of factor.dimensions) {
@@ -136,8 +165,14 @@ function weightedPriority(dimensions: DimScore[], factors: FactorScore[]): DimSc
     }
   }
   return [...dimensions].sort((a, b) => {
-    const left = (100 - a.score) * (1 + (weights.get(a.key) ?? 0) / 10)
-    const right = (100 - b.score) * (1 + (weights.get(b.key) ?? 0) / 10)
+    const left =
+      (100 - a.score) *
+      (1 + (weights.get(a.key) ?? 0) / 10) *
+      (1 + (needs.get(a.key) ?? 0))
+    const right =
+      (100 - b.score) *
+      (1 + (weights.get(b.key) ?? 0) / 10) *
+      (1 + (needs.get(b.key) ?? 0))
     return right - left
   })
 }
@@ -266,6 +301,7 @@ interface ModuleContext {
 function buildModule(key: ModuleKey, ctx: ModuleContext): ReportBlock | null {
   const { survey, answers, scores, template, overrides, baseVars, lowest, date } = ctx
   const copy = template.copy
+  const needs = needBoosts(survey, answers)
 
   if (key === 'hero') {
     const summarySource = overrides?.diagnosis?.trim()
@@ -324,7 +360,11 @@ function buildModule(key: ModuleKey, ctx: ModuleContext): ReportBlock | null {
       name: dim.name,
       score: dim.score
     }))
-    const gaps = weightedPriority(ACTIONABLE(scores.dimensions), factorScores(answers, scores))
+    const gaps = weightedPriority(
+      ACTIONABLE(scores.dimensions),
+      factorScores(answers, scores),
+      needs
+    )
       .slice(0, 3)
       .map((dim) => ({ key: dim.key, name: dim.name, score: dim.score }))
 
@@ -414,7 +454,8 @@ function buildModule(key: ModuleKey, ctx: ModuleContext): ReportBlock | null {
   if (key === 'gaps') {
     const bottom = weightedPriority(
       ACTIONABLE(scores.dimensions),
-      factorScores(answers, scores)
+      factorScores(answers, scores),
+      needs
     ).slice(0, 3)
     return {
       type: 'gaps',
@@ -538,7 +579,8 @@ function buildModule(key: ModuleKey, ctx: ModuleContext): ReportBlock | null {
     }
     for (const dim of weightedPriority(
       ACTIONABLE(scores.dimensions),
-      factorScores(answers, scores)
+      factorScores(answers, scores),
+      needs
     )) {
       const action = template.dimensions[dim.key]?.action30
       if (action) push(render(action, { ...baseVars, name: dim.name, dim: dim.name }))

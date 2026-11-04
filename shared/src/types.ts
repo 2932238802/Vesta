@@ -316,6 +316,7 @@ export interface ReportResponse {
   report: ReportPayload | null
   name?: string
   error?: string
+  notice?: string
 }
 
 export interface ReportOverrides {

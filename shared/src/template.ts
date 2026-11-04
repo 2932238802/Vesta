@@ -109,14 +109,14 @@ export const defaultTemplate: ReportTemplate = {
     claim: {
       title: '预约一次免费的现状梳理',
       description:
-        '留下两个你方便的时间段和微信号。我会先看自己的时间安排，不一定都能约上；能约上的话，一次聊四十分钟左右。',
+        '留下一个或两个你方便的时间段和微信号。我会先看自己的时间安排，不一定都能约上；能约上的话，一次聊四十分钟左右。',
       freeNote: '',
       wechatLabel: '微信号',
       timeLabel: '方便的时间段',
       submit: '提交时间意愿',
       successTitle: '已经收到',
       successBody:
-        '我会尽快看时间安排：有合适的时间就加你确认；没有合适时间会直接告诉你，不会收费。',
+        '我会尽快看时间安排：有合适的时间就加你确认；没有合适时间会直接告诉你。',
       privacy: '微信号只用于这次联系，可随时要求删除'
     },
     footer: {

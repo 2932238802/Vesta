@@ -29,11 +29,19 @@
     <main v-else-if="!payload" class="state analysis">
       <p class="eyebrow">正在分析</p>
       <h1 class="serif">正在按你的选择整理报告</h1>
-      <p class="analysis-copy">
-        会核对目标城市、岗位和考试要求，通常需要 1—2 分钟。
-      </p>
+      <p class="analysis-copy">{{ waitCopy }}</p>
       <div class="analysis-line"><span /></div>
       <p class="quiet small">页面会自动更新，不用刷新。</p>
+      <button
+        v-if="elapsed >= 8"
+        class="btn ghost preview-btn"
+        type="button"
+        :disabled="previewLoading"
+        @click="showPreview"
+      >
+        {{ previewLoading ? '正在打开基础版' : '先看基础版' }}
+      </button>
+      <p v-if="previewNote" class="quiet small">{{ previewNote }}</p>
       <p v-if="slow" class="quiet small">比预期久一些，可以稍后再打开这个链接。</p>
       <p v-if="pollNote" class="quiet small">{{ pollNote }}</p>
     </main>
@@ -41,10 +49,10 @@
     <main v-else class="wrap fade-in">
       <p v-if="reportNotice" class="notice report-notice">{{ reportNotice }}</p>
       <div ref="sheetEl" class="sheet">
-        <ReportBlocks :payload="payload" />
+        <ReportBlocks :payload="payload" :claim-link="!claimed" />
       </div>
 
-      <section class="claim-section">
+      <section id="claim" class="claim-section">
         <div class="claim-card">
           <p class="eyebrow">下一步</p>
           <h2>{{ payload.claim.title }}</h2>
@@ -54,15 +62,41 @@
           <form v-if="!claimed" class="claim-form" @submit.prevent="submitClaim">
             <label class="field">
               <span>{{ payload.claim.wechatLabel }}</span>
-              <input v-model="wechat" class="input" type="text" maxlength="80" placeholder="微信号" />
+              <input
+                v-model="wechat"
+                class="input"
+                type="text"
+                name="wechat"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                maxlength="80"
+                placeholder="微信号"
+              />
             </label>
             <label class="field">
               <span>{{ payload.claim.timeLabel }} 一</span>
-              <input v-model="slot1" class="input" type="text" maxlength="80" placeholder="例：周三晚 8 点后" />
+              <input
+                v-model="slot1"
+                class="input"
+                type="text"
+                name="slot1"
+                autocomplete="off"
+                maxlength="80"
+                placeholder="例：周三晚 8 点后"
+              />
             </label>
             <label class="field">
               <span>{{ payload.claim.timeLabel }} 二（可不填）</span>
-              <input v-model="slot2" class="input" type="text" maxlength="80" placeholder="例：周六下午" />
+              <input
+                v-model="slot2"
+                class="input"
+                type="text"
+                name="slot2"
+                autocomplete="off"
+                maxlength="80"
+                placeholder="例：周六下午"
+              />
             </label>
             <label class="check agree">
               <input v-model="agree" type="checkbox" />
@@ -78,6 +112,10 @@
             <p class="eyebrow">已提交</p>
             <h3>{{ payload.claim.successTitle }}</h3>
             <p>{{ payload.claim.successBody }}</p>
+            <p v-if="wechat.trim()" class="claimed-meta">
+              微信号：{{ wechat.trim() }}
+              <template v-if="claimedSlots.length">· 时间：{{ claimedSlots.join(' / ') }}</template>
+            </p>
           </div>
 
           <p class="privacy">{{ payload.claim.privacy }}</p>
@@ -114,7 +152,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { toPng } from 'html-to-image'
 import type { ReportPayload } from '@shared/types'
-import { api } from '@/api'
+import { ApiError, api } from '@/api'
 import ReportBlocks from '@/components/ReportBlocks.vue'
 
 const route = useRoute()
@@ -125,6 +163,10 @@ const error = ref('')
 const reportNotice = ref('')
 const slow = ref(false)
 const pollNote = ref('')
+const previewNote = ref('')
+const previewLoading = ref(false)
+const reportStatus = ref('')
+const elapsed = ref(0)
 const claimed = ref(false)
 const wechat = ref('')
 const slot1 = ref('')
@@ -139,8 +181,20 @@ const shot = ref('')
 
 let pollTimer: number | undefined
 let slowTimer: number | undefined
+let elapsedTimer: number | undefined
 let inFlight = false
 let pollFailures = 0
+
+const waitCopy = computed(() => {
+  if (elapsed.value < 12) return '正在核对目标城市、岗位和考试要求，通常需要 1—2 分钟。'
+  if (elapsed.value < 35) return '正在把九项自评和你说的情况放在一起看。'
+  if (elapsed.value < 70) return '正在整理最该先动的几件事，通常还需要一点时间。'
+  return '还在生成。你可以先看基础版，深度版完成后会自动替换。'
+})
+
+const claimedSlots = computed(() =>
+  [slot1.value, slot2.value].map((slot) => slot.trim()).filter(Boolean)
+)
 
 const themeStyle = computed<Record<string, string>>(() => ({
   '--accent': payload.value?.theme.accent ?? '#2f5d46',
@@ -155,6 +209,19 @@ function stopPolling() {
   slowTimer = undefined
 }
 
+function startElapsed() {
+  if (elapsedTimer !== undefined) return
+  elapsed.value = 0
+  elapsedTimer = window.setInterval(() => {
+    elapsed.value += 1
+  }, 1000)
+}
+
+function stopElapsed() {
+  if (elapsedTimer !== undefined) window.clearInterval(elapsedTimer)
+  elapsedTimer = undefined
+}
+
 function startPolling() {
   if (pollTimer !== undefined) return
   slowTimer = window.setTimeout(() => {
@@ -165,18 +232,20 @@ function startPolling() {
   }, 3000)
 }
 
-async function load(poll = false) {
+async function load(poll = false, preview = false) {
   if (inFlight) return
   inFlight = true
   try {
-    const result = await api.getReport(slug, poll)
+    const result = await api.getReport(slug, poll, preview)
     pollFailures = 0
     pollNote.value = ''
+    reportStatus.value = result.status
     if (result.report) {
       payload.value = result.report
       claimed.value = result.report.claimed
+      reportNotice.value = result.notice ?? result.error ?? ''
+      stopElapsed()
     }
-    reportNotice.value = result.report ? (result.error ?? '') : ''
     error.value = ''
     if (result.status === 'pending' || result.status === 'running') {
       startPolling()
@@ -205,11 +274,42 @@ async function load(poll = false) {
   }
 }
 
+async function showPreview() {
+  if (previewLoading.value) return
+  previewLoading.value = true
+  previewNote.value = ''
+  try {
+    await load(true, true)
+    if (!payload.value) {
+      previewNote.value = '基础版暂时没有打开，可以稍后再试。'
+    }
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+function onVisibility() {
+  if (document.visibilityState !== 'visible' || inFlight) return
+  if (
+    !payload.value ||
+    reportStatus.value === 'pending' ||
+    reportStatus.value === 'running'
+  ) {
+    void load(true)
+  }
+}
+
 onMounted(() => {
+  startElapsed()
+  document.addEventListener('visibilitychange', onVisibility)
   void load(false)
 })
 
-onUnmounted(stopPolling)
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', onVisibility)
+  stopPolling()
+  stopElapsed()
+})
 
 async function submitClaim() {
   claimError.value = ''
@@ -227,10 +327,14 @@ async function submitClaim() {
   }
   claiming.value = true
   try {
-    const slots = [slot1.value, slot2.value].map((s) => s.trim()).filter(Boolean)
+    const slots = claimedSlots.value
     await api.claim(slug, { wechat: wechat.value.trim(), slots, agree: agree.value })
     claimed.value = true
   } catch (err) {
+    if (err instanceof ApiError && err.status === 409) {
+      claimed.value = true
+      return
+    }
     claimError.value = err instanceof Error ? err.message : '提交失败，请再试一次'
   } finally {
     claiming.value = false
@@ -347,6 +451,10 @@ function flash(message: string) {
   max-width: 30em;
 }
 
+.preview-btn {
+  margin-top: 22px;
+}
+
 .analysis-line {
   margin-top: 34px;
   width: 100%;
@@ -455,6 +563,12 @@ function flash(message: string) {
   margin-top: 8px;
   font-size: 13.5px;
   color: var(--ink-2);
+}
+
+.claimed .claimed-meta {
+  font-size: 12px;
+  color: var(--ink-3);
+  line-height: 1.7;
 }
 
 .privacy {

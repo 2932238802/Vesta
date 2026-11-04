@@ -56,7 +56,7 @@
             :dy="labelAt(i).dy"
             class="axis-label"
           >
-            {{ dimension.name }}
+            {{ shortName(dimension) }}
           </text>
         </g>
       </svg>
@@ -97,6 +97,22 @@ const center = { x: 200, y: 168 }
 const radius = 108
 const labelRadius = 136
 const levels = [0.25, 0.5, 0.75, 1]
+
+const shortNames: Record<string, string> = {
+  b1: '方向',
+  b2: '学业',
+  b3: '实践',
+  b4: '技能',
+  b5: '方法',
+  b6: '执行',
+  b7: '信息',
+  b8: '家庭',
+  b9: '英语'
+}
+
+function shortName(dimension: DimScore): string {
+  return shortNames[dimension.key] ?? dimension.name
+}
 
 function angleAt(index: number): number {
   return -Math.PI / 2 + (index * Math.PI * 2) / props.dimensions.length
@@ -250,6 +266,10 @@ svg {
 }
 
 @media (max-width: 480px) {
+  .axis-label {
+    font-size: 10px;
+  }
+
   .data-grid {
     grid-template-columns: 1fr;
   }

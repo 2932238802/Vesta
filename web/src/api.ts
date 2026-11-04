@@ -18,9 +18,11 @@ export function clearToken(): void {
 
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  details?: Record<string, unknown>
+  constructor(message: string, status: number, details?: Record<string, unknown>) {
     super(message)
     this.status = status
+    this.details = details
   }
 }
 
@@ -62,7 +64,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       data && typeof data === 'object' && 'error' in data
         ? String((data as { error: unknown }).error)
         : '请求失败'
-    throw new ApiError(message, response.status)
+    throw new ApiError(
+      message,
+      response.status,
+      data && typeof data === 'object' ? (data as Record<string, unknown>) : undefined
+    )
   }
 
   return data as T
@@ -267,8 +273,11 @@ export const api = {
       body: { answers, timing }
     })
   },
-  getReport(slug: string, poll = false) {
-    const suffix = poll ? '?poll=1' : ''
+  getReport(slug: string, poll = false, preview = false) {
+    const params = new URLSearchParams()
+    if (poll) params.set('poll', '1')
+    if (preview) params.set('preview', '1')
+    const suffix = params.toString() ? `?${params.toString()}` : ''
     return request<ReportResponse>(`/api/report/${encodeURIComponent(slug)}${suffix}`)
   },
   claim(slug: string, body: { wechat: string; slots: string[]; agree: boolean }) {

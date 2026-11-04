@@ -602,8 +602,8 @@ export function regenerateReport(submissionId: string): boolean {
   if (row.ai_status === 'running' && running.has(submissionId)) return true
   db.prepare(
     `UPDATE submissions
-     SET ai_status = 'pending', ai_report = NULL, ai_error = '', ai_attempts = 0,
-         ai_meta = '{}', ai_started_at = NULL, ai_finished_at = NULL
+     SET ai_status = 'pending', ai_error = '', ai_attempts = 0,
+         ai_started_at = NULL, ai_finished_at = NULL
      WHERE id = ?`
   ).run(submissionId)
   startReportGeneration(submissionId)

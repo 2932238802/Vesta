@@ -282,6 +282,20 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
     changed = true
   }
 
+  // 英语独立成 b9 后，B2 的锚点不再用四六级举例，避免同一件事被问三遍。
+  const b2 = questions.find((q) => q.id === 'b2')
+  const canonicalB2 = canonical.find((q) => q.id === 'b2')
+  if (b2?.anchors && canonicalB2?.anchors) {
+    if (b2.anchors.low === '四六级都没过，绩点中下，经常担心挂科') {
+      b2.anchors.low = canonicalB2.anchors.low
+      changed = true
+    }
+    if (b2.anchors.high === '四级已过、六级在准备或已过，绩点稳定在专业前列') {
+      b2.anchors.high = canonicalB2.anchors.high
+      changed = true
+    }
+  }
+
   const c2Question = questions.find((q) => q.id === 'c2')
   if (
     c2Question?.type === 'matrix' &&
@@ -477,14 +491,20 @@ function upgradeTemplate(template: ReportTemplate): { template: ReportTemplate; 
   if (claim) {
     const legacyClaim: Partial<Record<keyof typeof claim, string[]>> = {
       title: ['领取一次免费规划'],
-      description: ['留两个你方便的时间段和微信号，我会按顺序联系你，一次约四十分钟'],
+      description: [
+        '留两个你方便的时间段和微信号，我会按顺序联系你，一次约四十分钟',
+        '留下两个你方便的时间段和微信号。我会先看自己的时间安排，不一定都能约上；能约上的话，一次聊四十分钟左右。'
+      ],
       freeNote: [
         '这是一次免费的现状梳理，不代表任何课程推销。你不报课，这次梳理照样做',
         '如果时间合适，这次梳理是免费的，也不代表任何课程推销；约不上也不会向你收费。'
       ],
       submit: ['提交'],
       successTitle: ['收到了'],
-      successBody: ['我会在两天内加你，按你留的时间段约']
+      successBody: [
+        '我会在两天内加你，按你留的时间段约',
+        '我会尽快看时间安排：有合适的时间就加你确认；没有合适时间会直接告诉你，不会收费。'
+      ]
     }
     for (const key of Object.keys(legacyClaim) as (keyof typeof claim)[]) {
       if (legacyClaim[key]?.includes(claim[key])) {

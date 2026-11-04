@@ -62,6 +62,9 @@
         <span class="box" />
         <span>{{ option.label }}</span>
       </button>
+      <p v-if="limitHit" class="limit-hint">
+        最多选 {{ question.maxSelect }} 项，先取消一项
+      </p>
     </div>
 
     <div v-else-if="question.type === 'matrix'" class="matrix">
@@ -78,7 +81,12 @@
           <span>{{ question.anchors.high }} · {{ scale.length }}</span>
         </div>
       </div>
-      <div v-for="row in question.rows" :key="row.id" class="matrix-row">
+      <div
+        v-for="row in question.rows"
+        :key="row.id"
+        class="matrix-row"
+        :class="{ missing: invalid && matrixValue[row.id] === undefined }"
+      >
         <span class="matrix-label">{{ row.label }}</span>
         <div class="matrix-scale" role="radiogroup" :aria-label="row.label">
           <button
@@ -97,7 +105,12 @@
 
     <div v-else-if="question.type === 'text'" class="text-inputs">
       <template v-if="question.fields?.length">
-        <label v-for="(field, i) in question.fields" :key="field" class="split-field">
+        <label
+          v-for="(field, i) in question.fields"
+          :key="field"
+          class="split-field"
+          :class="{ 'field-missing': invalid && !(textValues[i] ?? '').trim() }"
+        >
           <span>{{ field }}</span>
           <input
             class="input"
@@ -112,6 +125,7 @@
       <textarea
         v-else
         class="textarea"
+        :class="{ 'field-missing': invalid && !String(modelValue ?? '').trim() }"
         rows="3"
         maxlength="600"
         :value="typeof modelValue === 'string' ? modelValue : ''"
@@ -131,7 +145,11 @@
     </div>
 
     <div v-if="question.type === 'choiceText'" class="note-field">
-      <label v-if="isOtherSelected" class="split-field other-field">
+      <label
+        v-if="isOtherSelected"
+        class="split-field other-field"
+        :class="{ 'field-missing': invalid && !choiceNote.other.trim() }"
+      >
         <span>{{ question.otherLabel || '其他（请填写）' }}</span>
         <input
           class="input"
@@ -155,12 +173,12 @@
       </label>
     </div>
 
-    <p v-if="invalid" class="invalid">这道题还没完成</p>
+    <p v-if="invalid" class="invalid">{{ invalidMessage }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { AnswerValue, Question } from '@shared/types'
 
 const props = defineProps<{
@@ -219,6 +237,25 @@ const isOtherSelected = computed(
   () => Boolean(otherOptionId.value) && choiceNote.value.choice === otherOptionId.value
 )
 
+const limitHit = ref(false)
+
+const matrixMissingCount = computed(
+  () => (props.question.rows ?? []).filter((row) => matrixValue.value[row.id] === undefined).length
+)
+
+const invalidMessage = computed(() => {
+  if (props.question.type === 'matrix' && matrixMissingCount.value > 0) {
+    return `还有 ${matrixMissingCount.value} 项没打分`
+  }
+  if (props.question.type === 'choiceText' && isOtherSelected.value && !choiceNote.value.other.trim()) {
+    return '选了「其他」，请写清具体内容'
+  }
+  if (props.question.type === 'text' && props.question.fields?.length) {
+    return '还有空没填'
+  }
+  return '这道题还没完成'
+})
+
 function isSelected(id: string): boolean {
   return props.question.type === 'choiceText'
     ? choiceNote.value.choice === id
@@ -268,8 +305,15 @@ function isChecked(id: string): boolean {
 function toggle(id: string) {
   const current = Array.isArray(props.modelValue) ? [...props.modelValue] : []
   const index = current.indexOf(id)
-  if (index >= 0) current.splice(index, 1)
-  else if (!props.question.maxSelect || current.length < props.question.maxSelect) current.push(id)
+  if (index >= 0) {
+    current.splice(index, 1)
+  } else if (props.question.maxSelect && current.length >= props.question.maxSelect) {
+    limitHit.value = true
+    return
+  } else {
+    current.push(id)
+  }
+  limitHit.value = false
   update(current)
 }
 </script>
@@ -435,6 +479,12 @@ function toggle(id: string) {
   box-shadow: inset 0 0 0 3px var(--accent-soft);
 }
 
+.limit-hint {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
 .matrix {
   margin-top: 18px;
   padding-left: 34px;
@@ -460,6 +510,10 @@ function toggle(id: string) {
   font-size: 14px;
   line-height: 1.5;
   color: var(--ink-2);
+}
+
+.matrix-row.missing .matrix-label {
+  color: var(--danger);
 }
 
 .matrix-scale {
@@ -526,6 +580,16 @@ function toggle(id: string) {
   font-size: 11.5px;
   color: var(--ink-3);
   letter-spacing: 0.04em;
+}
+
+.field-missing > span {
+  color: var(--danger);
+}
+
+.field-missing .input,
+.input.field-missing,
+.textarea.field-missing {
+  border-color: var(--danger);
 }
 
 .note-field {

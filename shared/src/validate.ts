@@ -147,6 +147,7 @@ export function validateAnswers(survey: Survey, input: unknown): AnswerValidatio
         errors.push(`题目「${question.title}」的选项无效`)
       } else if (isOther && !other) {
         errors.push(`题目「${question.title}」选了其他，请填写具体内容`)
+        missing.push(question.id)
       } else if (note.length > 300 || other.length > 300) {
         errors.push(`题目「${question.title}」填写过长`)
       } else {
@@ -203,7 +204,11 @@ export function validateAnswers(survey: Survey, input: unknown): AnswerValidatio
         } else if (value.some((v) => (v as string).length > 300)) {
           errors.push(`题目「${question.title}」填写过长`)
         } else {
-          answers[question.id] = (value as string[]).map((v) => v.trim())
+          const fields = (value as string[]).map((v) => v.trim())
+          answers[question.id] = fields
+          if (question.required && fields.some((field) => field.length === 0)) {
+            missing.push(question.id)
+          }
         }
       } else if (typeof value !== 'string') {
         errors.push(`题目「${question.title}」的填写内容无效`)
