@@ -39,7 +39,7 @@
           {{ loading ? '正在登录' : '进入后台' }}
         </button>
 
-        <p class="login-note">登录状态会保留 30 天；同一时间只能一台设备登录。</p>
+        <p class="login-note">登录状态会保留 30 天；可在多台设备同时登录，退出只影响当前设备。</p>
       </form>
     </section>
   </div>
@@ -59,7 +59,7 @@ const error = ref('')
 
 onMounted(() => {
   if (route.query.expired === '1') {
-    error.value = '登录已失效，或账号已在其他设备登录，请重新登录'
+    error.value = '登录已失效，请重新登录'
   }
 })
 

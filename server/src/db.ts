@@ -80,6 +80,14 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS admin_sessions (
+    sid TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);
 `)
 
 function ensureSubmissionColumns(): void {
@@ -123,18 +131,52 @@ export function setSetting(key: string, value: string): void {
   ).run(key, value)
 }
 
-// 后台同一时间只保留一个有效登录会话，存在 settings 里以便重启后仍然有效。
-export function getActiveAdminSession(): string | null {
-  return getSetting('admin_session')
+interface AdminSessionRow {
+  sid: string
+  username: string
+  created_at: string
+  expires_at: string
 }
 
-export function setActiveAdminSession(sessionId: string): void {
-  setSetting('admin_session', sessionId)
+export function createAdminSession(sid: string, username: string, expiresAt: string): void {
+  clearExpiredAdminSessions()
+  db.prepare(
+    'INSERT INTO admin_sessions (sid, username, created_at, expires_at) VALUES (?, ?, ?, ?)'
+  ).run(sid, username, now(), expiresAt)
 }
 
-export function clearActiveAdminSession(): void {
+export function getAdminSession(sid: string): AdminSessionRow | null {
+  const row = db
+    .prepare('SELECT sid, username, created_at, expires_at FROM admin_sessions WHERE sid = ?')
+    .get(sid) as AdminSessionRow | undefined
+  if (!row) return null
+  if (row.expires_at <= now()) {
+    deleteAdminSession(sid)
+    return null
+  }
+  return row
+}
+
+export function deleteAdminSession(sid: string): void {
+  db.prepare('DELETE FROM admin_sessions WHERE sid = ?').run(sid)
+}
+
+export function clearExpiredAdminSessions(): void {
+  db.prepare('DELETE FROM admin_sessions WHERE expires_at <= ?').run(now())
+}
+
+function migrateLegacyAdminSession(): void {
+  const sessionId = getSetting('admin_session')
+  if (!sessionId) return
+  const expiresAt = new Date(Date.now() + config.sessionTtl * 1000).toISOString()
+  db.prepare(
+    'INSERT OR IGNORE INTO admin_sessions (sid, username, created_at, expires_at) VALUES (?, ?, ?, ?)'
+  ).run(sessionId, config.adminUser, now(), expiresAt)
   db.prepare("DELETE FROM settings WHERE key = 'admin_session'").run()
 }
+
+migrateLegacyAdminSession()
+clearExpiredAdminSessions()
 
 export function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${crypto.randomBytes(4).toString('hex')}`

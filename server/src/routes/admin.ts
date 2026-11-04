@@ -8,8 +8,8 @@ import { validateAnswers, validateSurvey, validateTemplate } from '../../../shar
 import { config } from '../env'
 import { checkCredentials, createToken, noStore, requireAdmin } from '../auth'
 import {
-  clearActiveAdminSession,
   db,
+  deleteAdminSession,
   getActiveSurvey,
   getReportSkill,
   getSurvey,
@@ -56,7 +56,8 @@ adminRouter.get('/me', (req, res) => {
 
 adminRouter.post('/logout', (req, res) => {
   noStore(res)
-  clearActiveAdminSession()
+  const sessionId = typeof res.locals.adminSessionId === 'string' ? res.locals.adminSessionId : ''
+  if (sessionId) deleteAdminSession(sessionId)
   res.json({ ok: true })
 })
 
