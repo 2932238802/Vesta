@@ -101,9 +101,14 @@ export const api = {
   overview() {
     return request<Overview>('/api/admin/overview', { auth: true })
   },
-  invites(params: { q?: string; status?: string } = {}) {
+  invites(params: { q?: string; status?: string; from?: string; to?: string } = {}) {
     return request<{ invites: AdminInvite[] }>(
-      `/api/admin/invites${query({ q: params.q, status: params.status })}`,
+      `/api/admin/invites${query({
+        q: params.q,
+        status: params.status,
+        from: params.from,
+        to: params.to
+      })}`,
       { auth: true }
     )
   },
@@ -133,6 +138,17 @@ export const api = {
       `/api/admin/submissions${query({
         q: params.q,
         contactStatus: params.contactStatus
+      })}`,
+      { auth: true }
+    )
+  },
+  roster(params: { q?: string; category?: string; from?: string; to?: string } = {}) {
+    return request<{ roster: AdminRosterRow[]; counts: Record<string, number> }>(
+      `/api/admin/roster${query({
+        q: params.q,
+        category: params.category,
+        from: params.from,
+        to: params.to
       })}`,
       { auth: true }
     )
@@ -315,6 +331,39 @@ export interface AdminSubmissionSummary {
   contactStatus: string
   createdAt: string
   reportSlug: string
+}
+
+export type AdminRosterStage =
+  | 'pending'
+  | 'opened'
+  | 'expired'
+  | 'unclaimed'
+  | 'new'
+  | 'contacted'
+  | 'scheduled'
+  | 'done'
+
+export interface AdminRosterRow {
+  id: string
+  inviteId: string
+  submissionId: string | null
+  token: string
+  name: string
+  note: string
+  channel: string
+  stage: AdminRosterStage
+  inviteCreatedAt: string
+  openedAt: string | null
+  submittedAt: string | null
+  expiresAt: string | null
+  total: number | null
+  tier: string | null
+  claimed: boolean
+  slots: string[]
+  contactStatus: string | null
+  reportSlug: string | null
+  reportPath: string | null
+  detailPath: string | null
 }
 
 export interface AdminAppointment {

@@ -3,119 +3,19 @@
     <header class="page-head">
       <div>
         <p class="eyebrow">邀请链接</p>
-        <h1 class="page-title">一人一条，发给学员</h1>
+        <h1 class="page-title">生成邀请链接</h1>
       </div>
-      <button class="btn" type="button" @click="openModal">生成链接</button>
     </header>
 
-    <div class="toolbar">
-      <input v-model="q" class="input search" type="search" placeholder="搜索姓名、备注、渠道" />
-      <select v-model="status" class="select filter">
-        <option value="">全部状态</option>
-        <option value="pending">待填写</option>
-        <option value="opened">已打开</option>
-        <option value="submitted">已提交</option>
-        <option value="expired">已过期</option>
-      </select>
-      <div class="spacer" />
-      <span class="quiet tiny">{{ invites.length }} 条</span>
-    </div>
+    <p class="lead">
+      这里只负责生成链接。打开、提交、是否领取和跟进状态，统一到
+      <RouterLink to="/admin/submissions">答卷与名单</RouterLink> 查看。
+    </p>
 
-    <section class="card table-card">
-      <div v-if="loading" class="empty">正在读取</div>
-      <div v-else-if="error" class="empty">{{ error }}</div>
-      <div v-else-if="invites.length === 0" class="empty">
-        还没有链接
-        <div class="empty-action">
-          <button class="btn ghost small" type="button" @click="openModal">生成第一条</button>
-        </div>
-      </div>
-      <div v-else class="table-scroll">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>学员</th>
-              <th>渠道</th>
-              <th>状态</th>
-              <th>提交</th>
-              <th>创建时间</th>
-              <th class="actions-col">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="invite in invites" :key="invite.id">
-              <td>
-                <div class="name">{{ invite.name || '未命名' }}</div>
-                <div v-if="invite.note" class="note">{{ invite.note }}</div>
-              </td>
-              <td class="quiet small">{{ invite.channel || '—' }}</td>
-              <td>
-                <span class="chip" :class="statusClass(invite.status)">
-                  {{ inviteStatusLabel(invite.status) }}
-                </span>
-              </td>
-              <td>
-                <template v-if="invite.reportPath">
-                  <RouterLink class="link" :to="invite.reportPath">
-                    {{ invite.tier }} 档 · {{ invite.total }} 分
-                  </RouterLink>
-                </template>
-                <span v-else class="quiet small">—</span>
-              </td>
-              <td class="quiet small">{{ formatDate(invite.createdAt, false) }}</td>
-              <td>
-                <div class="row-actions">
-                  <button class="btn quiet" type="button" @click="copy(inviteUrl(invite.token))">
-                    复制
-                  </button>
-                  <button class="btn quiet" type="button" @click="open(invite.token)">打开</button>
-                  <button
-                    v-if="!invite.reportSlug"
-                    class="btn quiet"
-                    type="button"
-                    @click="rotate(invite)"
-                  >
-                    换链接
-                  </button>
-                  <button
-                    v-if="!invite.reportSlug"
-                    class="btn quiet delete"
-                    type="button"
-                    @click="remove(invite)"
-                  >
-                    删除
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <Modal
-      :open="modalOpen"
-      :title="created.length ? '链接已生成' : '生成邀请链接'"
-      @close="closeModal"
-    >
-      <div v-if="created.length" class="created">
-        <div class="created-list">
-          <div v-for="item in created" :key="item.url" class="created-item">
-            <span class="created-name">{{ item.name }}</span>
-            <span class="created-url">{{ item.url }}</span>
-            <button class="btn quiet" type="button" @click="copy(item.url)">复制</button>
-          </div>
-        </div>
-        <button class="btn ghost wide" type="button" @click="copyAll">复制全部链接</button>
-      </div>
-
-      <form v-else class="form" @submit.prevent="generate">
+    <section v-if="!created.length" class="card generator-card">
+      <form class="form" @submit.prevent="generate">
         <div class="mode">
-          <button
-            type="button"
-            :class="{ on: mode === 'single' }"
-            @click="mode = 'single'"
-          >
+          <button type="button" :class="{ on: mode === 'single' }" @click="mode = 'single'">
             单个
           </button>
           <button type="button" :class="{ on: mode === 'bulk' }" @click="mode = 'bulk'">
@@ -132,7 +32,7 @@
           <textarea
             v-model="namesText"
             class="textarea"
-            rows="5"
+            rows="7"
             placeholder="小林&#10;小周&#10;小陈"
           />
         </label>
@@ -154,20 +54,37 @@
         </label>
 
         <p v-if="formError" class="notice">{{ formError }}</p>
-      </form>
 
-      <template #footer>
-        <template v-if="created.length">
-          <button class="btn" type="button" @click="closeModal">完成</button>
-        </template>
-        <template v-else>
-          <button class="btn quiet" type="button" @click="closeModal">取消</button>
-          <button class="btn" type="button" :disabled="creating" @click="generate">
-            {{ creating ? '正在生成' : '生成' }}
+        <div class="form-actions">
+          <button class="btn" type="submit" :disabled="creating">
+            {{ creating ? '正在生成' : '生成链接' }}
           </button>
-        </template>
-      </template>
-    </Modal>
+        </div>
+      </form>
+    </section>
+
+    <section v-else class="card result-card">
+      <header class="result-head">
+        <div>
+          <p class="eyebrow">生成完成</p>
+          <h2>已生成 {{ created.length }} 条链接</h2>
+        </div>
+        <button class="btn ghost small" type="button" @click="reset">再生成一批</button>
+      </header>
+
+      <div class="created-list">
+        <div v-for="item in created" :key="item.url" class="created-item">
+          <span class="created-name">{{ item.name }}</span>
+          <span class="created-url">{{ item.url }}</span>
+          <button class="btn quiet" type="button" @click="copy(item.url)">复制</button>
+        </div>
+      </div>
+
+      <div class="result-actions">
+        <button class="btn ghost" type="button" @click="copyAll">复制全部链接</button>
+        <RouterLink class="btn" to="/admin/submissions">去答卷与名单查看</RouterLink>
+      </div>
+    </section>
 
     <Transition name="toast">
       <div v-if="toast" class="toast">{{ toast }}</div>
@@ -176,19 +93,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { api, type AdminInvite } from '@/api'
-import { formatDate, inviteStatusLabel } from '@/format'
-import Modal from '@/components/Modal.vue'
+import { api } from '@/api'
 
-const invites = ref<AdminInvite[]>([])
-const loading = ref(true)
-const error = ref('')
-const q = ref('')
-const status = ref('')
-
-const modalOpen = ref(false)
 const mode = ref<'single' | 'bulk'>('single')
 const name = ref('')
 const namesText = ref('')
@@ -199,53 +107,6 @@ const creating = ref(false)
 const formError = ref('')
 const created = ref<{ name: string; url: string }[]>([])
 const toast = ref('')
-
-let searchTimer: ReturnType<typeof setTimeout> | undefined
-
-function statusClass(value: string): string {
-  if (value === 'submitted') return 'accent'
-  if (value === 'expired') return 'danger'
-  if (value === 'opened') return 'warn'
-  return ''
-}
-
-function inviteUrl(token: string): string {
-  return `${location.origin}/i/${token}`
-}
-
-async function load() {
-  loading.value = true
-  error.value = ''
-  try {
-    const result = await api.invites({ q: q.value.trim(), status: status.value })
-    invites.value = result.invites
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '读取失败'
-  } finally {
-    loading.value = false
-  }
-}
-
-watch(q, () => {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(load, 280)
-})
-watch(status, load)
-
-function openModal() {
-  modalOpen.value = true
-  created.value = []
-  formError.value = ''
-  name.value = ''
-  namesText.value = ''
-  note.value = ''
-  channel.value = ''
-  expiresAt.value = ''
-}
-
-function closeModal() {
-  modalOpen.value = false
-}
 
 async function generate() {
   formError.value = ''
@@ -280,7 +141,6 @@ async function generate() {
       name: invite.name,
       url: `${location.origin}${invite.path}`
     }))
-    await load()
   } catch (err) {
     formError.value = err instanceof Error ? err.message : '生成失败'
   } finally {
@@ -288,36 +148,19 @@ async function generate() {
   }
 }
 
-async function rotate(invite: AdminInvite) {
-  if (!confirm(`给「${invite.name}」换一条新链接？旧链接会立即失效`)) return
-  try {
-    await api.rotateInvite(invite.id)
-    await load()
-    flash('已换新链接')
-  } catch (err) {
-    flash(err instanceof Error ? err.message : '操作失败')
-  }
-}
-
-async function remove(invite: AdminInvite) {
-  if (!confirm(`删除「${invite.name}」的链接？删除后无法恢复`)) return
-  try {
-    await api.deleteInvite(invite.id)
-    await load()
-    flash('已删除')
-  } catch (err) {
-    flash(err instanceof Error ? err.message : '删除失败')
-  }
-}
-
-function open(token: string) {
-  window.open(`/i/${token}`, '_blank')
+function reset() {
+  created.value = []
+  name.value = ''
+  namesText.value = ''
+  note.value = ''
+  channel.value = ''
+  expiresAt.value = ''
+  formError.value = ''
 }
 
 async function copy(text: string) {
   try {
     await navigator.clipboard.writeText(text)
-    flash('已复制')
   } catch {
     const area = document.createElement('textarea')
     area.value = text
@@ -325,12 +168,12 @@ async function copy(text: string) {
     area.select()
     document.execCommand('copy')
     document.body.removeChild(area)
-    flash('已复制')
   }
+  flash('已复制')
 }
 
 function copyAll() {
-  copy(created.value.map((item) => `${item.name} ${item.url}`).join('\n'))
+  void copy(created.value.map((item) => `${item.name} ${item.url}`).join('\n'))
 }
 
 function flash(message: string) {
@@ -339,8 +182,6 @@ function flash(message: string) {
     toast.value = ''
   }, 1800)
 }
-
-onMounted(load)
 </script>
 
 <style scoped>
@@ -350,7 +191,7 @@ onMounted(load)
   justify-content: space-between;
   gap: 24px;
   flex-wrap: wrap;
-  margin-bottom: 26px;
+  margin-bottom: 16px;
 }
 
 .page-title {
@@ -360,110 +201,28 @@ onMounted(load)
   letter-spacing: -0.01em;
 }
 
-.toolbar {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 14px;
-}
-
-.search {
-  max-width: 280px;
-  height: 40px;
-  font-size: 13.5px;
-  padding: 0 14px;
-}
-
-.filter {
-  width: 140px;
-  height: 40px;
-  font-size: 13.5px;
-  padding: 0 12px;
-}
-
-.table-card {
-  overflow: hidden;
-}
-
-.table-scroll {
-  overflow-x: auto;
-}
-
-.name {
-  font-size: 13.5px;
-  color: var(--ink);
-}
-
-.note {
-  margin-top: 3px;
-  font-size: 11.5px;
-  color: var(--ink-3);
-}
-
-.link {
-  color: var(--accent);
-  border-bottom: 1px solid transparent;
-}
-
-.link:hover {
-  border-bottom-color: var(--accent);
-}
-
-.row-actions {
-  display: flex;
-  gap: 2px;
-  justify-content: flex-end;
-}
-
-.delete {
-  color: var(--danger);
-}
-
-.empty-action {
-  margin-top: 16px;
-}
-
-.created {
-  display: grid;
-  gap: 16px;
-}
-
-.created-list {
-  display: grid;
-  gap: 0;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.created-item {
-  display: grid;
-  grid-template-columns: 80px 1fr auto;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 0;
-  border-top: 1px solid var(--line);
-}
-
-.created-item:first-child {
-  border-top: 0;
-}
-
-.created-name {
+.lead {
+  max-width: 620px;
+  margin-bottom: 22px;
   font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink-3);
 }
 
-.created-url {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.lead a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.generator-card {
+  max-width: 680px;
+  padding: 26px 28px;
 }
 
 .form {
   display: grid;
-  gap: 16px;
+  gap: 18px;
 }
 
 .mode {
@@ -489,27 +248,80 @@ onMounted(load)
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.result-card {
+  max-width: 760px;
+  padding: 24px 26px;
+}
+
+.result-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.result-head h2 {
+  margin-top: 5px;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.created-list {
+  display: grid;
+  max-height: 380px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+}
+
+.created-item {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.created-name {
+  font-size: 13px;
+}
+
+.created-url {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
 @media (max-width: 640px) {
-  .toolbar {
-    flex-wrap: wrap;
-  }
-
-  .search {
-    max-width: none;
-    flex: 1;
-    min-width: 160px;
-  }
-
-  .filter {
-    width: 120px;
+  .generator-card,
+  .result-card {
+    padding: 20px 18px;
   }
 
   .created-item {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 76px minmax(0, 1fr) auto;
+    gap: 8px;
   }
 
-  .created-url {
-    grid-column: span 2;
+  .result-actions {
+    flex-direction: column;
   }
 }
 </style>

@@ -101,6 +101,74 @@ interface SubmissionRow {
   created_at: string
 }
 
+interface RosterRow {
+  invite_id: string
+  token: string
+  name: string
+  note: string
+  channel: string
+  invite_created_at: string
+  opened_at: string | null
+  submitted_at: string | null
+  expires_at: string | null
+  submission_id: string | null
+  slug: string | null
+  total: number | null
+  tier: string | null
+  claimed_at: string | null
+  slots: string | null
+  contact_status: string | null
+  submission_created_at: string | null
+}
+
+type RosterStage =
+  | 'pending'
+  | 'opened'
+  | 'expired'
+  | 'unclaimed'
+  | 'new'
+  | 'contacted'
+  | 'scheduled'
+  | 'done'
+
+const ROSTER_CATEGORIES = new Set([
+  '',
+  'all',
+  'unsubmitted',
+  'pending',
+  'opened',
+  'expired',
+  'unclaimed',
+  'new',
+  'contacted',
+  'scheduled',
+  'done'
+])
+
+function rosterStage(row: RosterRow): RosterStage {
+  if (row.submission_id) {
+    if (!row.claimed_at) return 'unclaimed'
+    if (
+      row.contact_status === 'contacted' ||
+      row.contact_status === 'scheduled' ||
+      row.contact_status === 'done'
+    ) {
+      return row.contact_status
+    }
+    return 'new'
+  }
+  if (row.expires_at && row.expires_at <= now()) return 'expired'
+  return row.opened_at ? 'opened' : 'pending'
+}
+
+function rosterCategoryMatches(category: string, stage: RosterStage): boolean {
+  if (!category || category === 'all') return true
+  if (category === 'unsubmitted') {
+    return stage === 'pending' || stage === 'opened' || stage === 'expired'
+  }
+  return category === stage
+}
+
 function inviteStatus(row: InviteRow, slug: string | null): string {
   if (slug) return 'submitted'
   if (row.expires_at && row.expires_at <= now()) return 'expired'
@@ -276,14 +344,27 @@ adminRouter.get('/invites', (req, res) => {
   noStore(res)
   const q = clampString(req.query.q, 80)
   const status = clampString(req.query.status, 20)
+  const from = clampString(req.query.from, 40)
+  const to = clampString(req.query.to, 40)
   const rows = db
     .prepare(
       `SELECT i.*, s.slug, s.total, s.tier, s.claimed_at
        FROM invites i LEFT JOIN submissions s ON s.invite_id = i.id
        WHERE (? = '' OR i.name LIKE ? OR i.note LIKE ? OR i.channel LIKE ?)
+         AND (? = '' OR i.created_at >= ?)
+         AND (? = '' OR i.created_at < ?)
        ORDER BY i.created_at DESC LIMIT 300`
     )
-    .all(q, `%${q}%`, `%${q}%`, `%${q}%`) as unknown as (InviteRow & {
+    .all(
+      q,
+      `%${q}%`,
+      `%${q}%`,
+      `%${q}%`,
+      from,
+      from,
+      to,
+      to
+    ) as unknown as (InviteRow & {
     slug: string | null
     total: number | null
     tier: string | null
@@ -483,6 +564,85 @@ adminRouter.get('/submissions/export.csv', (req, res) => {
     `attachment; filename="vesta-submissions-${new Date().toISOString().slice(0, 10)}.csv"`
   )
   res.send(csv)
+})
+
+adminRouter.get('/roster', (req, res) => {
+  noStore(res)
+  const q = clampString(req.query.q, 80)
+  const requested = clampString(req.query.category, 20)
+  const category = ROSTER_CATEGORIES.has(requested) ? requested : ''
+  const from = clampString(req.query.from, 40)
+  const to = clampString(req.query.to, 40)
+  const rows = db
+    .prepare(
+      `SELECT i.id AS invite_id, i.token, i.name, i.note, i.channel,
+              i.created_at AS invite_created_at, i.opened_at, i.submitted_at, i.expires_at,
+              s.id AS submission_id, s.slug, s.total, s.tier, s.claimed_at, s.slots,
+              s.contact_status, s.created_at AS submission_created_at
+       FROM invites i LEFT JOIN submissions s ON s.invite_id = i.id
+       WHERE (? = '' OR i.name LIKE ? OR i.note LIKE ? OR i.channel LIKE ?)
+         AND (? = '' OR COALESCE(s.created_at, i.created_at) >= ?)
+         AND (? = '' OR COALESCE(s.created_at, i.created_at) < ?)
+       ORDER BY COALESCE(s.created_at, i.created_at) DESC LIMIT 1000`
+    )
+    .all(
+      q,
+      `%${q}%`,
+      `%${q}%`,
+      `%${q}%`,
+      from,
+      from,
+      to,
+      to
+    ) as unknown as RosterRow[]
+
+  const counts: Record<string, number> = {
+    all: rows.length,
+    unsubmitted: 0,
+    pending: 0,
+    opened: 0,
+    expired: 0,
+    unclaimed: 0,
+    new: 0,
+    contacted: 0,
+    scheduled: 0,
+    done: 0
+  }
+
+  const roster = rows.map((row) => {
+    const stage = rosterStage(row)
+    counts[stage] += 1
+    if (stage === 'pending' || stage === 'opened' || stage === 'expired') {
+      counts.unsubmitted += 1
+    }
+    return {
+      id: row.invite_id,
+      inviteId: row.invite_id,
+      submissionId: row.submission_id,
+      token: row.token,
+      name: row.name,
+      note: row.note,
+      channel: row.channel,
+      stage,
+      inviteCreatedAt: row.invite_created_at,
+      openedAt: row.opened_at,
+      submittedAt: row.submitted_at ?? row.submission_created_at,
+      expiresAt: row.expires_at,
+      total: row.total,
+      tier: row.tier,
+      claimed: Boolean(row.claimed_at),
+      slots: parseJson<string[]>(row.slots, []),
+      contactStatus: row.contact_status,
+      reportSlug: row.slug,
+      reportPath: row.slug ? `/r/${row.slug}` : null,
+      detailPath: row.submission_id ? `/admin/submissions/${row.submission_id}` : null
+    }
+  })
+
+  res.json({
+    roster: roster.filter((row) => rosterCategoryMatches(category, row.stage)),
+    counts
+  })
 })
 
 adminRouter.get('/submissions', (req, res) => {
