@@ -29,7 +29,7 @@
           <p class="stat-label">完成率</p>
           <p class="stat-value">{{ data.stats.completion }}<small>%</small></p>
           <p class="stat-meta">还有 {{ data.stats.pending }} 人未填写</p>
-          <span class="stat-link">去催填 →</span>
+          <span class="stat-link">查看未填写 →</span>
         </RouterLink>
         <RouterLink class="card stat" to="/admin/appointments">
           <p class="stat-label">已领取规划</p>

@@ -198,9 +198,6 @@ function seed(): void {
   if (!getSetting('report_template')) {
     setSetting('report_template', JSON.stringify(defaultTemplate))
   }
-  if (!getSetting('report_skill')) {
-    setSetting('report_skill', defaultReportSkill)
-  }
 }
 
 seed()
@@ -484,8 +481,69 @@ function migrateReportSkill(): void {
   if (LEGACY_SKILL_HASHES.has(hash)) setSetting('report_skill', defaultReportSkill)
 }
 
+export const DEFAULT_REPORT_SKILL_ID = 'default'
+
+export interface ReportSkillTemplate {
+  id: string
+  name: string
+  skill: string
+  createdAt: string
+  updatedAt: string
+}
+
+const SKILL_TEMPLATES_KEY = 'report_skill_templates_v1'
+const ACTIVE_SKILL_KEY = 'report_skill_active_v1'
+
+function readSkillTemplates(): ReportSkillTemplate[] {
+  const raw = getSetting(SKILL_TEMPLATES_KEY)
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is ReportSkillTemplate => {
+      if (!item || typeof item !== 'object') return false
+      const value = item as Record<string, unknown>
+      return (
+        typeof value.id === 'string' &&
+        typeof value.name === 'string' &&
+        typeof value.skill === 'string' &&
+        typeof value.createdAt === 'string' &&
+        typeof value.updatedAt === 'string'
+      )
+    })
+  } catch {
+    return []
+  }
+}
+
+function writeSkillTemplates(templates: ReportSkillTemplate[]): void {
+  setSetting(SKILL_TEMPLATES_KEY, JSON.stringify(templates))
+}
+
+function migrateReportSkillTemplates(): void {
+  if (getSetting(SKILL_TEMPLATES_KEY)) return
+  const current = getSetting('report_skill')?.trim() ?? ''
+  const templates: ReportSkillTemplate[] = []
+  let activeId = DEFAULT_REPORT_SKILL_ID
+  if (current && current !== defaultReportSkill) {
+    const timestamp = now()
+    const template: ReportSkillTemplate = {
+      id: newId('skill'),
+      name: '原有自定义规则',
+      skill: current,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }
+    templates.push(template)
+    activeId = template.id
+  }
+  writeSkillTemplates(templates)
+  setSetting(ACTIVE_SKILL_KEY, activeId)
+}
+
 function migrate(): void {
   migrateReportSkill()
+  migrateReportSkillTemplates()
   const surveyId = getSetting('active_survey')
   if (surveyId) {
     const row = db.prepare('SELECT version, data FROM surveys WHERE id = ?').get(surveyId) as
@@ -590,12 +648,78 @@ export function saveTemplate(template: ReportTemplate): void {
   setSetting('report_template', JSON.stringify(template))
 }
 
-export function getReportSkill(): string {
-  return getSetting('report_skill')?.trim() || defaultReportSkill
+export function getReportSkillState(): {
+  templates: ReportSkillTemplate[]
+  activeId: string
+} {
+  const templates = readSkillTemplates()
+  const storedActiveId = getSetting(ACTIVE_SKILL_KEY) || DEFAULT_REPORT_SKILL_ID
+  const activeId =
+    storedActiveId === DEFAULT_REPORT_SKILL_ID ||
+    templates.some((template) => template.id === storedActiveId)
+      ? storedActiveId
+      : DEFAULT_REPORT_SKILL_ID
+  if (activeId !== storedActiveId) setSetting(ACTIVE_SKILL_KEY, activeId)
+  return { templates, activeId }
 }
 
-export function saveReportSkill(skill: string): void {
-  setSetting('report_skill', skill)
+export function getReportSkill(): string {
+  const { templates, activeId } = getReportSkillState()
+  return (
+    templates.find((template) => template.id === activeId)?.skill.trim() || defaultReportSkill
+  )
+}
+
+export function createReportSkillTemplate(name: string, skill: string): ReportSkillTemplate {
+  const templates = readSkillTemplates()
+  const timestamp = now()
+  const template: ReportSkillTemplate = {
+    id: newId('skill'),
+    name,
+    skill,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  }
+  writeSkillTemplates([...templates, template])
+  return template
+}
+
+export function updateReportSkillTemplate(
+  id: string,
+  name: string,
+  skill: string
+): ReportSkillTemplate | null {
+  const templates = readSkillTemplates()
+  const index = templates.findIndex((template) => template.id === id)
+  if (index < 0) return null
+  const template: ReportSkillTemplate = {
+    ...templates[index],
+    name,
+    skill,
+    updatedAt: now()
+  }
+  templates[index] = template
+  writeSkillTemplates(templates)
+  return template
+}
+
+export function deleteReportSkillTemplate(id: string): boolean {
+  const templates = readSkillTemplates()
+  const next = templates.filter((template) => template.id !== id)
+  if (next.length === templates.length) return false
+  writeSkillTemplates(next)
+  if (getSetting(ACTIVE_SKILL_KEY) === id) setSetting(ACTIVE_SKILL_KEY, DEFAULT_REPORT_SKILL_ID)
+  return true
+}
+
+export function activateReportSkill(id: string): boolean {
+  if (id === DEFAULT_REPORT_SKILL_ID) {
+    setSetting(ACTIVE_SKILL_KEY, DEFAULT_REPORT_SKILL_ID)
+    return true
+  }
+  if (!readSkillTemplates().some((template) => template.id === id)) return false
+  setSetting(ACTIVE_SKILL_KEY, id)
+  return true
 }
 
 export function recordEvent(inviteId: string | null, type: string, payload: unknown = {}): void {

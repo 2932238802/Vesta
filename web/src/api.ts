@@ -204,15 +204,36 @@ export const api = {
   },
   skill() {
     return request<{
-      skill: string
       defaultSkill: string
+      templates: AdminReportSkillTemplate[]
+      activeId: string
       ai: { configured: boolean; searchConfigured: boolean; model: string }
     }>('/api/admin/skill', { auth: true })
   },
-  saveSkill(skill: string) {
-    return request<{ skill: string }>('/api/admin/skill', {
+  createSkillTemplate(body: { name: string; skill?: string }) {
+    return request<{ template: AdminReportSkillTemplate }>('/api/admin/skill/templates', {
+      method: 'POST',
+      body,
+      auth: true
+    })
+  },
+  updateSkillTemplate(id: string, body: { name: string; skill: string }) {
+    return request<{ template: AdminReportSkillTemplate }>(`/api/admin/skill/templates/${id}`, {
       method: 'PUT',
-      body: { skill },
+      body,
+      auth: true
+    })
+  },
+  deleteSkillTemplate(id: string) {
+    return request<{ ok: true }>(`/api/admin/skill/templates/${id}`, {
+      method: 'DELETE',
+      auth: true
+    })
+  },
+  activateSkillTemplate(id: string) {
+    return request<{ activeId: string }>('/api/admin/skill/active', {
+      method: 'PUT',
+      body: { id },
       auth: true
     })
   },
@@ -372,6 +393,14 @@ export interface AdminRosterRow {
 export interface AdminRosterDateOption {
   date: string
   count: number
+}
+
+export interface AdminReportSkillTemplate {
+  id: string
+  name: string
+  skill: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface AdminAppointment {

@@ -8,17 +8,21 @@ import { validateAnswers, validateSurvey, validateTemplate } from '../../../shar
 import { config } from '../env'
 import { checkCredentials, createToken, noStore, requireAdmin } from '../auth'
 import {
+  DEFAULT_REPORT_SKILL_ID,
+  activateReportSkill,
+  createReportSkillTemplate,
   db,
   deleteAdminSession,
+  deleteReportSkillTemplate,
   getActiveSurvey,
-  getReportSkill,
+  getReportSkillState,
   getSurvey,
   getTemplate,
   newId,
   now,
   publishSurvey,
   recordEvent,
-  saveReportSkill,
+  updateReportSkillTemplate,
   saveTemplate
 } from '../db'
 import { isAiConfigured, isSearchConfigured, regenerateReport } from '../ai/generate'
@@ -903,9 +907,11 @@ adminRouter.put('/template', (req, res) => {
 
 adminRouter.get('/skill', (req, res) => {
   noStore(res)
+  const { templates, activeId } = getReportSkillState()
   res.json({
-    skill: getReportSkill(),
     defaultSkill: defaultReportSkill,
+    templates,
+    activeId,
     ai: {
       configured: isAiConfigured(),
       searchConfigured: isSearchConfigured(),
@@ -914,19 +920,68 @@ adminRouter.get('/skill', (req, res) => {
   })
 })
 
-adminRouter.put('/skill', (req, res) => {
+function skillTemplateInput(body: unknown, fallbackSkill?: string) {
+  const input = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
+  const name = typeof input.name === 'string' ? input.name.trim() : ''
+  const skill = typeof input.skill === 'string' ? input.skill.trim() : fallbackSkill ?? ''
+  if (!name) return { error: '请填写模板名称' } as const
+  if (name.length > 40) return { error: '模板名称最多 40 个字' } as const
+  if (skill.length < 100) return { error: '分析规则内容太短' } as const
+  if (skill.length > 60_000) return { error: '分析规则内容太长' } as const
+  return { name, skill } as const
+}
+
+adminRouter.post('/skill/templates', (req, res) => {
   noStore(res)
-  const skill = typeof req.body?.skill === 'string' ? req.body.skill.trim() : ''
-  if (skill.length < 100) {
-    res.status(400).json({ error: 'Skill 内容太短' })
+  const input = skillTemplateInput(req.body, defaultReportSkill)
+  if ('error' in input) {
+    res.status(400).json({ error: input.error })
     return
   }
-  if (skill.length > 60_000) {
-    res.status(400).json({ error: 'Skill 内容太长' })
+  const template = createReportSkillTemplate(input.name, input.skill)
+  res.json({ template })
+})
+
+adminRouter.put('/skill/templates/:id', (req, res) => {
+  noStore(res)
+  if (req.params.id === DEFAULT_REPORT_SKILL_ID) {
+    res.status(403).json({ error: '默认设置不能修改，请新建模板' })
     return
   }
-  saveReportSkill(skill)
-  res.json({ skill })
+  const input = skillTemplateInput(req.body)
+  if ('error' in input) {
+    res.status(400).json({ error: input.error })
+    return
+  }
+  const template = updateReportSkillTemplate(req.params.id, input.name, input.skill)
+  if (!template) {
+    res.status(404).json({ error: '没有找到这个模板' })
+    return
+  }
+  res.json({ template })
+})
+
+adminRouter.delete('/skill/templates/:id', (req, res) => {
+  noStore(res)
+  if (req.params.id === DEFAULT_REPORT_SKILL_ID) {
+    res.status(403).json({ error: '默认设置不能删除' })
+    return
+  }
+  if (!deleteReportSkillTemplate(req.params.id)) {
+    res.status(404).json({ error: '没有找到这个模板' })
+    return
+  }
+  res.json({ ok: true })
+})
+
+adminRouter.put('/skill/active', (req, res) => {
+  noStore(res)
+  const id = typeof req.body?.id === 'string' ? req.body.id.trim() : ''
+  if (!id || !activateReportSkill(id)) {
+    res.status(404).json({ error: '没有找到这个模板' })
+    return
+  }
+  res.json({ activeId: id })
 })
 
 function sampleAnswers(survey: Survey): Answers {

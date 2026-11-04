@@ -1,12 +1,5 @@
 <template>
   <div class="appointments-page">
-    <header class="page-head">
-      <div>
-        <p class="eyebrow">咨询时间预约</p>
-        <h1 class="page-title">谁留了时间，什么时候联系</h1>
-      </div>
-    </header>
-
     <div class="toolbar">
       <input v-model="q" class="input search" type="search" placeholder="搜索姓名、备注、渠道" />
       <select v-model="contactStatus" class="select filter">
@@ -185,22 +178,6 @@ onMounted(load)
 </script>
 
 <style scoped>
-.page-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-  margin-bottom: 26px;
-}
-
-.page-title {
-  margin-top: 8px;
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
 .toolbar {
   display: flex;
   gap: 10px;

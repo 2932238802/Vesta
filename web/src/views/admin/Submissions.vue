@@ -1,16 +1,5 @@
 <template>
   <div class="submissions-page">
-    <header class="page-head">
-      <div>
-        <p class="eyebrow">答卷与名单</p>
-        <h1 class="page-title">谁填了，谁还没填</h1>
-        <p class="page-sub">所有邀请、填写、领取和联系状态都在这里。</p>
-      </div>
-      <button class="btn ghost" type="button" :disabled="exporting" @click="exportCsv">
-        {{ exporting ? '正在导出' : '导出答卷 CSV' }}
-      </button>
-    </header>
-
     <div class="category-tabs" role="tablist" aria-label="名单分类">
       <button
         v-for="item in tabs"
@@ -33,17 +22,28 @@
           <h2 id="date-filter-title" class="date-filter-title">邀请日期</h2>
           <p class="date-filter-summary">{{ dateSummary }}</p>
         </div>
-        <button
-          v-if="dateOptions.length"
-          class="btn ghost small date-all-btn"
-          type="button"
-          @click="toggleAllDates"
-        >
-          {{ allDatesSelected ? '清空日期' : '全选日期' }}
-        </button>
+        <div v-if="dateOptions.length" class="date-filter-actions">
+          <button
+            v-if="dateOptions.length > 12"
+            class="btn quiet small"
+            type="button"
+            @click="datesExpanded = !datesExpanded"
+          >
+            {{ datesExpanded ? '收起日期' : '展开全部' }}
+          </button>
+          <button class="btn ghost small date-all-btn" type="button" @click="toggleAllDates">
+            {{ allDatesSelected ? '清空日期' : '全选日期' }}
+          </button>
+        </div>
       </div>
 
-      <div v-if="dateOptions.length" class="date-rail" role="group" aria-label="选择邀请日期">
+      <div
+        v-if="dateOptions.length"
+        class="date-rail"
+        :class="{ expanded: datesExpanded }"
+        role="group"
+        aria-label="选择邀请日期"
+      >
         <button
           v-for="day in dateOptions"
           :key="day.date"
@@ -61,6 +61,9 @@
         </button>
       </div>
       <p v-else class="date-filter-empty">还没有可以筛选的邀请日期。</p>
+      <p v-if="dateOptions.length > 12 && !datesExpanded" class="date-filter-tip date-scroll-hint">
+        日期较多，可在框内上下滚动，或点“展开全部”。
+      </p>
       <p v-if="dateOptions.length && !allDatesSelected" class="date-filter-tip">
         点一下选中，再点取消；按住并拖动可以连续选择。
       </p>
@@ -71,6 +74,9 @@
       <span class="spacer" />
       <span v-if="showDateTones" class="date-hint">表格颜色按邀请日期区分</span>
       <span class="quiet tiny">{{ roster.length }} 人</span>
+      <button class="btn ghost small export-btn" type="button" :disabled="exporting" @click="exportCsv">
+        {{ exporting ? '正在导出' : '导出答卷 CSV' }}
+      </button>
     </div>
 
     <section class="card table-card">
@@ -178,7 +184,6 @@
                   </template>
                   <template v-else>
                     <button class="btn quiet" type="button" @click="copyLink(row)">复制链接</button>
-                    <button class="btn quiet" type="button" @click="copyReminder(row)">催填话术</button>
                     <button class="btn quiet" type="button" @click="openInvite(row)">打开</button>
                   </template>
                 </div>
@@ -244,6 +249,7 @@ const q = ref('')
 const category = ref(categoryFromQuery())
 const dateOptions = ref<AdminRosterDateOption[]>([])
 const selectedDates = ref<Set<string>>(new Set())
+const datesExpanded = ref(false)
 const exporting = ref(false)
 const toast = ref('')
 const savingStatus = ref('')
@@ -448,12 +454,6 @@ async function copyLink(row: AdminRosterRow) {
   flash('链接已复制')
 }
 
-async function copyReminder(row: AdminRosterRow) {
-  const text = `你好${row.name || ''}，这份现状自评还差最后一步，麻烦抽空填一下：${inviteUrl(row.token)}`
-  await writeClipboard(text)
-  flash('催填话术已复制')
-}
-
 function openInvite(row: AdminRosterRow) {
   window.open(inviteUrl(row.token), '_blank')
 }
@@ -520,28 +520,6 @@ onMounted(load)
 </script>
 
 <style scoped>
-.page-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-  margin-bottom: 22px;
-}
-
-.page-title {
-  margin-top: 8px;
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.page-sub {
-  margin-top: 7px;
-  font-size: 12.5px;
-  color: var(--ink-3);
-}
-
 .category-tabs {
   display: flex;
   gap: 4px;
@@ -621,29 +599,40 @@ onMounted(load)
   color: var(--ink-3);
 }
 
-.date-all-btn {
+.date-filter-actions {
+  display: flex;
   flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.date-all-btn {
   margin-top: -3px;
 }
 
 .date-rail {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
   gap: 8px;
   margin-top: 13px;
-  padding: 2px 1px 5px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
+  max-height: 202px;
+  padding: 2px 4px 5px 1px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
   scrollbar-width: thin;
   user-select: none;
 }
 
+.date-rail.expanded {
+  max-height: none;
+}
+
 .date-block {
   display: flex;
-  flex: 0 0 auto;
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  min-width: 108px;
+  min-width: 0;
   min-height: 58px;
   padding: 9px 12px;
   border: 1px solid var(--line-strong);
@@ -710,6 +699,10 @@ onMounted(load)
   margin-top: 7px;
 }
 
+.date-scroll-hint {
+  color: var(--ink-3);
+}
+
 .toolbar {
   display: flex;
   gap: 12px;
@@ -728,6 +721,10 @@ onMounted(load)
   font-size: 11.5px;
   color: var(--ink-3);
   white-space: nowrap;
+}
+
+.export-btn {
+  flex: 0 0 auto;
 }
 
 .spacer {
@@ -864,8 +861,16 @@ onMounted(load)
     align-items: center;
   }
 
-  .date-block {
-    min-width: 100px;
+  .date-filter-actions {
+    gap: 2px;
+  }
+
+  .date-filter-actions .btn {
+    padding: 0 10px;
+  }
+
+  .date-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .toolbar {

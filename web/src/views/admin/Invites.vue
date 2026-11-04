@@ -1,17 +1,5 @@
 <template>
   <div class="invites-page">
-    <header class="page-head">
-      <div>
-        <p class="eyebrow">邀请链接</p>
-        <h1 class="page-title">生成邀请链接</h1>
-      </div>
-    </header>
-
-    <p class="lead">
-      这里只负责生成链接。打开、提交、是否领取和跟进状态，统一到
-      <RouterLink to="/admin/submissions">答卷与名单</RouterLink> 查看。
-    </p>
-
     <section v-if="!created.length" class="card generator-card">
       <form class="form" @submit.prevent="generate">
         <div class="mode">
@@ -185,36 +173,6 @@ function flash(message: string) {
 </script>
 
 <style scoped>
-.page-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
-.page-title {
-  margin-top: 8px;
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.lead {
-  max-width: 620px;
-  margin-bottom: 22px;
-  font-size: 13px;
-  line-height: 1.8;
-  color: var(--ink-3);
-}
-
-.lead a {
-  color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
 .generator-card {
   max-width: 680px;
   padding: 26px 28px;
