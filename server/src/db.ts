@@ -122,6 +122,33 @@ db.exec(`
     PRIMARY KEY (run_id, seq)
   );
   CREATE INDEX IF NOT EXISTS idx_consult_run_sections_run ON consult_run_sections(run_id, seq);
+
+  CREATE TABLE IF NOT EXISTS consult_purpose_feedback (
+    template_id TEXT NOT NULL,
+    purpose_key TEXT NOT NULL,
+    selected INTEGER NOT NULL DEFAULT 0,
+    won INTEGER NOT NULL DEFAULT 0,
+    lost INTEGER NOT NULL DEFAULT 0,
+    liked INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (template_id, purpose_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS consult_collections (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'quote',
+    title TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    tags TEXT NOT NULL DEFAULT '[]',
+    pinned INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_consult_collections_updated ON consult_collections(pinned DESC, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_consult_collections_kind ON consult_collections(kind);
 `)
 
 function ensureSubmissionColumns(): void {
@@ -157,12 +184,24 @@ function ensureConsultColumns(): void {
   const additions: [string, string][] = [
     ['target_length', 'INTEGER NOT NULL DEFAULT 0'],
     ['updated_at', "TEXT NOT NULL DEFAULT ''"],
-    ['finished_at', 'TEXT']
+    ['finished_at', 'TEXT'],
+    ['mode', "TEXT NOT NULL DEFAULT 'sentence'"],
+    ['purpose_template_id', "TEXT NOT NULL DEFAULT ''"],
+    ['purpose_path', "TEXT NOT NULL DEFAULT ''"]
   ]
   for (const [name, definition] of additions) {
     if (!columns.has(name)) {
       db.exec(`ALTER TABLE consult_runs ADD COLUMN ${name} ${definition}`)
     }
+  }
+
+  const sectionColumns = new Set(
+    (db.prepare('PRAGMA table_info(consult_run_sections)').all() as { name: string }[]).map(
+      (column) => column.name
+    )
+  )
+  if (!sectionColumns.has('purpose_keys')) {
+    db.exec("ALTER TABLE consult_run_sections ADD COLUMN purpose_keys TEXT NOT NULL DEFAULT '[]'")
   }
 }
 

@@ -12,13 +12,6 @@ export interface ComposeConsultInput {
   decision: ConsultDecisionPath
   context: ConsultContext
   targetLength: number
-  relatedPaths?: {
-    id: string
-    pathText: string[]
-    matchedTags: string[]
-    decidedCount: number
-    conversionLowerBound: number | null
-  }[]
 }
 
 export interface ConsultChapterPlan {
@@ -120,24 +113,6 @@ function templateText(input: ComposeConsultInput): string {
   ].join('\n')
 }
 
-function relatedPathsText(input: ComposeConsultInput): string {
-  const paths = input.relatedPaths ?? []
-  if (!paths.length) return '暂无足够的历史路径索引。'
-  return paths
-    .map(
-      (path, index) =>
-        `${index + 1}. ${path.id}｜已决策 ${path.decidedCount} 次｜成交率下界 ${
-          path.conversionLowerBound === null ? '暂无' : `${Math.round(path.conversionLowerBound * 1000) / 10}%`
-        }｜命中特点：${path.matchedTags.join('、') || '无'}\n${compactRelatedPath(path.pathText)}`
-    )
-    .join('\n\n')
-}
-
-function compactRelatedPath(path: string[]): string {
-  if (path.length <= 18) return path.join(' → ')
-  return [...path.slice(0, 9), `……共 ${path.length} 步……`, ...path.slice(-9)].join(' → ')
-}
-
 export async function planConsultOutline(input: ComposeConsultInput): Promise<ConsultChapterPlan[]> {
   const chapterCount = Math.max(6, Math.min(12, Math.ceil(input.targetLength / 3500)))
   const systemPrompt = `你是一位资深职业咨询内容架构师。请为一份中文咨询稿做章节规划。
@@ -159,9 +134,6 @@ ${pathText(input)}
 
 【来访者情况】
 ${contextText(input) || '没有补充情况。写作时必须明确哪些信息还需要确认，不能补造事实。'}
-
-【历史路径索引（只作结构参考，不是本次结论）】
-${relatedPathsText(input)}
 
 请现在输出章节规划 JSON。`
 
@@ -254,9 +226,6 @@ ${pathText(input)}
 
 【来访者情况】
 ${contextText(input) || '没有补充情况。请明确说明还需要确认哪些信息，不要补造事实。'}
-
-【历史路径索引（只作参考，不得改变本次路径）】
-${relatedPathsText(input)}
 
 ${recentText ? `【上一章结尾，供衔接】\n${recentText}\n` : ''}
 请直接输出“${chapter.title}”的正文。`

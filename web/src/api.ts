@@ -5,14 +5,16 @@ import type {
   ConsultForest,
   ConsultOutcome,
   ConsultRun,
+  ConsultRunMode,
   ConsultScoringConfig,
   ConsultTemplate,
   ConsultTree
 } from '@shared/consult'
+import type { ConsultPurposePayload } from '@shared/consult-purpose'
 import type {
-  ConsultPathIndex,
-  ConsultPathRank
-} from '@shared/consult-index'
+  ConsultCollectionInput,
+  ConsultCollectionItem
+} from '@shared/consult-collection'
 
 export type { Answers, Question, ReportPayload, ReportResponse, ReportTemplate, Survey } from '@shared/types'
 export type {
@@ -22,6 +24,7 @@ export type {
   ConsultNode,
   ConsultOutcome,
   ConsultRun,
+  ConsultRunMode,
   ConsultRunSection,
   ConsultRunStatus,
   ConsultScoringConfig,
@@ -29,7 +32,17 @@ export type {
   ConsultTemplateSection,
   ConsultTree
 } from '@shared/consult'
-export type { ConsultPathFeature, ConsultPathIndex, ConsultPathRank, ConsultStudentFeature } from '@shared/consult-index'
+export type {
+  ConsultPurposeExample,
+  ConsultPurposeNode,
+  ConsultPurposePayload,
+  ConsultPurposeTurn
+} from '@shared/consult-purpose'
+export type {
+  ConsultCollectionInput,
+  ConsultCollectionItem,
+  ConsultCollectionKind
+} from '@shared/consult-collection'
 
 const TOKEN_KEY = 'vesta.admin.token'
 
@@ -66,11 +79,24 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (options.body !== undefined) headers['Content-Type'] = 'application/json'
   if (options.auth) headers.Authorization = `Bearer ${getToken()}`
 
-  const response = await fetch(path, {
-    method: options.method ?? 'GET',
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body)
-  })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 20_000)
+  let response: Response
+  try {
+    response = await fetch(path, {
+      method: options.method ?? 'GET',
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: controller.signal
+    })
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new ApiError('请求超时，请刷新页面后重试', 0)
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
 
   let data: unknown = null
   const text = await response.text()
@@ -284,10 +310,51 @@ export const api = {
       trees: ConsultTree[]
       templates: ConsultTemplate[]
       activeTemplateId: string
+      purposeTemplates: Array<{
+        id: string
+        name: string
+        season: string
+        description: string
+        stats: ConsultPurposePayload['templates'][number]['stats']
+      }>
+      activePurposeTemplateId: string
       scoring: ConsultScoringConfig
       ai: { configured: boolean; model: string }
       stats: { nodes: number; runs: number }
     }>('/api/admin/consult', { auth: true })
+  },
+  consultPurposes() {
+    return request<ConsultPurposePayload>('/api/admin/consult/purposes', { auth: true })
+  },
+  consultCollections() {
+    return request<{ items: ConsultCollectionItem[] }>('/api/admin/consult/collections', {
+      auth: true
+    })
+  },
+  consultCollection(id: string) {
+    return request<{ item: ConsultCollectionItem }>(
+      `/api/admin/consult/collections/${encodeURIComponent(id)}`,
+      { auth: true }
+    )
+  },
+  createConsultCollection(body: ConsultCollectionInput) {
+    return request<{ item: ConsultCollectionItem }>('/api/admin/consult/collections', {
+      method: 'POST',
+      body,
+      auth: true
+    })
+  },
+  updateConsultCollection(id: string, body: ConsultCollectionInput) {
+    return request<{ item: ConsultCollectionItem }>(
+      `/api/admin/consult/collections/${encodeURIComponent(id)}`,
+      { method: 'PUT', body, auth: true }
+    )
+  },
+  deleteConsultCollection(id: string) {
+    return request<{ ok: true }>(`/api/admin/consult/collections/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      auth: true
+    })
   },
   saveConsultTree(tree: ConsultTree) {
     return request<{ tree: ConsultTree; trees: ConsultTree[]; forest: ConsultForest }>('/api/admin/consult/tree', {
@@ -399,33 +466,19 @@ export const api = {
       auth: true
     })
   },
-  consultIndexes() {
-    return request<{
-      generatedAt: string
-      treeUpdatedAt: string
-      runsScanned: number
-      pathCount: number
-      vocabulary: string[]
-      paths: ConsultPathIndex[]
-    }>('/api/admin/consult/indexes', { auth: true })
-  },
-  queryConsultIndexes(context: ConsultContext, limit = 20) {
-    return request<{
-      generatedAt: string
-      runsScanned: number
-      matched: ConsultPathRank[]
-    }>('/api/admin/consult/indexes/query', {
-      method: 'POST',
-      body: { context, limit },
-      auth: true
-    })
-  },
-  generateConsult(body: { context: ConsultContext; templateId?: string; targetLength?: number }) {
+  generateConsult(body: {
+    context: ConsultContext
+    templateId?: string
+    targetLength?: number
+    mode?: ConsultRunMode
+    purposeTemplateId?: string
+  }) {
     return request<{
       run: ConsultRun | null
-      tree: ConsultTree
-      trees: ConsultTree[]
-      forest: ConsultForest
+      purposeTemplate?: string
+      tree?: ConsultTree
+      trees?: ConsultTree[]
+      forest?: ConsultForest
     }>('/api/admin/consult/runs', {
       method: 'POST',
       body,
@@ -438,9 +491,10 @@ export const api = {
   ) {
     return request<{
       ok: true
-      tree: ConsultTree
-      trees: ConsultTree[]
-      forest: ConsultForest
+      run?: ConsultRun
+      tree?: ConsultTree
+      trees?: ConsultTree[]
+      forest?: ConsultForest
       outcome: ConsultOutcome
       outcomeNodeId: string
     }>(`/api/admin/consult/runs/${id}/outcome`, {

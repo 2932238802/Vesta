@@ -87,13 +87,21 @@ function paragraphsFromDocx(zipFile) {
 
 const SPEAKER_MARKER = /^发言人\s*(\d+)\s+(\d{1,2}:\d{2}(?::\d{2})?)$/
 
+function markerSeconds(value) {
+  const parts = value.split(':').map(Number)
+  return parts.length === 3
+    ? parts[0] * 3600 + parts[1] * 60 + parts[2]
+    : parts[0] * 60 + parts[1]
+}
+
 function speakerTurns(paragraphs) {
   const turns = []
   let speaker = ''
+  let at = 0
   let buffer = []
   const flush = () => {
     const text = buffer.join('').trim()
-    if (speaker && text) turns.push({ speaker: Number(speaker), text })
+    if (speaker && text) turns.push({ speaker: Number(speaker), at, text })
     buffer = []
   }
   for (const paragraph of paragraphs) {
@@ -101,12 +109,23 @@ function speakerTurns(paragraphs) {
     if (match) {
       flush()
       speaker = match[1]
+      at = markerSeconds(match[2])
       continue
     }
     if (!speaker) continue
     buffer.push(paragraph.text)
   }
   flush()
+
+  // 一个文件里可能拼接了多段录音。时间轴一旦回退，就说明进入了新的一段；
+  // 新录音的发言人编号不保证沿用上一段的角色，需要分段识别。
+  let session = 0
+  let previous = -1
+  for (const turn of turns) {
+    if (turn.at < previous) session += 1
+    turn.session = session
+    previous = turn.at
+  }
   return turns
 }
 
@@ -134,7 +153,21 @@ function detectConsultantSpeaker(turns) {
   return best
 }
 
-function buildTranscriptTree(turns, consultantSpeaker, name, treeId) {
+function detectConsultantSpeakers(turns) {
+  const bySession = new Map()
+  for (const turn of turns) {
+    const list = bySession.get(turn.session) ?? []
+    list.push(turn)
+    bySession.set(turn.session, list)
+  }
+  const speakers = new Map()
+  for (const [session, list] of bySession) {
+    speakers.set(session, detectConsultantSpeaker(list))
+  }
+  return speakers
+}
+
+function buildTranscriptTree(turns, consultants, name, treeId) {
   const idPrefix = `node_${treeId.replace(/^consult_tree_/, '')}`
   const root = makeNode(name, -1, 'root', idPrefix)
   root.metadata = { tags: [], answerHistory: [], placeholder: true }
@@ -142,7 +175,7 @@ function buildTranscriptTree(turns, consultantSpeaker, name, treeId) {
   let consultantTurns = 0
   let answers = 0
   for (const [index, turn] of turns.entries()) {
-    if (turn.speaker === consultantSpeaker) {
+    if (turn.speaker === consultants.get(turn.session)) {
       const node = makeNode(turn.text, index, 'leaf', idPrefix)
       node.reward = 1
       current.children.push(node)
@@ -319,21 +352,28 @@ const treeId = !isTranscript && name === '七月咨询稿' ? 'consult_tree_july'
 let tree
 let description
 if (isTranscript) {
-  const consultantSpeaker =
+  const sessionCount = (turns.at(-1)?.session ?? 0) + 1
+  const consultantSpeakers =
     Number.isInteger(requestedConsultant) && requestedConsultant > 0
-      ? requestedConsultant
-      : detectConsultantSpeaker(turns)
-  const built = buildTranscriptTree(turns, consultantSpeaker, name, treeId)
+      ? new Map(
+          Array.from({ length: sessionCount }, (_, session) => [session, requestedConsultant])
+        )
+      : detectConsultantSpeakers(turns)
+  const built = buildTranscriptTree(turns, consultantSpeakers, name, treeId)
   tree = built.tree
-  description = `识别到 ${turns.length} 轮对话（发言人 ${consultantSpeaker} 是咨询师，${built.consultantTurns} 段话术，${built.answers} 条学生回答）`
+  const speakerSummary = [...consultantSpeakers]
+    .map(([session, speaker]) =>
+      sessionCount > 1 ? `第 ${session + 1} 段：发言人 ${speaker}` : `发言人 ${speaker}`
+    )
+    .join('，')
+  description = `识别到 ${turns.length} 轮对话（${speakerSummary} 是咨询师，${built.consultantTurns} 段话术，${built.answers} 条学生回答）`
   if (list) {
     let seq = 0
     for (const turn of turns) {
-      const role = turn.speaker === consultantSpeaker ? '咨询师' : `学生${turn.speaker}`
-      if (turn.speaker === consultantSpeaker) seq += 1
-      console.log(
-        `${turn.speaker === consultantSpeaker ? String(seq).padStart(3, '0') : '   '} [${role}] ${turn.text}`
-      )
+      const isConsultant = turn.speaker === consultantSpeakers.get(turn.session)
+      const role = isConsultant ? '咨询师' : `学生${turn.speaker}`
+      if (isConsultant) seq += 1
+      console.log(`${isConsultant ? String(seq).padStart(3, '0') : '   '} [${role}] ${turn.text}`)
     }
   }
 } else {

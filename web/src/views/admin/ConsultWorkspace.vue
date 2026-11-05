@@ -5,11 +5,6 @@
         <p class="eyebrow">咨询</p>
         <h1 class="page-title">写咨询稿</h1>
       </div>
-      <div class="head-actions">
-        <RouterLink class="btn ghost small" to="/admin/consult/tree">维护咨询路径</RouterLink>
-        <RouterLink class="btn ghost small" to="/admin/consult/indexes">查看路径索引</RouterLink>
-        <RouterLink class="btn ghost small" to="/admin/consult/templates">调整咨询稿风格</RouterLink>
-      </div>
     </header>
 
     <div v-if="loading" class="card empty">正在读取</div>
@@ -22,8 +17,10 @@
 
     <template v-else>
       <p v-if="!ai.configured" class="notice">
-        AI 还没开通。可以先看看咨询会走哪些方向，但暂时不能生成完整咨询稿。
-        请联系技术人员开通。
+        AI 还没开通，暂时不能生成咨询稿。请联系技术人员开通。
+      </p>
+      <p v-if="!purposeTemplates.length" class="notice">
+        咨询树数据还没有生成。请先运行 node prototype/consult-purpose-tree/generate.mjs。
       </p>
 
       <div class="workspace-grid">
@@ -51,10 +48,10 @@
             </label>
 
             <label class="field">
-              <span>咨询稿框架</span>
-              <select v-model="templateId" class="select">
-                <option v-for="template in templates" :key="template.id" :value="template.id">
-                  {{ templateOptionLabel(template) }}
+              <span>咨询树</span>
+              <select v-model="purposeTemplateId" class="select">
+                <option v-for="item in purposeTemplates" :key="item.id" :value="item.id">
+                  {{ purposeTemplateLabel(item) }}
                 </option>
               </select>
             </label>
@@ -66,17 +63,6 @@
                 <option :value="30000">约 3 万字</option>
                 <option :value="40000">约 4 万字</option>
               </select>
-            </label>
-
-            <label class="field">
-              <span>关键词（可选，用逗号隔开）</span>
-              <input
-                v-model="tagsText"
-                class="input"
-                type="text"
-                maxlength="300"
-                placeholder="例：求职, 英语, 杭州"
-              />
             </label>
 
             <div class="field">
@@ -96,47 +82,15 @@
             </div>
 
             <div class="compose-actions">
-              <button class="btn ghost" type="button" :disabled="busy" @click="preview">
-                先看看会怎么聊
-              </button>
-              <button class="btn" type="submit" :disabled="busy || !ai.configured">
+              <button class="btn" type="submit" :disabled="busy || !ai.configured || !purposeTemplateId">
                 {{ busy ? '正在生成' : '生成咨询稿' }}
               </button>
             </div>
             <p class="quiet tiny">
-              长稿会先规划章节，再逐章生成。通常需要几分钟，关掉页面也不会中断。
+              生成时会先结合学生情况判断要走哪些目的，再按咨询树规划章节、逐章生成。通常需要几分钟，关掉页面也不会中断。
             </p>
             <p v-if="actionError" class="notice">{{ actionError }}</p>
           </form>
-
-          <section v-if="decision" class="path-panel">
-            <div class="path-head">
-              <strong>本次咨询师会这样说</strong>
-              <span class="quiet tiny">{{ decision.path.length }} 步</span>
-            </div>
-            <ol class="path-list">
-              <li v-for="(item, index) in decision.path" :key="item.id">
-                <span class="path-index">{{ index + 1 }}</span>
-                <span class="path-text">{{ item.text }}</span>
-              </li>
-            </ol>
-            <details v-if="decision.steps.length" class="trace-details">
-              <summary>为什么这样安排</summary>
-              <p class="quiet tiny trace-note">系统比较了下一句可以怎么说，以及哪一句更贴近本次学生情况。</p>
-              <div v-for="step in decision.steps" :key="step.nodeId" class="trace-step">
-                <p class="trace-title">{{ step.nodeText }}</p>
-                <div
-                  v-for="candidate in step.candidates"
-                  :key="candidate.id"
-                  class="trace-choice"
-                  :class="{ selected: candidate.selected }"
-                >
-                  <span>{{ candidate.text }}</span>
-                  <em v-if="candidate.selected">{{ step.explored ? '本次尝试这个方向' : '本次走这里' }}</em>
-                </div>
-              </div>
-            </details>
-          </section>
         </section>
 
         <section class="card history-card">
@@ -162,7 +116,7 @@
                 @click="selectRun(run)"
               >
                 <span class="run-choice-main">
-                  <span class="run-choice-title">{{ run.path.at(-1)?.text || '未完成生成' }}</span>
+                  <span class="run-choice-title">{{ runTitle(run) }}</span>
                   <span class="run-choice-meta">
                     {{ formatDate(run.createdAt, false) }} · {{ run.templateName }}
                   </span>
@@ -223,17 +177,21 @@
               </div>
               <pre v-else class="run-output">{{ selectedRun.output }}</pre>
 
-              <div class="run-path">
-                <span v-for="(item, index) in selectedRun.path" :key="item.id" class="path-chip">
-                  {{ index + 1 }}. {{ item.text }}
+              <div v-if="selectedRun.purposePath?.items.length" class="run-path">
+                <span
+                  v-for="item in selectedRun.purposePath.items"
+                  :key="item.purposeKey"
+                  class="path-chip"
+                  :title="item.reason || item.summary"
+                >
+                  {{ item.stageLabel }} · {{ item.label }}
                 </span>
               </div>
-              <p class="quiet tiny path-index-line">路径索引 {{ selectedRun.pathIndexId }}</p>
 
               <footer v-if="selectedRun.status === 'ready'" class="feedback">
                 <div class="feedback-head">
                   <strong>{{ selectedRun.outcome ? '反馈已记录' : '记录这次结果' }}</strong>
-                  <span class="quiet tiny">记录后，系统会记住这条路径效果好不好。</span>
+                  <span class="quiet tiny">记录后，系统会记住哪些目的对这类学生更有效。</span>
                 </div>
                 <div v-if="!selectedRun.outcome" class="feedback-actions">
                   <button class="btn ghost small" type="button" :disabled="feedbackBusy" @click="recordOutcome('won')">成交</button>
@@ -243,19 +201,7 @@
                 </div>
                 <div v-else class="feedback-result">
                   <span class="chip" :class="outcomeChip(selectedRun.outcome)">{{ outcomeLabel(selectedRun.outcome) }}</span>
-                  <span v-if="selectedRun.outcome === 'abandoned'" class="quiet tiny">
-                    聊到这里离开：{{ selectedRun.path.find((item) => item.id === selectedRun?.outcomeNodeId)?.text || '最后一步' }}
-                  </span>
                 </div>
-                <label v-if="!selectedRun.outcome" class="field breakpoint-field">
-                  <span>对方聊到哪一步离开（可选）</span>
-                  <select v-model="breakpointNodeId" class="select">
-                    <option value="">最后一步</option>
-                    <option v-for="item in selectedRun.path" :key="item.id" :value="item.id">
-                      {{ item.text }}
-                    </option>
-                  </select>
-                </label>
               </footer>
             </article>
           </div>
@@ -326,20 +272,25 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
 import {
   api,
   type AdminSubmissionDetail,
   type AdminSubmissionSummary,
   type ConsultContext,
-  type ConsultDecisionPath,
   type ConsultOutcome,
   type ConsultRun,
-  type ConsultRunSectionStatus,
-  type ConsultTemplate
+  type ConsultRunSectionStatus
 } from '@/api'
 import Modal from '@/components/Modal.vue'
 import { formatDate } from '@/format'
+
+interface PurposeTemplateSummary {
+  id: string
+  name: string
+  season: string
+  description: string
+  stats: { purposes: number; optional: number; gaps: number }
+}
 
 const loading = ref(true)
 const loadingRuns = ref(false)
@@ -347,17 +298,14 @@ const loadError = ref('')
 const actionError = ref('')
 const busy = ref(false)
 const feedbackBusy = ref(false)
-const templates = ref<ConsultTemplate[]>([])
-const activeTemplateId = ref('')
-const templateId = ref('')
+const purposeTemplates = ref<PurposeTemplateSummary[]>([])
+const activePurposeTemplateId = ref('')
+const purposeTemplateId = ref('')
 const userName = ref('')
-const tagsText = ref('')
 const profile = ref('')
 const targetLength = ref(30000)
-const decision = ref<ConsultDecisionPath | null>(null)
 const runs = ref<ConsultRun[]>([])
 const selectedRunId = ref('')
-const breakpointNodeId = ref('')
 const toast = ref('')
 const ai = ref({ configured: false, model: '' })
 const importOpen = ref(false)
@@ -373,8 +321,16 @@ let pollRunId = ''
 
 const selectedRun = computed(() => runs.value.find((run) => run.id === selectedRunId.value) ?? null)
 
-function templateOptionLabel(template: ConsultTemplate): string {
-  return template.id === activeTemplateId.value ? `${template.name}（默认使用）` : template.name
+function purposeTemplateLabel(template: PurposeTemplateSummary): string {
+  const suffix = template.season ? ` · ${template.season}` : ''
+  return `${template.name}${suffix}`
+}
+
+function runTitle(run: ConsultRun): string {
+  const last = run.purposePath?.items.at(-1)
+  if (last) return `${last.stageLabel} · ${last.label}`
+  if (run.status === 'failed') return '未完成生成'
+  return run.purposePath?.templateName || '咨询稿生成'
 }
 
 function progressPercent(run: ConsultRun): number {
@@ -402,10 +358,6 @@ function sectionStatusLabel(status: ConsultRunSectionStatus): string {
 function context(): ConsultContext {
   return {
     name: userName.value.trim(),
-    tags: tagsText.value
-      .split(/[,，]/)
-      .map((tag) => tag.trim())
-      .filter(Boolean),
     profile: profile.value.trim()
   }
 }
@@ -480,9 +432,9 @@ async function load() {
   loadError.value = ''
   try {
     const result = await api.consult()
-    templates.value = result.templates
-    activeTemplateId.value = result.activeTemplateId
-    templateId.value = result.activeTemplateId
+    purposeTemplates.value = result.purposeTemplates
+    activePurposeTemplateId.value = result.activePurposeTemplateId
+    purposeTemplateId.value = result.activePurposeTemplateId || result.purposeTemplates[0]?.id || ''
     ai.value = result.ai
     await loadRuns(false)
   } catch (error) {
@@ -512,7 +464,6 @@ async function loadRuns(showError = true) {
 
 function selectRun(run: ConsultRun) {
   selectedRunId.value = run.id
-  breakpointNodeId.value = run.path.at(-1)?.id ?? ''
 }
 
 function replaceRun(run: ConsultRun) {
@@ -536,9 +487,6 @@ function startPolling(runId: string) {
     try {
       const result = await api.consultRun(runId)
       replaceRun(result.run)
-      if (selectedRunId.value === runId) {
-        breakpointNodeId.value = result.run.path.at(-1)?.id ?? ''
-      }
       if (result.run.status === 'queued' || result.run.status === 'running') {
         pollTimer = setTimeout(poll, 2000)
         return
@@ -560,32 +508,23 @@ function startPolling(runId: string) {
   void poll()
 }
 
-async function preview() {
-  actionError.value = ''
-  busy.value = true
-  try {
-    const result = await api.previewConsult(context())
-    decision.value = result.decision
-  } catch (error) {
-    actionError.value = error instanceof Error ? error.message : '预览失败'
-  } finally {
-    busy.value = false
-  }
-}
-
 async function generate() {
   actionError.value = ''
+  if (!purposeTemplateId.value) {
+    actionError.value = '咨询树还没有可用模板，请先生成咨询树数据'
+    return
+  }
   busy.value = true
   try {
     const result = await api.generateConsult({
       context: context(),
-      templateId: templateId.value,
-      targetLength: targetLength.value
+      targetLength: targetLength.value,
+      mode: 'purpose',
+      purposeTemplateId: purposeTemplateId.value
     })
     if (result.run) {
       replaceRun(result.run)
       selectRun(result.run)
-      decision.value = { path: result.run.path, steps: result.run.steps, leafId: result.run.path.at(-1)?.id ?? '' }
       startPolling(result.run.id)
     } else {
       busy.value = false
@@ -616,10 +555,7 @@ async function recordOutcome(outcome: Exclude<ConsultOutcome, ''>) {
   feedbackBusy.value = true
   actionError.value = ''
   try {
-    const result = await api.setConsultOutcome(run.id, {
-      outcome,
-      nodeId: outcome === 'abandoned' ? breakpointNodeId.value : undefined
-    })
+    const result = await api.setConsultOutcome(run.id, { outcome })
     const index = runs.value.findIndex((item) => item.id === run.id)
     if (index >= 0) {
       runs.value[index] = {
@@ -677,7 +613,6 @@ onUnmounted(stopPolling)
 <style scoped>
 .page-head,
 .card-head,
-.path-head,
 .run-detail-head,
 .feedback-head {
   display: flex;
@@ -694,12 +629,6 @@ onUnmounted(stopPolling)
   margin-top: 3px;
   font-size: 27px;
   letter-spacing: -0.03em;
-}
-
-.head-actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
 }
 
 .workspace-grid {
@@ -746,87 +675,6 @@ onUnmounted(stopPolling)
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-.path-panel {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-}
-
-.path-list {
-  display: grid;
-  gap: 7px;
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.path-list li {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(47, 93, 70, 0.045);
-  font-size: 12.5px;
-  line-height: 1.55;
-}
-
-.path-index {
-  flex: 0 0 18px;
-  color: var(--accent);
-  font-family: var(--mono);
-  font-size: 10.5px;
-}
-
-.path-text {
-  flex: 1;
-}
-
-.trace-details {
-  margin-top: 12px;
-}
-
-.trace-note {
-  margin-top: 7px;
-  line-height: 1.7;
-}
-
-.trace-details summary {
-  cursor: pointer;
-  color: var(--ink-3);
-  font-size: 12px;
-}
-
-.trace-step {
-  margin-top: 12px;
-}
-
-.trace-title {
-  margin-bottom: 5px;
-  font-size: 12px;
-  color: var(--ink-2);
-}
-
-.trace-choice {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 6px 9px;
-  border-radius: 8px;
-  color: var(--ink-3);
-  font-size: 11.5px;
-}
-
-.trace-choice.selected {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.trace-choice em {
-  margin-left: 5px;
-  font-style: normal;
 }
 
 .history-layout {
@@ -938,18 +786,8 @@ onUnmounted(stopPolling)
   margin-top: 10px;
 }
 
-.feedback-result,
-.breakpoint-field {
+.feedback-result {
   margin-top: 10px;
-}
-
-.breakpoint-field {
-  max-width: 360px;
-}
-
-.path-index-line {
-  margin-top: 8px;
-  font-family: var(--mono);
 }
 
 .small-empty {

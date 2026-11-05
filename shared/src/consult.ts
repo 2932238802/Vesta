@@ -1,3 +1,5 @@
+import type { ConsultPurposePlan } from './consult-purpose'
+
 export type ConsultNodeType = 'root' | 'branch' | 'leaf'
 export type ConsultTemplateGoal = '成交' | '答疑' | '引导' | '回访'
 export type ConsultAnswerSource = 'generation' | 'import'
@@ -123,6 +125,7 @@ export interface ConsultDecisionPath {
 export type ConsultRunStatus = 'queued' | 'running' | 'ready' | 'failed'
 export type ConsultRunSectionStatus = 'pending' | 'running' | 'ready' | 'failed'
 export type ConsultOutcome = '' | 'won' | 'lost' | 'liked' | 'abandoned'
+export type ConsultRunMode = 'sentence' | 'purpose'
 
 export interface ConsultRunSection {
   seq: number
@@ -132,6 +135,7 @@ export interface ConsultRunSection {
   status: ConsultRunSectionStatus
   error: string
   targetChars: number
+  purposeKeys: string[]
   updatedAt: string
 }
 
@@ -139,9 +143,11 @@ export interface ConsultRun {
   id: string
   templateId: string
   templateName: string
+  mode: ConsultRunMode
+  purposeTemplateId: string
+  purposePath: ConsultPurposePlan | null
   context: ConsultContext
   path: ConsultPathItem[]
-  pathIndexId: string
   steps: ConsultDecisionStep[]
   output: string
   status: ConsultRunStatus

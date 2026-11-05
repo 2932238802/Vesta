@@ -1,4 +1,7 @@
 import { Router } from 'express'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   CONSULT_MAX_CHILDREN,
   CONSULT_MAX_DEPTH,
@@ -28,11 +31,13 @@ import {
   type ConsultTemplateGoal,
   type ConsultTree
 } from '../../../shared/src/consult'
+import type { ConsultPurposePayload, ConsultPurposePlan } from '../../../shared/src/consult-purpose'
 import {
-  buildConsultPathIndexes,
-  consultPathId,
-  rankConsultPathIndexes
-} from '../../../shared/src/consult-index'
+  consultCollectionKinds,
+  type ConsultCollectionInput,
+  type ConsultCollectionItem,
+  type ConsultCollectionKind
+} from '../../../shared/src/consult-collection'
 import { config } from '../env'
 import { db, getSetting, newId, now, setSetting } from '../db'
 import { isAiConfigured } from '../ai/generate'
@@ -44,10 +49,18 @@ import {
   type ConsultChapterPlan,
   type ConsultChapterResult
 } from '../ai/consult'
+import { buildPurposePlan, findPurposeTemplate } from '../ai/purpose'
+import {
+  composePurposeChapter,
+  planPurposeChapters,
+  type PurposeChapterPlan,
+  type PurposeChapterResult
+} from '../ai/purpose-consult'
 import { clampString, parseJson } from '../util'
 
 const FOREST_KEY = 'consult_forest'
 const FOREST_VERSION_KEY = 'consult_forest_version'
+const FOREST_SEED_KEY = 'consult_forest_seed_applied'
 const LEGACY_TREE_KEY = 'consult_tree'
 const TEMPLATES_KEY = 'consult_templates'
 const ACTIVE_TEMPLATE_KEY = 'consult_active_template'
@@ -62,10 +75,71 @@ const DEFAULT_TARGET_LENGTH = 30_000
 const MIN_TARGET_LENGTH = 20_000
 const MAX_TARGET_LENGTH = 40_000
 
+// 咨询树由 prototype/consult-purpose-tree/generate.mjs 从逐字稿生成。
+// 这里只读文件，页面本身不写数据库。
+const PURPOSE_DATA_FILE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../shared/src/consult-purpose-data.json'
+)
+let purposePayloadCache: ConsultPurposePayload | null = null
+let purposePayloadMtime = 0
+
+// 新装或远端库第一次读取咨询路径时，把两份成交稿生成的种子树并入森林。
+// 只补缺失的树，不覆盖同 id 的现有树；执行一次后记录标记，之后不再自动写入。
+const FOREST_SEED_FILE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../shared/src/consult-forest-seed.json'
+)
+
+function treeHasContent(tree: ConsultTree): boolean {
+  return Boolean(tree.root.text.trim()) || tree.root.children.length > 0
+}
+
+function readSeedForest(): ConsultForest | null {
+  try {
+    return sanitizeForest(JSON.parse(fs.readFileSync(FOREST_SEED_FILE, 'utf8')))
+  } catch {
+    return null
+  }
+}
+
+function mergeSeedForest(forest: ConsultForest, seed: ConsultForest): ConsultForest {
+  const existingIds = new Set(forest.trees.map((tree) => tree.id))
+  const existingNames = new Set(forest.trees.map((tree) => tree.name))
+  // 同 id 或同名的树都视为已有，避免远端之前单独导入过一份时出现重复树。
+  const added = seed.trees.filter(
+    (tree) => !existingIds.has(tree.id) && !existingNames.has(tree.name)
+  )
+  if (!added.length) return forest
+  // 空白的占位树没有内容，合并时清掉，避免种子树旁边多一棵“未命名咨询树”。
+  const kept = forest.trees.filter(treeHasContent)
+  const trees = [...kept, ...added]
+  const activeTreeId = trees.some((tree) => tree.id === forest.activeTreeId)
+    ? forest.activeTreeId
+    : added.some((tree) => tree.id === seed.activeTreeId)
+      ? seed.activeTreeId
+      : added[0].id
+  return { ...forest, trees, activeTreeId }
+}
+
+function readPurposePayload(): ConsultPurposePayload {
+  const stat = fs.statSync(PURPOSE_DATA_FILE)
+  if (!purposePayloadCache || stat.mtimeMs !== purposePayloadMtime) {
+    purposePayloadCache = JSON.parse(
+      fs.readFileSync(PURPOSE_DATA_FILE, 'utf8')
+    ) as ConsultPurposePayload
+    purposePayloadMtime = stat.mtimeMs
+  }
+  return purposePayloadCache
+}
+
 interface ConsultRunRow {
   id: string
   template_id: string
   template_name: string
+  mode: string
+  purpose_template_id: string
+  purpose_path: string
   context: string
   path: string
   steps: string
@@ -90,6 +164,7 @@ interface ConsultRunSectionRow {
   status: string
   error: string
   target_chars: number
+  purpose_keys: string
   updated_at: string
 }
 
@@ -310,10 +385,19 @@ function isLegacyDefaultTree(tree: ConsultTree): boolean {
 }
 
 function readForest(): ConsultForest {
+  const seedApplied = getSetting(FOREST_SEED_KEY) === '1'
   const raw = getSetting(FOREST_KEY)
   if (raw) {
     try {
-      const forest = sanitizeForest(JSON.parse(raw))
+      let forest = sanitizeForest(JSON.parse(raw))
+      if (!seedApplied) {
+        const seed = readSeedForest()
+        if (seed) {
+          forest = mergeSeedForest(forest, seed)
+          writeForest(forest)
+          setSetting(FOREST_SEED_KEY, '1')
+        }
+      }
       if (getSetting(FOREST_VERSION_KEY) !== DEFAULT_FOREST_VERSION) {
         writeForest(forest)
         setSetting(FOREST_VERSION_KEY, DEFAULT_FOREST_VERSION)
@@ -342,9 +426,17 @@ function readForest(): ConsultForest {
     activeTreeId: trees[0].id,
     updatedAt: now()
   }
-  writeForest(forest)
+  let result = forest
+  if (!seedApplied) {
+    const seed = readSeedForest()
+    if (seed) {
+      result = mergeSeedForest(forest, seed)
+      setSetting(FOREST_SEED_KEY, '1')
+    }
+  }
+  writeForest(result)
   setSetting(FOREST_VERSION_KEY, DEFAULT_FOREST_VERSION)
-  return forest
+  return result
 }
 
 function writeForest(forest: ConsultForest): void {
@@ -430,19 +522,24 @@ function writeScoring(scoring: ConsultScoringConfig): void {
   setSetting(SCORING_KEY, JSON.stringify(scoring))
 }
 
-function runFromRow(row: ConsultRunRow, includeSections = true): ConsultRun {
+function runFromRow(row: ConsultRunRow): ConsultRun {
   const rawStatus = row.status as ConsultRunStatus
   const status: ConsultRunStatus = ['queued', 'running', 'failed'].includes(rawStatus)
     ? rawStatus
     : 'ready'
   const path = parseJson<ConsultRun['path']>(row.path, [])
+  const mode: ConsultRun['mode'] = row.mode === 'purpose' ? 'purpose' : 'sentence'
   return {
     id: row.id,
     templateId: row.template_id,
     templateName: row.template_name,
+    mode,
+    purposeTemplateId: row.purpose_template_id || '',
+    purposePath: row.purpose_path
+      ? parseJson<ConsultRun['purposePath']>(row.purpose_path, null)
+      : null,
     context: parseJson<ConsultContext>(row.context, {}),
     path,
-    pathIndexId: consultPathId(path.map((item) => item.id)),
     steps: parseJson<ConsultRun['steps']>(row.steps, []),
     output: row.output,
     status,
@@ -450,7 +547,7 @@ function runFromRow(row: ConsultRunRow, includeSections = true): ConsultRun {
     outcome: (row.outcome || '') as ConsultOutcome,
     outcomeNodeId: row.outcome_node_id,
     targetLength: row.target_length || 0,
-    sections: includeSections ? readRunSections(row.id) : [],
+    sections: readRunSections(row.id),
     createdAt: row.created_at,
     updatedAt: row.updated_at || row.created_at,
     finishedAt: row.finished_at,
@@ -471,6 +568,7 @@ function sectionFromRow(row: ConsultRunSectionRow): ConsultRunSection {
     status,
     error: row.error,
     targetChars: row.target_chars,
+    purposeKeys: parseJson<string[]>(row.purpose_keys, []),
     updatedAt: row.updated_at
   }
 }
@@ -494,13 +592,6 @@ function readRuns(limit = 40): ConsultRun[] {
     .prepare('SELECT * FROM consult_runs ORDER BY created_at DESC LIMIT ?')
     .all(Math.min(100, Math.max(1, limit))) as unknown as ConsultRunRow[]
   return rows.map((row) => runFromRow(row))
-}
-
-function readRunsForIndexes(): ConsultRun[] {
-  const rows = db
-    .prepare("SELECT * FROM consult_runs WHERE status = 'ready' ORDER BY created_at DESC")
-    .all() as unknown as ConsultRunRow[]
-  return rows.map((row) => runFromRow(row, false))
 }
 
 function findNode(root: ConsultNode, id: string): ConsultNode | null {
@@ -685,11 +776,8 @@ function setRunReady(runId: string, output: string): void {
   ).run(output, finishedAt, finishedAt, runId)
 }
 
-async function runConsultJob(runId: string): Promise<void> {
-  const row = db.prepare('SELECT * FROM consult_runs WHERE id = ?').get(runId) as
-    | ConsultRunRow
-    | undefined
-  if (!row) return
+async function runSentenceConsultJob(row: ConsultRunRow): Promise<void> {
+  const runId = row.id
   const forest = readForest()
   const path = parseJson<ConsultRun['path']>(row.path, [])
   if (!path.length) throw new Error('这次生成没有决策路径，无法继续')
@@ -710,17 +798,6 @@ async function runConsultJob(runId: string): Promise<void> {
     context,
     targetLength: row.target_length || DEFAULT_TARGET_LENGTH
   }
-  const relatedIndex = buildConsultPathIndexes(
-    forest.trees.map((item) => item.root),
-    readRunsForIndexes()
-  )
-  input.relatedPaths = rankConsultPathIndexes(relatedIndex.paths, context, 5).map((path) => ({
-    id: path.id,
-    pathText: path.pathText,
-    matchedTags: path.matchedTags,
-    decidedCount: path.decidedCount,
-    conversionLowerBound: path.conversionLowerBound
-  }))
 
   let plan: ConsultChapterPlan[] = []
   let completedBySeq = new Map<number, ConsultChapterResult>()
@@ -801,6 +878,129 @@ async function runConsultJob(runId: string): Promise<void> {
   }
 }
 
+async function runPurposeConsultJob(row: ConsultRunRow): Promise<void> {
+  const runId = row.id
+  const context = parseJson<ConsultContext>(row.context, {})
+  const template =
+    readTemplates().find((item) => item.id === row.template_id) ?? defaultConsultTemplate
+  const payload = readPurposePayload()
+  const purposeTemplate = findPurposeTemplate(payload, row.purpose_template_id)
+  let plan = parseJson<ConsultPurposePlan | null>(row.purpose_path, null)
+  if (!plan?.items?.length) {
+    plan = await buildPurposePlan(payload, purposeTemplate.id, context)
+    db.prepare('UPDATE consult_runs SET purpose_path = ?, updated_at = ? WHERE id = ?').run(
+      JSON.stringify(plan),
+      now(),
+      runId
+    )
+  }
+  const input = {
+    template,
+    purposeTemplate,
+    plan,
+    context,
+    targetLength: row.target_length || DEFAULT_TARGET_LENGTH
+  }
+
+  const existingSections = readRunSections(runId)
+  const completedBySeq = new Map<number, PurposeChapterResult>()
+  let chapters: PurposeChapterPlan[]
+  if (existingSections.length) {
+    // 重试时沿用已存下来的章节与目的分配，保证不会因为重新规划而跳过已完成的内容。
+    chapters = existingSections.map((section) => ({
+      title: section.title,
+      goal: section.goal,
+      targetChars: section.targetChars,
+      purposeKeys: section.purposeKeys
+    }))
+    for (const section of existingSections) {
+      if (section.status === 'ready' && section.content.trim()) {
+        completedBySeq.set(section.seq, {
+          title: section.title,
+          goal: section.goal,
+          targetChars: section.targetChars,
+          purposeKeys: section.purposeKeys,
+          content: section.content,
+          summary: chapterSummary(section.content)
+        })
+      }
+    }
+    db.prepare(
+      "UPDATE consult_run_sections SET status = 'pending', content = '', error = '', updated_at = ? WHERE run_id = ? AND status != 'ready'"
+    ).run(now(), runId)
+  } else {
+    setRunRunning(runId)
+    chapters = await planPurposeChapters(input)
+    const insertSection = db.prepare(
+      `INSERT INTO consult_run_sections
+       (run_id, seq, title, goal, content, status, error, target_chars, purpose_keys, updated_at)
+       VALUES (?, ?, ?, ?, '', 'pending', '', ?, ?, ?)`
+    )
+    for (const [index, chapter] of chapters.entries()) {
+      insertSection.run(
+        runId,
+        index + 1,
+        chapter.title,
+        chapter.goal,
+        chapter.targetChars,
+        JSON.stringify(chapter.purposeKeys),
+        now()
+      )
+    }
+  }
+
+  setRunRunning(runId)
+  let currentSeq = 0
+  try {
+    for (const [index, chapter] of chapters.entries()) {
+      const seq = index + 1
+      if (completedBySeq.has(seq)) continue
+      currentSeq = seq
+      db.prepare(
+        "UPDATE consult_run_sections SET status = 'running', error = '', updated_at = ? WHERE run_id = ? AND seq = ?"
+      ).run(now(), runId, seq)
+      const completed = [...completedBySeq.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([, item]) => item)
+      const result = await composePurposeChapter(input, chapters, chapter, index, completed)
+      completedBySeq.set(seq, result)
+      db.prepare(
+        "UPDATE consult_run_sections SET status = 'ready', content = ?, error = '', updated_at = ? WHERE run_id = ? AND seq = ?"
+      ).run(result.content, now(), runId, seq)
+      const partialOutput = buildConsultDocument(
+        [...completedBySeq.entries()].sort(([a], [b]) => a - b).map(([, item]) => item)
+      )
+      db.prepare("UPDATE consult_runs SET output = ?, updated_at = ? WHERE id = ?").run(
+        partialOutput,
+        now(),
+        runId
+      )
+    }
+    const output = buildConsultDocument(
+      [...completedBySeq.entries()].sort(([a], [b]) => a - b).map(([, item]) => item)
+    )
+    if (!output.trim()) throw new Error('AI 没有生成任何有效正文')
+    setRunReady(runId, output)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'AI 生成失败'
+    if (currentSeq) {
+      db.prepare(
+        "UPDATE consult_run_sections SET status = 'failed', error = ?, updated_at = ? WHERE run_id = ? AND seq = ?"
+      ).run(message.slice(0, 1200), now(), runId, currentSeq)
+    }
+    throw error
+  }
+}
+
+async function runConsultJob(runId: string): Promise<void> {
+  const row = db.prepare('SELECT * FROM consult_runs WHERE id = ?').get(runId) as
+    | ConsultRunRow
+    | undefined
+  if (!row) return
+  if (row.mode === 'purpose') return runPurposeConsultJob(row)
+  return runSentenceConsultJob(row)
+}
+
 function startConsultJob(runId: string): void {
   if (activeConsultJobs.has(runId)) return
   const job = runConsultJob(runId)
@@ -813,6 +1013,150 @@ function startConsultJob(runId: string): void {
   activeConsultJobs.set(runId, job)
 }
 
+const MAX_COLLECTION_CONTENT = 200_000
+const MAX_COLLECTION_TITLE = 200
+const MAX_COLLECTION_SOURCE = 200
+const MAX_COLLECTION_SUMMARY = 2_000
+const MAX_COLLECTION_URL = 2_000
+const MAX_COLLECTION_TAGS = 20
+const MAX_COLLECTION_TAG_LENGTH = 30
+
+interface CollectionRow {
+  id: string
+  kind: string
+  title: string
+  content: string
+  url: string
+  source: string
+  summary: string
+  tags: string
+  pinned: number
+  created_at: string
+  updated_at: string
+}
+
+function parseCollectionTags(value: string): string[] {
+  const parsed = parseJson<unknown>(value, [])
+  return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+}
+
+function normalizeCollectionTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const tags: string[] = []
+  const seen = new Set<string>()
+  for (const item of value) {
+    if (typeof item !== 'string') continue
+    const tag = item.trim().slice(0, MAX_COLLECTION_TAG_LENGTH)
+    if (!tag || seen.has(tag)) continue
+    seen.add(tag)
+    tags.push(tag)
+    if (tags.length >= MAX_COLLECTION_TAGS) break
+  }
+  return tags
+}
+
+function rowToCollection(row: CollectionRow): ConsultCollectionItem {
+  return {
+    id: row.id,
+    kind: (consultCollectionKinds as string[]).includes(row.kind)
+      ? (row.kind as ConsultCollectionKind)
+      : 'other',
+    title: row.title,
+    content: row.content,
+    url: row.url,
+    source: row.source,
+    summary: row.summary,
+    tags: parseCollectionTags(row.tags),
+    pinned: Boolean(row.pinned),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function readCollections(): ConsultCollectionItem[] {
+  const rows = db
+    .prepare('SELECT * FROM consult_collections ORDER BY pinned DESC, updated_at DESC')
+    .all() as unknown as CollectionRow[]
+  return rows.map(rowToCollection)
+}
+
+function normalizeCollectionInput(
+  body: ConsultCollectionInput,
+  existing?: ConsultCollectionItem
+): Omit<ConsultCollectionItem, 'id' | 'createdAt' | 'updatedAt'> {
+  const rawKind = body.kind ?? existing?.kind ?? 'quote'
+  if (!(consultCollectionKinds as string[]).includes(rawKind)) {
+    throw new Error('收藏类型不对')
+  }
+  const kind = rawKind as ConsultCollectionKind
+  const pick = (key: 'title' | 'content' | 'url' | 'source' | 'summary', max: number) => {
+    if (body[key] === undefined) return existing?.[key] ?? ''
+    return clampString(body[key], max)
+  }
+  const title = pick('title', MAX_COLLECTION_TITLE)
+  const content = pick('content', MAX_COLLECTION_CONTENT)
+  const url = pick('url', MAX_COLLECTION_URL)
+  const source = pick('source', MAX_COLLECTION_SOURCE)
+  const summary = pick('summary', MAX_COLLECTION_SUMMARY)
+  const tags =
+    body.tags === undefined ? existing?.tags ?? [] : normalizeCollectionTags(body.tags)
+  const pinned = body.pinned === undefined ? existing?.pinned ?? false : Boolean(body.pinned)
+
+  if (kind === 'link') {
+    if (!url.trim()) throw new Error('链接需要填写有效的 http/https 地址')
+    let parsed: URL
+    try {
+      parsed = new URL(url)
+    } catch {
+      throw new Error('链接需要填写有效的 http/https 地址')
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('链接需要填写有效的 http/https 地址')
+    }
+  } else if (!content.trim()) {
+    throw new Error('内容不能为空')
+  }
+  // 非链接类型也可以带原文链接，但同样只允许 http/https，避免渲染出 javascript: 等地址。
+  if (url.trim()) {
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error('链接需要填写有效的 http/https 地址')
+      }
+    } catch {
+      throw new Error('链接需要填写有效的 http/https 地址')
+    }
+  }
+
+  return { kind, title, content: content.trim(), url, source, summary, tags, pinned }
+}
+
+function collectionPlainText(items: ConsultCollectionItem[]): string {
+  const sections: string[] = []
+  const labels: Record<ConsultCollectionKind, string> = {
+    quote: '金句',
+    script: '优秀咨询稿',
+    link: '公众号链接',
+    other: '其他'
+  }
+  for (const kind of consultCollectionKinds) {
+    const group = items.filter((item) => item.kind === kind)
+    if (!group.length) continue
+    sections.push(`## ${labels[kind]}`)
+    for (const item of group) {
+      const heading = item.title || (item.kind === 'link' ? item.url : item.content.slice(0, 40))
+      sections.push(`### ${heading}`)
+      if (item.source) sections.push(`来源：${item.source}`)
+      if (item.tags.length) sections.push(`标签：${item.tags.join(' / ')}`)
+      if (item.url) sections.push(`链接：${item.url}`)
+      if (item.summary) sections.push(item.summary)
+      if (item.kind !== 'link' && item.content) sections.push(item.content)
+      sections.push('')
+    }
+  }
+  return sections.join('\n').trim()
+}
+
 export const consultRouter = Router()
 
 consultRouter.get('/', (req, res) => {
@@ -821,12 +1165,35 @@ consultRouter.get('/', (req, res) => {
   const templates = readTemplates()
   const runCount = (db.prepare('SELECT COUNT(*) AS count FROM consult_runs').get() as { count: number })
     .count
+  let purposeTemplates: Array<{
+    id: string
+    name: string
+    season: string
+    description: string
+    stats: ConsultPurposePayload['templates'][number]['stats']
+  }> = []
+  let activePurposeTemplateId = ''
+  try {
+    const payload = readPurposePayload()
+    activePurposeTemplateId = payload.meta.activeTemplateId
+    purposeTemplates = payload.templates.map((item) => ({
+      id: item.id,
+      name: item.name,
+      season: item.season,
+      description: item.description,
+      stats: item.stats
+    }))
+  } catch {
+    // 目的树数据还没生成时，工作台仍可以展示旧的逐句树内容。
+  }
   res.json({
     forest,
     tree,
     trees: forest.trees,
     templates,
     activeTemplateId: readActiveTemplateId(templates),
+    purposeTemplates,
+    activePurposeTemplateId,
     scoring: readScoring(),
     ai: { configured: isAiConfigured(), model: config.deepseekModel },
     stats: {
@@ -834,6 +1201,126 @@ consultRouter.get('/', (req, res) => {
       runs: runCount
     }
   })
+})
+
+consultRouter.get('/purposes', (_req, res) => {
+  try {
+    res.json(readPurposePayload())
+  } catch {
+    res.status(500).json({
+      error:
+        '咨询树数据还没有生成。请先运行 node prototype/consult-purpose-tree/generate.mjs。'
+    })
+  }
+})
+
+consultRouter.get('/collections', (req, res) => {
+  const kind = typeof req.query.kind === 'string' ? req.query.kind : ''
+  const query = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : ''
+  let items = readCollections()
+  if (kind) items = items.filter((item) => item.kind === kind)
+  if (query) {
+    items = items.filter((item) =>
+      [item.title, item.content, item.source, item.summary, item.url, item.tags.join(' ')]
+        .join('\n')
+        .toLowerCase()
+        .includes(query)
+    )
+  }
+  res.json({ items })
+})
+
+// 给之后的咨询稿生成器（和人工导出）一份可直接阅读的纯文本合集。
+consultRouter.get('/collections/bundle', (_req, res) => {
+  const items = readCollections()
+  res.json({ count: items.length, text: collectionPlainText(items), items })
+})
+
+consultRouter.get('/collections/:id', (req, res) => {
+  const row = db.prepare('SELECT * FROM consult_collections WHERE id = ?').get(req.params.id) as unknown as
+    | CollectionRow
+    | undefined
+  if (!row) {
+    res.status(404).json({ error: '收藏不存在' })
+    return
+  }
+  res.json({ item: rowToCollection(row) })
+})
+
+consultRouter.post('/collections', (req, res) => {
+  try {
+    const input = normalizeCollectionInput(req.body ?? {})
+    const timestamp = now()
+    const id = newId('col')
+    db.prepare(
+      `INSERT INTO consult_collections
+        (id, kind, title, content, url, source, summary, tags, pinned, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id,
+      input.kind,
+      input.title,
+      input.content,
+      input.url,
+      input.source,
+      input.summary,
+      JSON.stringify(input.tags),
+      input.pinned ? 1 : 0,
+      timestamp,
+      timestamp
+    )
+    const row = db.prepare('SELECT * FROM consult_collections WHERE id = ?').get(id) as unknown as CollectionRow
+    res.status(201).json({ item: rowToCollection(row) })
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : '收藏格式不对' })
+  }
+})
+
+consultRouter.put('/collections/:id', (req, res) => {
+  const row = db.prepare('SELECT * FROM consult_collections WHERE id = ?').get(req.params.id) as unknown as
+    | CollectionRow
+    | undefined
+  if (!row) {
+    res.status(404).json({ error: '收藏不存在' })
+    return
+  }
+  try {
+    const current = rowToCollection(row)
+    const input = normalizeCollectionInput(req.body ?? {}, current)
+    const timestamp = now()
+    db.prepare(
+      `UPDATE consult_collections SET
+        kind = ?, title = ?, content = ?, url = ?, source = ?, summary = ?,
+        tags = ?, pinned = ?, updated_at = ?
+       WHERE id = ?`
+    ).run(
+      input.kind,
+      input.title,
+      input.content,
+      input.url,
+      input.source,
+      input.summary,
+      JSON.stringify(input.tags),
+      input.pinned ? 1 : 0,
+      timestamp,
+      current.id
+    )
+    const updated = db
+      .prepare('SELECT * FROM consult_collections WHERE id = ?')
+      .get(current.id) as unknown as CollectionRow
+    res.json({ item: rowToCollection(updated) })
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : '收藏格式不对' })
+  }
+})
+
+consultRouter.delete('/collections/:id', (req, res) => {
+  const result = db.prepare('DELETE FROM consult_collections WHERE id = ?').run(req.params.id)
+  if (!result.changes) {
+    res.status(404).json({ error: '收藏不存在' })
+    return
+  }
+  res.json({ ok: true })
 })
 
 consultRouter.put('/tree', (req, res) => {
@@ -1048,45 +1535,6 @@ consultRouter.delete('/templates/:id', (req, res) => {
   res.json({ ok: true })
 })
 
-function pathIndexPayload(): {
-  generatedAt: string
-  treeUpdatedAt: string
-  runsScanned: number
-  pathCount: number
-  vocabulary: string[]
-  paths: ReturnType<typeof buildConsultPathIndexes>['paths']
-} {
-  const forest = readForest()
-  const runs = readRunsForIndexes()
-  const { paths, vocabulary } = buildConsultPathIndexes(
-    forest.trees.map((tree) => tree.root),
-    runs
-  )
-  return {
-    generatedAt: now(),
-    treeUpdatedAt: forest.updatedAt,
-    runsScanned: runs.length,
-    pathCount: paths.length,
-    vocabulary,
-    paths
-  }
-}
-
-consultRouter.get('/indexes', (_req, res) => {
-  res.json(pathIndexPayload())
-})
-
-consultRouter.post('/indexes/query', (req, res) => {
-  const context = contextForDecision(req.body)
-  const limit = Math.round(finiteNumber(asRecord(req.body).limit, 20, 1, 50))
-  const payload = pathIndexPayload()
-  res.json({
-    generatedAt: payload.generatedAt,
-    runsScanned: payload.runsScanned,
-    matched: rankConsultPathIndexes(payload.paths, context, limit)
-  })
-})
-
 consultRouter.get('/runs', (req, res) => {
   res.json({ runs: readRuns(60) })
 })
@@ -1102,6 +1550,46 @@ consultRouter.post('/runs', (req, res) => {
   const templates = readTemplates()
   const requestedTemplateId = clampString(body.templateId, 100)
   const selectedTemplateId = requestedTemplateId || readActiveTemplateId(templates)
+  const mode: ConsultRun['mode'] = body.mode === 'purpose' ? 'purpose' : 'sentence'
+
+  if (mode === 'purpose') {
+    let purposeTemplate
+    try {
+      purposeTemplate = findPurposeTemplate(
+        readPurposePayload(),
+        clampString(body.purposeTemplateId, 100)
+      )
+    } catch (error) {
+      res.status(400).json({
+        error: error instanceof Error ? error.message : '没有可用的咨询树模板'
+      })
+      return
+    }
+    const template =
+      templates.find((item) => item.id === selectedTemplateId) ?? defaultConsultTemplate
+    const id = newId('consult_run')
+    const createdAt = now()
+    db.prepare(
+      `INSERT INTO consult_runs
+       (id, template_id, template_name, mode, purpose_template_id, purpose_path, context,
+        path, steps, output, status, error, outcome, outcome_node_id, target_length,
+        created_at, updated_at)
+       VALUES (?, ?, ?, 'purpose', ?, '', ?, '[]', '[]', '', 'queued', '', '', '', ?, ?, ?)`
+    ).run(
+      id,
+      template.id,
+      template.name,
+      purposeTemplate.id,
+      JSON.stringify(context),
+      targetLength,
+      createdAt,
+      createdAt
+    )
+    startConsultJob(id)
+    res.status(202).json({ run: readRun(id), purposeTemplate: purposeTemplate.id })
+    return
+  }
+
   const forest = readForest()
   let decision: ReturnType<typeof chooseConsultForestPath>
   try {
@@ -1225,6 +1713,33 @@ consultRouter.patch('/runs/:id/outcome', (req, res) => {
     return
   }
   const run = runFromRow(row)
+  if (run.mode === 'purpose') {
+    // 目的树改动的是“这个目的在这次学生状态里有没有效果”，不回写逐句森林。
+    const templateId = run.purposeTemplateId || run.purposePath?.templateId || ''
+    const feedbackAt = now()
+    const upsert = db.prepare(
+      `INSERT INTO consult_purpose_feedback
+       (template_id, purpose_key, selected, won, lost, liked, updated_at)
+       VALUES (?, ?, 1, ?, ?, ?, ?)
+       ON CONFLICT(template_id, purpose_key) DO UPDATE SET
+         selected = selected + 1,
+         won = won + excluded.won,
+         lost = lost + excluded.lost,
+         liked = liked + excluded.liked,
+         updated_at = excluded.updated_at`
+    )
+    const won = outcome === 'won' ? 1 : 0
+    const lost = outcome === 'lost' || outcome === 'abandoned' ? 1 : 0
+    const liked = outcome === 'liked' ? 1 : 0
+    for (const item of run.purposePath?.items ?? []) {
+      upsert.run(templateId, item.purposeKey, won, lost, liked, feedbackAt)
+    }
+    db.prepare(
+      'UPDATE consult_runs SET outcome = ?, outcome_node_id = ?, outcome_at = ? WHERE id = ?'
+    ).run(outcome, '', feedbackAt, req.params.id)
+    res.json({ ok: true, run: readRun(req.params.id), outcome, outcomeNodeId: '' })
+    return
+  }
   const pathIds = new Set(run.path.map((item) => item.id))
   const requestedNodeId = clampString(req.body?.nodeId, 100)
   const targetNodeId = pathIds.has(requestedNodeId) ? requestedNodeId : run.path.at(-1)?.id ?? ''

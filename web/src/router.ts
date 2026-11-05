@@ -17,9 +17,9 @@ import ReportEditor from './views/admin/ReportEditor.vue'
 import ReportPreview from './views/admin/ReportPreview.vue'
 import SkillEditor from './views/admin/SkillEditor.vue'
 import ConsultWorkspace from './views/admin/ConsultWorkspace.vue'
-import ConsultTree from './views/admin/ConsultTree.vue'
-import ConsultTemplates from './views/admin/ConsultTemplates.vue'
-import ConsultIndexes from './views/admin/ConsultIndexes.vue'
+import ConsultPurposes from './views/admin/ConsultPurposes.vue'
+import ConsultCollections from './views/admin/ConsultCollections.vue'
+import ConsultCollectionDetail from './views/admin/ConsultCollectionDetail.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -54,9 +54,14 @@ export const router = createRouter({
         { path: 'report', name: 'admin-report', component: ReportEditor },
         { path: 'skill', name: 'admin-skill', component: SkillEditor },
         { path: 'consult', name: 'admin-consult', component: ConsultWorkspace },
-        { path: 'consult/tree', name: 'admin-consult-tree', component: ConsultTree },
-        { path: 'consult/indexes', name: 'admin-consult-indexes', component: ConsultIndexes },
-        { path: 'consult/templates', name: 'admin-consult-templates', component: ConsultTemplates }
+        { path: 'consult/tree', redirect: { name: 'admin-consult-purposes' } },
+        { path: 'consult/purposes', name: 'admin-consult-purposes', component: ConsultPurposes },
+        { path: 'consult/collections', name: 'admin-consult-collections', component: ConsultCollections },
+        {
+          path: 'consult/collections/:id',
+          name: 'admin-consult-collection',
+          component: ConsultCollectionDetail
+        }
       ]
     },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFound }
@@ -79,9 +84,9 @@ const PAGE_TITLES: Record<string, string> = {
   'admin-report-preview': '报告预览 · 管理后台',
   'admin-skill': 'AI 分析规则 · 管理后台',
   'admin-consult': '写咨询稿 · 管理后台',
-  'admin-consult-tree': '咨询路径 · 管理后台',
-  'admin-consult-indexes': '路径索引 · 管理后台',
-  'admin-consult-templates': '咨询稿风格 · 管理后台',
+  'admin-consult-purposes': '咨询树 · 管理后台',
+  'admin-consult-collections': '收藏栏 · 管理后台',
+  'admin-consult-collection': '收藏详情 · 管理后台',
   'not-found': '页面不存在'
 }
 
