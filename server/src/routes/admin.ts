@@ -26,6 +26,7 @@ import {
   saveTemplate
 } from '../db'
 import { isAiConfigured, isSearchConfigured, regenerateReport } from '../ai/generate'
+import { consultRouter } from './consult'
 import {
   clampString,
   decryptText,
@@ -52,7 +53,19 @@ adminRouter.post(
   }
 )
 
+adminRouter.post('/dev-login', (req, res) => {
+  noStore(res)
+  if (!config.devGuestLogin) {
+    res.status(404).json({ error: '接口不存在' })
+    return
+  }
+  const username = '本地测试'
+  res.json({ token: createToken(username), user: { username } })
+})
+
 adminRouter.use(requireAdmin())
+
+adminRouter.use('/consult', consultRouter)
 
 adminRouter.get('/me', (req, res) => {
   res.json({ user: { username: res.locals.admin } })

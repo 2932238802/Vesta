@@ -5,7 +5,16 @@ interface Message {
   content: string
 }
 
-export async function askDeepSeek(messages: Message[]): Promise<string> {
+interface AskDeepSeekOptions {
+  json?: boolean
+  temperature?: number
+  maxTokens?: number
+}
+
+export async function askDeepSeek(
+  messages: Message[],
+  options: AskDeepSeekOptions = {}
+): Promise<string> {
   if (!config.deepseekApiKey) throw new Error('未配置 DEEPSEEK_API_KEY')
 
   const response = await fetch(
@@ -19,9 +28,9 @@ export async function askDeepSeek(messages: Message[]): Promise<string> {
       body: JSON.stringify({
         model: config.deepseekModel,
         messages,
-        temperature: 0.55,
-        max_tokens: 4096,
-        response_format: { type: 'json_object' }
+        temperature: options.temperature ?? 0.55,
+        max_tokens: options.maxTokens ?? 4096,
+        ...(options.json === false ? {} : { response_format: { type: 'json_object' } })
       }),
       signal: AbortSignal.timeout(config.aiTimeoutMs)
     }

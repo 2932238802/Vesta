@@ -1,6 +1,35 @@
 import type { ReportPayload, ReportResponse, ReportTemplate, Survey } from '@shared/types'
+import type {
+  ConsultContext,
+  ConsultDecisionPath,
+  ConsultForest,
+  ConsultOutcome,
+  ConsultRun,
+  ConsultScoringConfig,
+  ConsultTemplate,
+  ConsultTree
+} from '@shared/consult'
+import type {
+  ConsultPathIndex,
+  ConsultPathRank
+} from '@shared/consult-index'
 
 export type { Answers, Question, ReportPayload, ReportResponse, ReportTemplate, Survey } from '@shared/types'
+export type {
+  ConsultContext,
+  ConsultDecisionPath,
+  ConsultForest,
+  ConsultNode,
+  ConsultOutcome,
+  ConsultRun,
+  ConsultRunSection,
+  ConsultRunStatus,
+  ConsultScoringConfig,
+  ConsultTemplate,
+  ConsultTemplateSection,
+  ConsultTree
+} from '@shared/consult'
+export type { ConsultPathFeature, ConsultPathIndex, ConsultPathRank, ConsultStudentFeature } from '@shared/consult-index'
 
 const TOKEN_KEY = 'vesta.admin.token'
 
@@ -96,6 +125,11 @@ export const api = {
     return request<{ token: string; user: { username: string } }>('/api/admin/login', {
       method: 'POST',
       body: { username, password }
+    })
+  },
+  devLogin() {
+    return request<{ token: string; user: { username: string } }>('/api/admin/dev-login', {
+      method: 'POST'
     })
   },
   me() {
@@ -240,6 +274,178 @@ export const api = {
     return request<{ activeId: string }>('/api/admin/skill/active', {
       method: 'PUT',
       body: { id },
+      auth: true
+    })
+  },
+  consult() {
+    return request<{
+      forest: ConsultForest
+      tree: ConsultTree
+      trees: ConsultTree[]
+      templates: ConsultTemplate[]
+      activeTemplateId: string
+      scoring: ConsultScoringConfig
+      ai: { configured: boolean; model: string }
+      stats: { nodes: number; runs: number }
+    }>('/api/admin/consult', { auth: true })
+  },
+  saveConsultTree(tree: ConsultTree) {
+    return request<{ tree: ConsultTree; trees: ConsultTree[]; forest: ConsultForest }>('/api/admin/consult/tree', {
+      method: 'PUT',
+      body: { tree },
+      auth: true
+    })
+  },
+  createConsultTree(name: string) {
+    return request<{ tree: ConsultTree; trees: ConsultTree[]; forest: ConsultForest }>('/api/admin/consult/trees', {
+      method: 'POST',
+      body: { name },
+      auth: true
+    })
+  },
+  renameConsultTree(id: string, name: string) {
+    return request<{ tree: ConsultTree; trees: ConsultTree[]; forest: ConsultForest }>(
+      `/api/admin/consult/trees/${encodeURIComponent(id)}`,
+      { method: 'PUT', body: { name }, auth: true }
+    )
+  },
+  activateConsultTree(id: string) {
+    return request<{ tree: ConsultTree; trees: ConsultTree[]; forest: ConsultForest }>(
+      `/api/admin/consult/trees/${encodeURIComponent(id)}/active`,
+      { method: 'PUT', auth: true }
+    )
+  },
+  deleteConsultTree(id: string) {
+    return request<{ tree: ConsultTree; trees: ConsultTree[]; forest: ConsultForest }>(
+      `/api/admin/consult/trees/${encodeURIComponent(id)}`,
+      { method: 'DELETE', auth: true }
+    )
+  },
+  saveConsultScoring(scoring: ConsultScoringConfig) {
+    return request<{ scoring: ConsultScoringConfig }>('/api/admin/consult/scoring', {
+      method: 'PUT',
+      body: scoring,
+      auth: true
+    })
+  },
+  previewConsult(context: ConsultContext) {
+    return request<{ decision: ConsultDecisionPath }>('/api/admin/consult/preview', {
+      method: 'POST',
+      body: { context },
+      auth: true
+    })
+  },
+  importConsult(body: { text: string; treeId?: string; newTreeName?: string }) {
+    return request<{
+      tree: ConsultTree
+      trees: ConsultTree[]
+      forest: ConsultForest
+      imported: number
+      answers: number
+    }>('/api/admin/consult/import', {
+      method: 'POST',
+      body,
+      auth: true
+    })
+  },
+  decayConsult(factor: number) {
+    return request<{
+      tree: ConsultTree
+      trees: ConsultTree[]
+      forest: ConsultForest
+      factor: number
+    }>('/api/admin/consult/decay', {
+      method: 'POST',
+      body: { factor },
+      auth: true
+    })
+  },
+  createConsultTemplate(body: { name: string; sourceId?: string }) {
+    return request<{ template: ConsultTemplate }>('/api/admin/consult/templates', {
+      method: 'POST',
+      body,
+      auth: true
+    })
+  },
+  updateConsultTemplate(id: string, template: ConsultTemplate) {
+    return request<{ template: ConsultTemplate }>(`/api/admin/consult/templates/${id}`, {
+      method: 'PUT',
+      body: { template },
+      auth: true
+    })
+  },
+  deleteConsultTemplate(id: string) {
+    return request<{ ok: true }>(`/api/admin/consult/templates/${id}`, {
+      method: 'DELETE',
+      auth: true
+    })
+  },
+  activateConsultTemplate(id: string) {
+    return request<{ activeTemplateId: string }>('/api/admin/consult/templates/active', {
+      method: 'PUT',
+      body: { id },
+      auth: true
+    })
+  },
+  consultRuns() {
+    return request<{ runs: ConsultRun[] }>('/api/admin/consult/runs', { auth: true })
+  },
+  consultRun(id: string) {
+    return request<{ run: ConsultRun }>(`/api/admin/consult/runs/${id}`, { auth: true })
+  },
+  retryConsultRun(id: string) {
+    return request<{ run: ConsultRun }>(`/api/admin/consult/runs/${id}/retry`, {
+      method: 'POST',
+      auth: true
+    })
+  },
+  consultIndexes() {
+    return request<{
+      generatedAt: string
+      treeUpdatedAt: string
+      runsScanned: number
+      pathCount: number
+      vocabulary: string[]
+      paths: ConsultPathIndex[]
+    }>('/api/admin/consult/indexes', { auth: true })
+  },
+  queryConsultIndexes(context: ConsultContext, limit = 20) {
+    return request<{
+      generatedAt: string
+      runsScanned: number
+      matched: ConsultPathRank[]
+    }>('/api/admin/consult/indexes/query', {
+      method: 'POST',
+      body: { context, limit },
+      auth: true
+    })
+  },
+  generateConsult(body: { context: ConsultContext; templateId?: string; targetLength?: number }) {
+    return request<{
+      run: ConsultRun | null
+      tree: ConsultTree
+      trees: ConsultTree[]
+      forest: ConsultForest
+    }>('/api/admin/consult/runs', {
+      method: 'POST',
+      body,
+      auth: true
+    })
+  },
+  setConsultOutcome(
+    id: string,
+    body: { outcome: Exclude<ConsultOutcome, ''>; nodeId?: string }
+  ) {
+    return request<{
+      ok: true
+      tree: ConsultTree
+      trees: ConsultTree[]
+      forest: ConsultForest
+      outcome: ConsultOutcome
+      outcomeNodeId: string
+    }>(`/api/admin/consult/runs/${id}/outcome`, {
+      method: 'PATCH',
+      body,
       auth: true
     })
   },

@@ -39,7 +39,7 @@ app.use((req, res, next) => {
   next()
 })
 
-app.use(express.json({ limit: '256kb' }))
+app.use(express.json({ limit: '4mb' }))
 
 app.use('/api/admin', adminRouter)
 app.use('/api', publicRouter)

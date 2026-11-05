@@ -61,7 +61,23 @@ onMounted(() => {
   if (route.query.expired === '1') {
     error.value = '登录已失效，请重新登录'
   }
+  void tryDevLogin()
 })
+
+async function tryDevLogin() {
+  if (route.query.logout === '1') return
+  loading.value = true
+  try {
+    const result = await api.devLogin()
+    setToken(result.token)
+    const next = typeof route.query.next === 'string' ? route.query.next : '/admin'
+    await router.replace(next)
+  } catch {
+    // 生产环境或关闭 DEV_GUEST_LOGIN 时继续显示账号密码表单。
+  } finally {
+    loading.value = false
+  }
+}
 
 async function submit() {
   if (!username.value.trim() || !password.value) {

@@ -19,11 +19,15 @@ function read(name: string): string | undefined {
   return value && value.trim() ? value.trim() : undefined
 }
 
-const adminUser = read('ADMIN_USER')
-const adminPassword = read('ADMIN_PASSWORD')
+const adminUser = read('ADMIN_USER') ?? ''
+const adminPassword = read('ADMIN_PASSWORD') ?? ''
 
-if (!adminUser || !adminPassword) {
+if (isProd && (!adminUser || !adminPassword)) {
   throw new Error('缺少管理员账号，请在根目录 .env 中配置 ADMIN_USER 与 ADMIN_PASSWORD')
+}
+
+if (!isProd && (!adminUser || !adminPassword)) {
+  console.warn('[env] 本地开发未配置管理员账号，已启用免密登录；设置 DEV_GUEST_LOGIN=false 可关闭')
 }
 
 const authSecret = read('AUTH_SECRET') ?? (() => {
@@ -40,6 +44,8 @@ if (isProd && authSecret.length < 24) {
 
 export const config = {
   isProd,
+  // 仅显式 development 环境可用；npm start / 生产环境都不会开放免密登录。
+  devGuestLogin: process.env.NODE_ENV === 'development' && read('DEV_GUEST_LOGIN') !== 'false',
   rootDir,
   port: Number(read('PORT') ?? 8787),
   dataDir: (() => {

@@ -88,6 +88,40 @@ db.exec(`
     expires_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);
+
+  CREATE TABLE IF NOT EXISTS consult_runs (
+    id TEXT PRIMARY KEY,
+    template_id TEXT NOT NULL,
+    template_name TEXT NOT NULL,
+    context TEXT NOT NULL DEFAULT '{}',
+    path TEXT NOT NULL,
+    steps TEXT NOT NULL DEFAULT '[]',
+    output TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'ready',
+    error TEXT NOT NULL DEFAULT '',
+    outcome TEXT NOT NULL DEFAULT '',
+    outcome_node_id TEXT NOT NULL DEFAULT '',
+    target_length INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT '',
+    finished_at TEXT,
+    outcome_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_consult_runs_created ON consult_runs(created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS consult_run_sections (
+    run_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    goal TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    error TEXT NOT NULL DEFAULT '',
+    target_chars INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (run_id, seq)
+  );
+  CREATE INDEX IF NOT EXISTS idx_consult_run_sections_run ON consult_run_sections(run_id, seq);
 `)
 
 function ensureSubmissionColumns(): void {
@@ -113,6 +147,26 @@ function ensureSubmissionColumns(): void {
 }
 
 ensureSubmissionColumns()
+
+function ensureConsultColumns(): void {
+  const columns = new Set(
+    (db.prepare('PRAGMA table_info(consult_runs)').all() as { name: string }[]).map(
+      (column) => column.name
+    )
+  )
+  const additions: [string, string][] = [
+    ['target_length', 'INTEGER NOT NULL DEFAULT 0'],
+    ['updated_at', "TEXT NOT NULL DEFAULT ''"],
+    ['finished_at', 'TEXT']
+  ]
+  for (const [name, definition] of additions) {
+    if (!columns.has(name)) {
+      db.exec(`ALTER TABLE consult_runs ADD COLUMN ${name} ${definition}`)
+    }
+  }
+}
+
+ensureConsultColumns()
 
 export function now(): string {
   return new Date().toISOString()

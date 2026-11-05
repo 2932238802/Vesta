@@ -6,15 +6,19 @@
       </div>
 
       <nav class="nav" aria-label="后台导航">
-        <p class="nav-label">日常工作</p>
+        <p class="nav-label">问卷</p>
         <RouterLink to="/admin" exact-active-class="on">概览</RouterLink>
         <RouterLink to="/admin/invites" active-class="on">邀请链接</RouterLink>
-        <RouterLink to="/admin/submissions" active-class="on">答卷与名单</RouterLink>
         <RouterLink to="/admin/appointments" active-class="on">咨询预约</RouterLink>
-        <p class="nav-label second">内容设置</p>
         <RouterLink to="/admin/survey" active-class="on">问卷设置</RouterLink>
+        <RouterLink to="/admin/submissions" active-class="on">答卷与名单</RouterLink>
         <RouterLink to="/admin/report" active-class="on">报告设置</RouterLink>
         <RouterLink to="/admin/skill" active-class="on">AI 分析规则</RouterLink>
+        <p class="nav-label second">咨询</p>
+        <RouterLink to="/admin/consult" exact-active-class="on">写咨询稿</RouterLink>
+        <RouterLink to="/admin/consult/tree" active-class="on">咨询路径</RouterLink>
+        <RouterLink to="/admin/consult/indexes" active-class="on">路径索引</RouterLink>
+        <RouterLink to="/admin/consult/templates" active-class="on">咨询稿风格</RouterLink>
       </nav>
 
       <div class="account">
@@ -53,7 +57,7 @@ async function logout() {
     // 会话已失效时也继续清理本地登录状态
   }
   clearToken()
-  router.replace('/admin/login')
+  router.replace({ name: 'admin-login', query: { logout: '1' } })
 }
 </script>
 

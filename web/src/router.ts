@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { getToken } from './api'
+import { api, getToken, setToken } from './api'
 import Root from './views/Root.vue'
 import Invite from './views/Invite.vue'
 import Quiz from './views/Quiz.vue'
@@ -16,6 +16,10 @@ import SurveyEditor from './views/admin/SurveyEditor.vue'
 import ReportEditor from './views/admin/ReportEditor.vue'
 import ReportPreview from './views/admin/ReportPreview.vue'
 import SkillEditor from './views/admin/SkillEditor.vue'
+import ConsultWorkspace from './views/admin/ConsultWorkspace.vue'
+import ConsultTree from './views/admin/ConsultTree.vue'
+import ConsultTemplates from './views/admin/ConsultTemplates.vue'
+import ConsultIndexes from './views/admin/ConsultIndexes.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -48,7 +52,11 @@ export const router = createRouter({
         { path: 'submissions/:id', name: 'admin-submission', component: SubmissionDetail },
         { path: 'survey', name: 'admin-survey', component: SurveyEditor },
         { path: 'report', name: 'admin-report', component: ReportEditor },
-        { path: 'skill', name: 'admin-skill', component: SkillEditor }
+        { path: 'skill', name: 'admin-skill', component: SkillEditor },
+        { path: 'consult', name: 'admin-consult', component: ConsultWorkspace },
+        { path: 'consult/tree', name: 'admin-consult-tree', component: ConsultTree },
+        { path: 'consult/indexes', name: 'admin-consult-indexes', component: ConsultIndexes },
+        { path: 'consult/templates', name: 'admin-consult-templates', component: ConsultTemplates }
       ]
     },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFound }
@@ -70,6 +78,10 @@ const PAGE_TITLES: Record<string, string> = {
   'admin-report': '报告设置 · 管理后台',
   'admin-report-preview': '报告预览 · 管理后台',
   'admin-skill': 'AI 分析规则 · 管理后台',
+  'admin-consult': '写咨询稿 · 管理后台',
+  'admin-consult-tree': '咨询路径 · 管理后台',
+  'admin-consult-indexes': '路径索引 · 管理后台',
+  'admin-consult-templates': '咨询稿风格 · 管理后台',
   'not-found': '页面不存在'
 }
 
@@ -78,8 +90,15 @@ router.afterEach((to) => {
     (typeof to.name === 'string' ? PAGE_TITLES[to.name] : undefined) ?? '大学现状自评'
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   if (to.meta.admin && !getToken()) {
+    try {
+      const result = await api.devLogin()
+      setToken(result.token)
+      return true
+    } catch {
+      // 生产环境不提供免密登录，继续走正常登录页。
+    }
     return { name: 'admin-login', query: { next: to.fullPath } }
   }
   return true
