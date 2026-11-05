@@ -9,7 +9,17 @@
           title="隐藏侧栏"
           aria-label="隐藏侧栏"
           @click="sidebarOpen = false"
-        >«</button>
+        >
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path
+              d="M9.5 4.5 6 8l3.5 3.5"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
       </div>
 
       <nav class="nav" aria-label="后台导航">
@@ -17,11 +27,22 @@
           <button
             class="nav-toggle"
             type="button"
+            :class="{ active: activeGroup === 'survey' }"
             :aria-expanded="groups.survey"
             @click="toggleGroup('survey')"
           >
             <span>问卷</span>
-            <span class="chev" :class="{ closed: !groups.survey }">⌄</span>
+            <span class="chev" :class="{ closed: !groups.survey }" aria-hidden="true">
+              <svg viewBox="0 0 14 14" fill="none">
+                <path
+                  d="M3.5 5.5 7 9l3.5-3.5"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
           </button>
           <div class="nav-links" :class="{ closed: !groups.survey }">
             <RouterLink to="/admin" exact-active-class="on">概览</RouterLink>
@@ -38,11 +59,22 @@
           <button
             class="nav-toggle"
             type="button"
+            :class="{ active: activeGroup === 'consult' }"
             :aria-expanded="groups.consult"
             @click="toggleGroup('consult')"
           >
             <span>咨询</span>
-            <span class="chev" :class="{ closed: !groups.consult }">⌄</span>
+            <span class="chev" :class="{ closed: !groups.consult }" aria-hidden="true">
+              <svg viewBox="0 0 14 14" fill="none">
+                <path
+                  d="M3.5 5.5 7 9l3.5-3.5"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
           </button>
           <div class="nav-links" :class="{ closed: !groups.consult }">
             <RouterLink to="/admin/consult" exact-active-class="on">写咨询稿</RouterLink>
@@ -59,11 +91,22 @@
           <button
             class="nav-toggle"
             type="button"
+            :class="{ active: activeGroup === 'resume' }"
             :aria-expanded="groups.resume"
             @click="toggleGroup('resume')"
           >
             <span>简历</span>
-            <span class="chev" :class="{ closed: !groups.resume }">⌄</span>
+            <span class="chev" :class="{ closed: !groups.resume }" aria-hidden="true">
+              <svg viewBox="0 0 14 14" fill="none">
+                <path
+                  d="M3.5 5.5 7 9l3.5-3.5"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
           </button>
           <div class="nav-links" :class="{ closed: !groups.resume }">
             <RouterLink to="/admin/resumes" active-class="on">简历收集</RouterLink>
@@ -93,7 +136,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { api, clearToken } from '@/api'
 
@@ -107,6 +150,24 @@ const router = useRouter()
 const username = ref('')
 const sidebarOpen = ref(true)
 const groups = ref<Record<NavGroup, boolean>>({ survey: true, consult: true, resume: true })
+
+const activeGroup = computed<NavGroup | null>(() => {
+  const path = route.path
+  if (path.startsWith('/admin/consult')) return 'consult'
+  if (path.startsWith('/admin/resumes')) return 'resume'
+  if (
+    path === '/admin' ||
+    path.startsWith('/admin/invites') ||
+    path.startsWith('/admin/appointments') ||
+    path.startsWith('/admin/survey') ||
+    path.startsWith('/admin/submissions') ||
+    path.startsWith('/admin/report') ||
+    path.startsWith('/admin/skill')
+  ) {
+    return 'survey'
+  }
+  return null
+})
 
 function toggleGroup(key: NavGroup) {
   groups.value = { ...groups.value, [key]: !groups.value[key] }
@@ -213,9 +274,18 @@ async function logout() {
   border-radius: 7px;
   background: transparent;
   color: var(--ink-3);
-  font-size: 14px;
   line-height: 1;
   cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.sidebar-toggle svg {
+  display: block;
+  width: 15px;
+  height: 15px;
 }
 
 .sidebar-toggle:hover {
@@ -237,7 +307,7 @@ async function logout() {
 
 .nav-group + .nav-group {
   padding-top: 14px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
 }
 
 .nav-toggle {
@@ -245,26 +315,49 @@ async function logout() {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 7px 12px;
+  padding: 8px 12px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 9px;
   background: transparent;
-  color: var(--ink-2);
-  font-size: 12px;
+  color: var(--ink);
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .nav-toggle:hover {
-  color: var(--ink);
-  background: rgba(0, 0, 0, 0.03);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.nav-toggle.active {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.nav-toggle.active .chev {
+  color: var(--accent);
 }
 
 .chev {
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
   color: var(--ink-3);
-  transition: transform 0.15s ease;
+  transition:
+    transform 0.18s ease,
+    color 0.18s ease;
+}
+
+.chev svg {
+  display: block;
+  width: 14px;
+  height: 14px;
 }
 
 .chev.closed {

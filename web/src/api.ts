@@ -16,6 +16,7 @@ import type {
   ConsultCollectionInput,
   ConsultCollectionItem
 } from '@shared/consult-collection'
+import type { ResumeImageSummary } from '@shared/resume'
 
 export type { Answers, Question, ReportPayload, ReportResponse, ReportTemplate, Survey } from '@shared/types'
 export type {
@@ -47,6 +48,7 @@ export type {
   ConsultCollectionItem,
   ConsultCollectionKind
 } from '@shared/consult-collection'
+export type { ResumeImageSummary } from '@shared/resume'
 
 const TOKEN_KEY = 'vesta.admin.token'
 
@@ -143,6 +145,55 @@ function query(params: Record<string, string | undefined>): string {
   return text ? `?${text}` : ''
 }
 
+async function throwResponseError(response: Response): Promise<never> {
+  if (response.status === 401) {
+    clearToken()
+    if (!location.pathname.startsWith('/admin/login')) {
+      location.href = '/admin/login?expired=1'
+    }
+  }
+  let message = '请求失败'
+  try {
+    const data = (await response.json()) as { error?: unknown }
+    if (data?.error) message = String(data.error)
+  } catch {
+    // 响应不是 JSON 时使用默认提示。
+  }
+  throw new ApiError(message, response.status)
+}
+
+async function blobRequest(path: string): Promise<Blob> {
+  let response: Response
+  try {
+    response = await fetch(path, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    })
+  } catch {
+    throw new ApiError('连接失败，请稍后重试', 0)
+  }
+  if (!response.ok) return throwResponseError(response)
+  return response.blob()
+}
+
+async function uploadResumeRequest<T>(path: string, file: File): Promise<T> {
+  let response: Response
+  try {
+    response = await fetch(path, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        'Content-Type': file.type,
+        'X-File-Name': encodeURIComponent(file.name)
+      },
+      body: file
+    })
+  } catch {
+    throw new ApiError('连接失败，请稍后重试', 0)
+  }
+  if (!response.ok) return throwResponseError(response)
+  return (await response.json()) as T
+}
+
 export interface InvitePayload {
   name: string
   note: string
@@ -165,6 +216,21 @@ export const api = {
   },
   me() {
     return request<{ user: { username: string } }>('/api/admin/me', { auth: true })
+  },
+  resumeImages() {
+    return request<{ items: ResumeImageSummary[] }>('/api/admin/resumes', { auth: true })
+  },
+  resumeImageBlob(id: string) {
+    return blobRequest(`/api/admin/resumes/${encodeURIComponent(id)}/file`)
+  },
+  downloadResumeImage(id: string) {
+    return blobRequest(`/api/admin/resumes/${encodeURIComponent(id)}/download`)
+  },
+  uploadResumeImage(major: string, file: File) {
+    return uploadResumeRequest<{ item: ResumeImageSummary }>(
+      `/api/admin/resumes${query({ major })}`,
+      file
+    )
   },
   logout() {
     return request<{ ok: true }>('/api/admin/logout', { method: 'POST', auth: true })

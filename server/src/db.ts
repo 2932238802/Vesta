@@ -81,6 +81,17 @@ db.exec(`
     value TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS resume_images (
+    id TEXT PRIMARY KEY,
+    major TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    data BLOB NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_resume_images_major ON resume_images(major, created_at DESC);
+
   CREATE TABLE IF NOT EXISTS admin_sessions (
     sid TEXT PRIMARY KEY,
     username TEXT NOT NULL,
