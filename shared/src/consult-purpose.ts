@@ -8,6 +8,14 @@
 export type ConsultPurposeKind = 'root' | 'stage' | 'purpose' | 'butterfly'
 export type ConsultPurposeSource = string
 export type ConsultPurposeTurnRole = 'consultant' | 'student'
+export type ConsultPurposeBeatKind = 'line' | 'ask' | 'student' | 'direction'
+
+// 参考节拍：从原文示例里拆出来的“这一段下一步怎么说/怎么接”。
+// 它不是生成结果，也不改原文；生成时可作为骨架，再按学生情况改写。
+export interface ConsultPurposeBeat {
+  kind: ConsultPurposeBeatKind
+  text: string
+}
 
 export interface ConsultPurposeTurn {
   role: ConsultPurposeTurnRole
@@ -22,6 +30,69 @@ export interface ConsultPurposeExample {
   to: number
   note: string
   turns: ConsultPurposeTurn[]
+}
+
+const BEAT_MAX_CHARS = 180
+const STUDENT_FILLER = /^(嗯+|啊+|哦+|对+|好+|行+|是+|可以+|没事+|然后呢|是吧)[。！？，、…\s]*$/
+
+function splitBeatSentences(text: string): string[] {
+  return (text.replace(/\s+/g, ' ').trim().match(/[^。！？!?；;\n]+[。！？!?；;]?/g) ?? [text])
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
+function splitBeatClauses(text: string): string[] {
+  if (text.length <= BEAT_MAX_CHARS) return [text]
+  const clauses = text.match(/[^，,、]+[，,、]?/g) ?? [text]
+  const chunks: string[] = []
+  let buffer = ''
+  for (const clause of clauses) {
+    if (buffer && buffer.length + clause.length > BEAT_MAX_CHARS) {
+      chunks.push(buffer.trim())
+      buffer = ''
+    }
+    buffer += clause
+    while (buffer.length > BEAT_MAX_CHARS) {
+      chunks.push(buffer.slice(0, BEAT_MAX_CHARS).trim())
+      buffer = buffer.slice(BEAT_MAX_CHARS)
+    }
+  }
+  if (buffer.trim()) chunks.push(buffer.trim())
+  return chunks
+}
+
+function classifyConsultantBeat(text: string): 'line' | 'ask' | 'direction' {
+  if (/^[（(].*[）)]$/.test(text)) return 'direction'
+  if (/[？?]$/.test(text)) return 'ask'
+  if (
+    text.length <= 70 &&
+    /(吗|呢|对不对|是不是|好不好|行不行|有没有|要不要|想不想|怎么样|为什么|什么|哪里|哪个|多少|多久)[？?]?$/.test(text)
+  ) {
+    return 'ask'
+  }
+  return 'line'
+}
+
+// 把一组原文示例拆成逐条“节拍”。只做确定性的句子切分和角色归类，
+// 不总结、不改写，保证页面上看到的就是原稿里真实发生过的下一步。
+export function exampleToBeats(example: ConsultPurposeExample, limit = 24): ConsultPurposeBeat[] {
+  const beats: ConsultPurposeBeat[] = []
+  for (const turn of example.turns) {
+    const chunks = splitBeatSentences(turn.text).flatMap(splitBeatClauses)
+    for (const chunk of chunks) {
+      const text = chunk.trim()
+      if (!text) continue
+      if (turn.role === 'student') {
+        if (STUDENT_FILLER.test(text)) continue
+        beats.push({ kind: 'student', text })
+      } else {
+        if (text.length <= 2) continue
+        beats.push({ kind: classifyConsultantBeat(text), text })
+      }
+      if (beats.length >= limit) return beats
+    }
+  }
+  return beats
 }
 
 export interface ConsultPurposeNode {

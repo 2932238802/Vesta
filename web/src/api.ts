@@ -1,5 +1,6 @@
 import type { ReportPayload, ReportResponse, ReportTemplate, Survey } from '@shared/types'
 import type {
+  ConsultBeat,
   ConsultContext,
   ConsultDecisionPath,
   ConsultForest,
@@ -18,9 +19,12 @@ import type {
 
 export type { Answers, Question, ReportPayload, ReportResponse, ReportTemplate, Survey } from '@shared/types'
 export type {
+  ConsultBeat,
+  ConsultBeatKind,
   ConsultContext,
   ConsultDecisionPath,
   ConsultForest,
+  ConsultModuleOption,
   ConsultNode,
   ConsultOutcome,
   ConsultRun,
@@ -72,6 +76,7 @@ interface RequestOptions {
   method?: string
   body?: unknown
   auth?: boolean
+  timeout?: number
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -80,7 +85,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (options.auth) headers.Authorization = `Bearer ${getToken()}`
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 20_000)
+  const timer = setTimeout(() => controller.abort(), options.timeout ?? 20_000)
   let response: Response
   try {
     response = await fetch(path, {
@@ -500,6 +505,49 @@ export const api = {
       method: 'POST',
       auth: true
     })
+  },
+  saveConsultSection(
+    runId: string,
+    seq: number,
+    body: {
+      title?: string
+      goal?: string
+      content?: string
+      notes?: string
+      selectedOptionId?: string
+      purposeKeys?: string[]
+      beats?: ConsultBeat[]
+    }
+  ) {
+    return request<{ run: ConsultRun }>(
+      `/api/admin/consult/runs/${runId}/sections/${seq}`,
+      { method: 'PATCH', body, auth: true }
+    )
+  },
+  rewriteConsultSectionBeats(runId: string, seq: number, optionId: string) {
+    return request<{ run: ConsultRun }>(
+      `/api/admin/consult/runs/${runId}/sections/${seq}/beats`,
+      { method: 'POST', body: { optionId }, auth: true, timeout: 120_000 }
+    )
+  },
+  regenerateConsultSection(runId: string, seq: number) {
+    return request<{ run: ConsultRun }>(
+      `/api/admin/consult/runs/${runId}/sections/${seq}/regenerate`,
+      { method: 'POST', auth: true, timeout: 120_000 }
+    )
+  },
+  addConsultSection(runId: string, body: { afterSeq?: number; title?: string; goal?: string }) {
+    return request<{ run: ConsultRun }>(`/api/admin/consult/runs/${runId}/sections`, {
+      method: 'POST',
+      body,
+      auth: true
+    })
+  },
+  deleteConsultSection(runId: string, seq: number) {
+    return request<{ run: ConsultRun }>(
+      `/api/admin/consult/runs/${runId}/sections/${seq}`,
+      { method: 'DELETE', auth: true }
+    )
   },
   generateConsult(body: {
     context: ConsultContext

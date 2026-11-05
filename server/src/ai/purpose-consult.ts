@@ -50,7 +50,7 @@ function clampChapterCount(targetLength: number): number {
   return Math.max(6, Math.min(12, Math.ceil(targetLength / 3500)))
 }
 
-function contextText(context: ConsultContext): string {
+export function contextText(context: ConsultContext): string {
   return [
     context.name ? `称呼：${context.name}` : '',
     context.mentions ? `补充信息：${context.mentions}` : '',
@@ -91,7 +91,7 @@ function outlineText(plan: ConsultPurposePlan): string {
     .join('\n')
 }
 
-function nodeMap(tree: ConsultPurposeTemplate['tree']): Map<string, ConsultPurposeNode> {
+export function nodeMap(tree: ConsultPurposeTemplate['tree']): Map<string, ConsultPurposeNode> {
   const map = new Map<string, ConsultPurposeNode>()
   const stack = [tree]
   while (stack.length) {
@@ -118,7 +118,7 @@ function exampleText(example: ConsultPurposeExample, budget: number): string {
   return lines.join('\n')
 }
 
-function purposesText(
+export function purposesText(
   input: PurposeConsultInput,
   keys: string[],
   nodes: Map<string, ConsultPurposeNode>,

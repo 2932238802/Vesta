@@ -17,8 +17,11 @@ import {
   syncSharedConsultNodes,
   updateConsultNodesById,
   type ConsultAnswerHistory,
+  type ConsultBeat,
+  type ConsultBeatKind,
   type ConsultContext,
   type ConsultForest,
+  type ConsultModuleOption,
   type ConsultNode,
   type ConsultNodeType,
   type ConsultOutcome,
@@ -32,6 +35,7 @@ import {
   type ConsultTree
 } from '../../../shared/src/consult'
 import type { ConsultPurposePayload, ConsultPurposePlan } from '../../../shared/src/consult-purpose'
+import { buildModulesFromPlan, type ConsultModulePlan } from '../consult-modules'
 import {
   consultCollectionKinds,
   type ConsultCollectionInput,
@@ -56,6 +60,11 @@ import {
   type PurposeChapterPlan,
   type PurposeChapterResult
 } from '../ai/purpose-consult'
+import {
+  beatsToText,
+  composePurposeModuleBeats,
+  planPurposeModuleDraft
+} from '../ai/purpose-module'
 import { clampString, parseJson } from '../util'
 import { parseDocx } from '../docx'
 
@@ -166,6 +175,12 @@ interface ConsultRunSectionRow {
   error: string
   target_chars: number
   purpose_keys: string
+  module_id: string
+  options_json: string
+  selected_option_id: string
+  beats_json: string
+  notes: string
+  edited: number
   updated_at: string
 }
 
@@ -523,7 +538,7 @@ function writeScoring(scoring: ConsultScoringConfig): void {
   setSetting(SCORING_KEY, JSON.stringify(scoring))
 }
 
-function runFromRow(row: ConsultRunRow): ConsultRun {
+function runFromRow(row: ConsultRunRow, includeContent = false): ConsultRun {
   const rawStatus = row.status as ConsultRunStatus
   const status: ConsultRunStatus = ['queued', 'running', 'failed'].includes(rawStatus)
     ? rawStatus
@@ -548,7 +563,7 @@ function runFromRow(row: ConsultRunRow): ConsultRun {
     outcome: (row.outcome || '') as ConsultOutcome,
     outcomeNodeId: row.outcome_node_id,
     targetLength: row.target_length || 0,
-    sections: readRunSections(row.id),
+    sections: readRunSections(row.id, includeContent),
     createdAt: row.created_at,
     updatedAt: row.updated_at || row.created_at,
     finishedAt: row.finished_at,
@@ -556,43 +571,49 @@ function runFromRow(row: ConsultRunRow): ConsultRun {
   }
 }
 
-function sectionFromRow(row: ConsultRunSectionRow): ConsultRunSection {
+function sectionFromRow(row: ConsultRunSectionRow, includeContent = false): ConsultRunSection {
   const rawStatus = row.status as ConsultRunSectionStatus
   const status: ConsultRunSectionStatus = ['pending', 'running', 'failed'].includes(rawStatus)
     ? rawStatus
     : 'ready'
   return {
     seq: row.seq,
+    moduleId: row.module_id || '',
     title: row.title,
     goal: row.goal,
-    content: '',
+    content: includeContent ? row.content : '',
     status,
     error: row.error,
     targetChars: row.target_chars,
     purposeKeys: parseJson<string[]>(row.purpose_keys, []),
+    options: includeContent ? parseJson<ConsultModuleOption[]>(row.options_json, []) : [],
+    selectedOptionId: includeContent ? row.selected_option_id || '' : '',
+    beats: includeContent ? parseJson<ConsultBeat[]>(row.beats_json, []) : [],
+    notes: includeContent ? row.notes || '' : '',
+    edited: Boolean(row.edited),
     updatedAt: row.updated_at
   }
 }
 
-function readRunSections(runId: string): ConsultRunSection[] {
+function readRunSections(runId: string, includeContent = false): ConsultRunSection[] {
   const rows = db
     .prepare('SELECT * FROM consult_run_sections WHERE run_id = ? ORDER BY seq ASC')
     .all(runId) as unknown as ConsultRunSectionRow[]
-  return rows.map(sectionFromRow)
+  return rows.map((row) => sectionFromRow(row, includeContent))
 }
 
-function readRun(id: string): ConsultRun | null {
+function readRun(id: string, includeContent = true): ConsultRun | null {
   const row = db.prepare('SELECT * FROM consult_runs WHERE id = ?').get(id) as
     | ConsultRunRow
     | undefined
-  return row ? runFromRow(row) : null
+  return row ? runFromRow(row, includeContent) : null
 }
 
 function readRuns(limit = 40): ConsultRun[] {
   const rows = db
     .prepare('SELECT * FROM consult_runs ORDER BY created_at DESC LIMIT ?')
     .all(Math.min(100, Math.max(1, limit))) as unknown as ConsultRunRow[]
-  return rows.map((row) => runFromRow(row))
+  return rows.map((row) => runFromRow(row, false))
 }
 
 function findNode(root: ConsultNode, id: string): ConsultNode | null {
@@ -777,6 +798,87 @@ function setRunReady(runId: string, output: string): void {
   ).run(output, finishedAt, finishedAt, runId)
 }
 
+function rebuildRunOutput(runId: string): string {
+  const output = buildConsultDocument(readyDocumentSections(readRunSections(runId, true)))
+  db.prepare('UPDATE consult_runs SET output = ?, updated_at = ? WHERE id = ?').run(
+    output,
+    now(),
+    runId
+  )
+  return output
+}
+
+function purposeInputFromRow(row: ConsultRunRow): Parameters<typeof planPurposeModuleDraft>[0] {
+  const plan = parseJson<ConsultPurposePlan | null>(row.purpose_path, null)
+  if (!plan?.items?.length) throw new Error('这次生成还没有目的路径，请重新生成')
+  const purposeTemplate = findPurposeTemplate(readPurposePayload(), row.purpose_template_id)
+  return {
+    template: readTemplates().find((item) => item.id === row.template_id) ?? defaultConsultTemplate,
+    purposeTemplate,
+    plan,
+    context: parseJson<ConsultContext>(row.context, {}),
+    targetLength: row.target_length || DEFAULT_TARGET_LENGTH
+  }
+}
+
+interface PurposeFeedbackRow {
+  purpose_key: string
+  selected: number
+  won: number
+  lost: number
+  liked: number
+}
+
+// 把历史结果按目的整理成几行给 AI 看。样本很少时不写成结论，
+// 只让它在三种打法排序时参考，避免用几十次反馈压过眼前这个学生的特殊情况。
+function purposeFeedbackText(templateId: string, keys: string[]): string {
+  if (!templateId || !keys.length) return ''
+  const wanted = new Set(keys)
+  const rows = db
+    .prepare(
+      `SELECT purpose_key, selected, won, lost, liked
+       FROM consult_purpose_feedback WHERE template_id = ?`
+    )
+    .all(templateId) as unknown as PurposeFeedbackRow[]
+  return rows
+    .filter((row) => wanted.has(row.purpose_key))
+    .map(
+      (row) =>
+        `${row.purpose_key}：选择 ${row.selected} 次，成交 ${row.won}，未成交 ${row.lost}，好评 ${row.liked}`
+    )
+    .join('\n')
+}
+
+function readSectionRow(runId: string, seq: number): ConsultRunSectionRow | null {
+  return (db
+    .prepare('SELECT * FROM consult_run_sections WHERE run_id = ? AND seq = ?')
+    .get(runId, seq) ?? null) as ConsultRunSectionRow | null
+}
+
+const BEAT_KINDS = new Set<ConsultBeatKind>(['line', 'ask', 'student', 'direction', 'branch'])
+
+function sanitizeBeats(value: unknown): ConsultBeat[] {
+  if (!Array.isArray(value)) throw new Error('节拍格式不对')
+  const beats: ConsultBeat[] = []
+  for (const item of value.slice(0, 60)) {
+    const record = asRecord(item)
+    const text = clampString(record.text, 4000)
+    if (!text) continue
+    const kind = clampString(record.kind, 20) as ConsultBeatKind
+    if (!BEAT_KINDS.has(kind)) throw new Error('节拍类型不对')
+    beats.push({
+      id: clampString(record.id, 100) || newId('beat'),
+      kind,
+      text,
+      when:
+        kind === 'branch'
+          ? clampString(record.when, 200) || '如果她的反应不一样'
+          : undefined
+    })
+  }
+  return beats
+}
+
 async function runSentenceConsultJob(row: ConsultRunRow): Promise<void> {
   const runId = row.id
   const forest = readForest()
@@ -802,7 +904,7 @@ async function runSentenceConsultJob(row: ConsultRunRow): Promise<void> {
 
   let plan: ConsultChapterPlan[] = []
   let completedBySeq = new Map<number, ConsultChapterResult>()
-  const existingSections = readRunSections(runId)
+  const existingSections = readRunSections(runId, true)
   if (existingSections.length) {
     plan = existingSections.map((section) => ({
       title: section.title,
@@ -903,52 +1005,171 @@ async function runPurposeConsultJob(row: ConsultRunRow): Promise<void> {
     targetLength: row.target_length || DEFAULT_TARGET_LENGTH
   }
 
-  const existingSections = readRunSections(runId)
-  const completedBySeq = new Map<number, PurposeChapterResult>()
-  let chapters: PurposeChapterPlan[]
-  if (existingSections.length) {
-    // 重试时沿用已存下来的章节与目的分配，保证不会因为重新规划而跳过已完成的内容。
-    chapters = existingSections.map((section) => ({
+  const existingSections = readRunSections(runId, true)
+  if (existingSections.length && existingSections.every((section) => !section.moduleId)) {
+    await runLegacyPurposeConsultJob(row, input, existingSections)
+    return
+  }
+  await runModularPurposeConsultJob(row, input, existingSections)
+}
+
+function readyDocumentSections(sections: ConsultRunSection[]): Array<{
+  title: string
+  goal: string
+  targetChars: number
+  content: string
+  summary: string
+}> {
+  return sections
+    .filter((section) => section.status === 'ready' && section.content.trim())
+    .map((section) => ({
       title: section.title,
       goal: section.goal,
       targetChars: section.targetChars,
-      purposeKeys: section.purposeKeys
+      content: section.content,
+      summary: ''
     }))
-    for (const section of existingSections) {
-      if (section.status === 'ready' && section.content.trim()) {
-        completedBySeq.set(section.seq, {
-          title: section.title,
-          goal: section.goal,
-          targetChars: section.targetChars,
-          purposeKeys: section.purposeKeys,
-          content: section.content,
-          summary: chapterSummary(section.content)
-        })
-      }
+}
+
+function moduleForSection(
+  section: ConsultRunSection,
+  modules: ConsultModulePlan[],
+  index: number
+): ConsultModulePlan {
+  const matched = modules.find((module) => module.id === section.moduleId)
+  if (matched) return matched
+  return (
+    modules[index] ?? {
+      id: section.moduleId || `module.manual.${section.seq}`,
+      label: section.title,
+      stageId: '',
+      stageLabel: '',
+      purposeKeys: section.purposeKeys,
+      purposeLabels: section.purposeKeys
     }
-    db.prepare(
-      "UPDATE consult_run_sections SET status = 'pending', content = '', error = '', updated_at = ? WHERE run_id = ? AND status != 'ready'"
-    ).run(now(), runId)
-  } else {
+  )
+}
+
+async function runModularPurposeConsultJob(
+  row: ConsultRunRow,
+  input: Parameters<typeof planPurposeModuleDraft>[0],
+  existingSections: ConsultRunSection[]
+): Promise<void> {
+  const runId = row.id
+  const modules = buildModulesFromPlan(input.plan)
+  if (!modules.length) throw new Error('目的路径没有可用的对话模块')
+
+  if (!existingSections.length) {
     setRunRunning(runId)
-    chapters = await planPurposeChapters(input)
+    const perModule = Math.max(
+      800,
+      Math.round((row.target_length || DEFAULT_TARGET_LENGTH) / modules.length)
+    )
     const insertSection = db.prepare(
       `INSERT INTO consult_run_sections
-       (run_id, seq, title, goal, content, status, error, target_chars, purpose_keys, updated_at)
-       VALUES (?, ?, ?, ?, '', 'pending', '', ?, ?, ?)`
+       (run_id, seq, title, goal, content, status, error, target_chars, purpose_keys,
+        module_id, options_json, selected_option_id, beats_json, notes, edited, updated_at)
+       VALUES (?, ?, ?, ?, '', 'pending', '', ?, ?, ?, '[]', '', '[]', '', 0, ?)`
     )
-    for (const [index, chapter] of chapters.entries()) {
+    for (const [index, module] of modules.entries()) {
       insertSection.run(
         runId,
         index + 1,
-        chapter.title,
-        chapter.goal,
-        chapter.targetChars,
-        JSON.stringify(chapter.purposeKeys),
+        module.label,
+        `覆盖目的：${module.purposeLabels.join('、')}`.slice(0, 800),
+        perModule,
+        JSON.stringify(module.purposeKeys),
+        module.id,
         now()
       )
     }
   }
+
+  setRunRunning(runId)
+  let currentSeq = 0
+  try {
+    let sections = readRunSections(runId, true)
+    for (const [index, section] of sections.entries()) {
+      if (section.status === 'ready') continue
+      currentSeq = section.seq
+      db.prepare(
+        "UPDATE consult_run_sections SET status = 'running', error = '', updated_at = ? WHERE run_id = ? AND seq = ?"
+      ).run(now(), runId, section.seq)
+      const module = moduleForSection(section, modules, index)
+      const previous = sections
+        .filter((item) => item.seq < section.seq && item.status === 'ready')
+        .at(-1)
+      const result = await planPurposeModuleDraft(
+        input,
+        module,
+        previous?.content.slice(-1200) ?? '',
+        purposeFeedbackText(input.purposeTemplate.id, module.purposeKeys)
+      )
+      const content = beatsToText(result.beats)
+      db.prepare(
+        `UPDATE consult_run_sections
+         SET status = 'ready', error = '', content = ?, options_json = ?, selected_option_id = ?,
+             beats_json = ?, updated_at = ?
+         WHERE run_id = ? AND seq = ?`
+      ).run(
+        content,
+        JSON.stringify(result.options),
+        result.recommendedOptionId,
+        JSON.stringify(result.beats),
+        now(),
+        runId,
+        section.seq
+      )
+      sections = readRunSections(runId, true)
+      const partialOutput = buildConsultDocument(readyDocumentSections(sections))
+      db.prepare("UPDATE consult_runs SET output = ?, updated_at = ? WHERE id = ?").run(
+        partialOutput,
+        now(),
+        runId
+      )
+    }
+    const output = buildConsultDocument(readyDocumentSections(readRunSections(runId, true)))
+    if (!output.trim()) throw new Error('AI 没有生成任何有效正文')
+    setRunReady(runId, output)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'AI 生成失败'
+    if (currentSeq) {
+      db.prepare(
+        "UPDATE consult_run_sections SET status = 'failed', error = ?, updated_at = ? WHERE run_id = ? AND seq = ?"
+      ).run(message.slice(0, 1200), now(), runId, currentSeq)
+    }
+    throw error
+  }
+}
+
+async function runLegacyPurposeConsultJob(
+  row: ConsultRunRow,
+  input: Parameters<typeof planPurposeChapters>[0],
+  existingSections: ConsultRunSection[]
+): Promise<void> {
+  const runId = row.id
+  const completedBySeq = new Map<number, PurposeChapterResult>()
+  const chapters: PurposeChapterPlan[] = existingSections.map((section) => ({
+    title: section.title,
+    goal: section.goal,
+    targetChars: section.targetChars,
+    purposeKeys: section.purposeKeys
+  }))
+  for (const section of existingSections) {
+    if (section.status === 'ready' && section.content.trim()) {
+      completedBySeq.set(section.seq, {
+        title: section.title,
+        goal: section.goal,
+        targetChars: section.targetChars,
+        purposeKeys: section.purposeKeys,
+        content: section.content,
+        summary: chapterSummary(section.content)
+      })
+    }
+  }
+  db.prepare(
+    "UPDATE consult_run_sections SET status = 'pending', content = '', error = '', updated_at = ? WHERE run_id = ? AND status != 'ready'"
+  ).run(now(), runId)
 
   setRunRunning(runId)
   let currentSeq = 0
@@ -1717,6 +1938,274 @@ consultRouter.get('/runs/:id', (req, res) => {
     return
   }
   res.json({ run })
+})
+
+function sectionSeqParam(value: string): number {
+  const seq = Number(value)
+  if (!Number.isInteger(seq) || seq < 1) throw new Error('模块序号不对')
+  return seq
+}
+
+function markRunReadyIfComplete(runId: string): void {
+  const sections = readRunSections(runId, true)
+  if (!sections.length || sections.some((section) => section.status !== 'ready')) return
+  db.prepare(
+    "UPDATE consult_runs SET status = 'ready', error = '', finished_at = COALESCE(finished_at, ?), updated_at = ? WHERE id = ?"
+  ).run(now(), now(), runId)
+}
+
+// 保存一个模块的节拍、备注或选中的打法。保存节拍时，正文由节拍重新拼出来，
+// 这样“可照着说”的稿子和最终全文永远一致。
+consultRouter.patch('/runs/:id/sections/:seq', (req, res) => {
+  try {
+    const row = db.prepare('SELECT * FROM consult_runs WHERE id = ?').get(req.params.id) as
+      | ConsultRunRow
+      | undefined
+    if (!row) {
+      res.status(404).json({ error: '没有找到这次生成记录' })
+      return
+    }
+    const seq = sectionSeqParam(req.params.seq)
+    const section = readSectionRow(req.params.id, seq)
+    if (!section) {
+      res.status(404).json({ error: '没有找到这个模块' })
+      return
+    }
+    const body = asRecord(req.body)
+    const options = parseJson<ConsultModuleOption[]>(section.options_json, [])
+    let beats = parseJson<ConsultBeat[]>(section.beats_json, [])
+    let content = section.content
+    if ('beats' in body) {
+      beats = sanitizeBeats(body.beats)
+      content = beatsToText(beats)
+    } else if ('content' in body) {
+      content = clampString(body.content, 200_000)
+    }
+    let selectedOptionId = section.selected_option_id
+    if ('selectedOptionId' in body) {
+      selectedOptionId = clampString(body.selectedOptionId, 40)
+      if (selectedOptionId && !options.some((option) => option.id === selectedOptionId)) {
+        res.status(400).json({ error: '这个打法不属于当前模块' })
+        return
+      }
+    }
+    const title = 'title' in body ? clampString(body.title, 200) || section.title : section.title
+    const goal = 'goal' in body ? clampString(body.goal, 800) : section.goal
+    const notes = 'notes' in body ? clampString(body.notes, 8000) : section.notes
+    const purposeKeys =
+      'purposeKeys' in body
+        ? Array.isArray(body.purposeKeys)
+          ? body.purposeKeys
+              .map((item) => clampString(item, 120))
+              .filter(Boolean)
+              .slice(0, 80)
+          : []
+        : parseJson<string[]>(section.purpose_keys, [])
+    db.prepare(
+      `UPDATE consult_run_sections
+       SET title = ?, goal = ?, content = ?, status = 'ready', error = '',
+           purpose_keys = ?, selected_option_id = ?, beats_json = ?, notes = ?,
+           edited = 1, updated_at = ?
+       WHERE run_id = ? AND seq = ?`
+    ).run(
+      title,
+      goal,
+      content,
+      JSON.stringify(purposeKeys),
+      selectedOptionId,
+      JSON.stringify(beats),
+      notes,
+      now(),
+      req.params.id,
+      seq
+    )
+    rebuildRunOutput(req.params.id)
+    markRunReadyIfComplete(req.params.id)
+    res.json({ run: readRun(req.params.id) })
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : '保存模块失败' })
+  }
+})
+
+// 换一种打法：保留三种选择，只按选中的那一种重新写节拍。
+consultRouter.post('/runs/:id/sections/:seq/beats', async (req, res) => {
+  if (!isAiConfigured()) {
+    res.status(503).json({ error: '未配置 DEEPSEEK_API_KEY，暂时无法重写模块' })
+    return
+  }
+  try {
+    const row = db.prepare('SELECT * FROM consult_runs WHERE id = ?').get(req.params.id) as
+      | ConsultRunRow
+      | undefined
+    if (!row) {
+      res.status(404).json({ error: '没有找到这次生成记录' })
+      return
+    }
+    const seq = sectionSeqParam(req.params.seq)
+    const section = readSectionRow(req.params.id, seq)
+    if (!section) {
+      res.status(404).json({ error: '没有找到这个模块' })
+      return
+    }
+    const optionId = clampString(asRecord(req.body).optionId, 40)
+    const options = parseJson<ConsultModuleOption[]>(section.options_json, [])
+    const option = options.find((item) => item.id === optionId)
+    if (!option) {
+      res.status(400).json({ error: '先选择一个打法，再重写本模块' })
+      return
+    }
+    const input = purposeInputFromRow(row)
+    const modules = buildModulesFromPlan(input.plan)
+    const module = moduleForSection(sectionFromRow(section, true), modules, seq - 1)
+    const previous = readRunSections(req.params.id, true)
+      .filter((item) => item.seq < seq && item.status === 'ready' && item.content.trim())
+      .at(-1)
+    const beats = await composePurposeModuleBeats(
+      input,
+      module,
+      option,
+      previous?.content.slice(-1200) ?? '',
+      purposeFeedbackText(input.purposeTemplate.id, module.purposeKeys)
+    )
+    const content = beatsToText(beats)
+    db.prepare(
+      `UPDATE consult_run_sections
+       SET status = 'ready', error = '', content = ?, selected_option_id = ?, beats_json = ?,
+           edited = 1, updated_at = ?
+       WHERE run_id = ? AND seq = ?`
+    ).run(content, option.id, JSON.stringify(beats), now(), req.params.id, seq)
+    rebuildRunOutput(req.params.id)
+    markRunReadyIfComplete(req.params.id)
+    res.json({ run: readRun(req.params.id) })
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : '重写模块失败' })
+  }
+})
+
+// 整个模块重新给三种打法。适合咨询师觉得三种都不对，或者学生情况变了的时候。
+consultRouter.post('/runs/:id/sections/:seq/regenerate', async (req, res) => {
+  if (!isAiConfigured()) {
+    res.status(503).json({ error: '未配置 DEEPSEEK_API_KEY，暂时无法重写模块' })
+    return
+  }
+  try {
+    const row = db.prepare('SELECT * FROM consult_runs WHERE id = ?').get(req.params.id) as
+      | ConsultRunRow
+      | undefined
+    if (!row) {
+      res.status(404).json({ error: '没有找到这次生成记录' })
+      return
+    }
+    const seq = sectionSeqParam(req.params.seq)
+    const section = readSectionRow(req.params.id, seq)
+    if (!section) {
+      res.status(404).json({ error: '没有找到这个模块' })
+      return
+    }
+    const input = purposeInputFromRow(row)
+    const modules = buildModulesFromPlan(input.plan)
+    const module = moduleForSection(sectionFromRow(section, true), modules, seq - 1)
+    const previous = readRunSections(req.params.id, true)
+      .filter((item) => item.seq < seq && item.status === 'ready' && item.content.trim())
+      .at(-1)
+    const result = await planPurposeModuleDraft(
+      input,
+      module,
+      previous?.content.slice(-1200) ?? '',
+      purposeFeedbackText(input.purposeTemplate.id, module.purposeKeys)
+    )
+    const content = beatsToText(result.beats)
+    db.prepare(
+      `UPDATE consult_run_sections
+       SET status = 'ready', error = '', content = ?, options_json = ?, selected_option_id = ?,
+           beats_json = ?, edited = 0, updated_at = ?
+       WHERE run_id = ? AND seq = ?`
+    ).run(
+      content,
+      JSON.stringify(result.options),
+      result.recommendedOptionId,
+      JSON.stringify(result.beats),
+      now(),
+      req.params.id,
+      seq
+    )
+    rebuildRunOutput(req.params.id)
+    markRunReadyIfComplete(req.params.id)
+    res.json({ run: readRun(req.params.id) })
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : '重写模块失败' })
+  }
+})
+
+consultRouter.post('/runs/:id/sections', (req, res) => {
+  try {
+    const row = db.prepare('SELECT * FROM consult_runs WHERE id = ?').get(req.params.id) as
+      | ConsultRunRow
+      | undefined
+    if (!row) {
+      res.status(404).json({ error: '没有找到这次生成记录' })
+      return
+    }
+    const body = asRecord(req.body)
+    const sections = readRunSections(req.params.id, true)
+    const maxSeq = sections.at(-1)?.seq ?? 0
+    const requested = Number(body.afterSeq)
+    const afterSeq =
+      Number.isInteger(requested) && requested >= 0 && requested <= maxSeq ? requested : maxSeq
+    if (afterSeq < maxSeq) {
+      db.prepare(
+        'UPDATE consult_run_sections SET seq = -seq WHERE run_id = ? AND seq > ?'
+      ).run(req.params.id, afterSeq)
+      db.prepare(
+        'UPDATE consult_run_sections SET seq = -seq + 1 WHERE run_id = ? AND seq < 0'
+      ).run(req.params.id)
+    }
+    const seq = afterSeq + 1
+    const title = clampString(body.title, 200) || '新模块'
+    const goal = clampString(body.goal, 800)
+    db.prepare(
+      `INSERT INTO consult_run_sections
+       (run_id, seq, title, goal, content, status, error, target_chars, purpose_keys,
+        module_id, options_json, selected_option_id, beats_json, notes, edited, updated_at)
+       VALUES (?, ?, ?, ?, '', 'ready', '', 0, '[]', ?, '[]', '', '[]', '', 0, ?)`
+    ).run(req.params.id, seq, title, goal, newId('module'), now())
+    rebuildRunOutput(req.params.id)
+    markRunReadyIfComplete(req.params.id)
+    res.status(201).json({ run: readRun(req.params.id) })
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : '新增模块失败' })
+  }
+})
+
+consultRouter.delete('/runs/:id/sections/:seq', (req, res) => {
+  try {
+    const seq = sectionSeqParam(req.params.seq)
+    const run = db.prepare('SELECT id FROM consult_runs WHERE id = ?').get(req.params.id)
+    if (!run) {
+      res.status(404).json({ error: '没有找到这次生成记录' })
+      return
+    }
+    const section = readSectionRow(req.params.id, seq)
+    if (!section) {
+      res.status(404).json({ error: '没有找到这个模块' })
+      return
+    }
+    db.prepare('DELETE FROM consult_run_sections WHERE run_id = ? AND seq = ?').run(
+      req.params.id,
+      seq
+    )
+    db.prepare(
+      'UPDATE consult_run_sections SET seq = -seq WHERE run_id = ? AND seq > ?'
+    ).run(req.params.id, seq)
+    db.prepare(
+      'UPDATE consult_run_sections SET seq = -seq - 1 WHERE run_id = ? AND seq < 0'
+    ).run(req.params.id)
+    rebuildRunOutput(req.params.id)
+    markRunReadyIfComplete(req.params.id)
+    res.json({ run: readRun(req.params.id) })
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : '删除模块失败' })
+  }
 })
 
 consultRouter.post('/runs/:id/retry', (req, res) => {

@@ -118,6 +118,17 @@
 - 后台移除“路径索引”和“咨询稿风格”页面、导航与路由；工作台的路径索引行、断点选择和逐句预览一并删除。路径索引模块与接口不再需要，相关前后端代码已移除。
 - `consult_forest`、`consult_tree` 和旧 `consult_runs` 数据没有删除；逐句模式接口保留兼容，但后台不再提供入口。
 
+### 模块化咨询稿与节拍编辑（2026-11-05）
+
+- 目的模式不再由 AI 规划 6—12 个章节，也不再逐章生成 2500—4500 字文章。后端 `server/src/consult-modules.ts` 把目的路径按对话动作切成 10—20 个模块，模块顺序跟随目的路径。
+- 每个模块由 `server/src/ai/purpose-module.ts` 生成三种真正不同的推进打法，默认推荐最有学生依据的一种，并写成陈述、提问、学生回应、动作、分支五类节拍。正文由节拍按顺序拼出，篇幅由信息量决定，不按字数硬凑。
+- `consult_run_sections` 增量增加 `module_id`、`options_json`、`selected_option_id`、`beats_json`、`notes`、`edited`；旧的 `content` 和 `purpose_keys` 保留。迁移只加列，不删表、不改旧数据。
+- `GET /runs/:id` 返回完整模块内容；`GET /runs` 仍只返回轻量列表。旧版没有 `module_id` 的目的模式记录继续走原章节重试逻辑。
+- 工作台把生成结果改成模块卡片：可看三种打法的依据/代价/风险，换打法只重写当前模块，逐条增删改节拍，加模块、删模块、保存备注；保存后自动重新拼全文。
+- 新增模块接口：`PATCH /runs/:id/sections/:seq`、`POST /runs/:id/sections/:seq/beats`、`POST /runs/:id/sections/:seq/regenerate`、`POST /runs/:id/sections`、`DELETE /runs/:id/sections/:seq`。
+- 新增 `scripts/preview-consult-modules.ts`，不调用 AI 即可预览不同学生情况下会切出哪些模块。
+- 这一步没有改 SKILL，也没有把收藏栏逐字稿接入生成检索；后面再做案例档案、全文检索和反馈排序。
+
 ### 收藏栏（2026-11-05）
 
 - 咨询栏目新增“收藏栏”（`/admin/consult/collections`），用来收金句、完整优秀咨询稿、公众号链接和其他参考资料。

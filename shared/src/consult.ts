@@ -127,8 +127,36 @@ export type ConsultRunSectionStatus = 'pending' | 'running' | 'ready' | 'failed'
 export type ConsultOutcome = '' | 'won' | 'lost' | 'liked' | 'abandoned'
 export type ConsultRunMode = 'sentence' | 'purpose'
 
+// 一个模块里的最小单位是“节拍”：一句要说的话、一次提问、学生的真实回应、
+// 一个动作提示，或者一条“如果她说……就……”的分支。
+// 节拍不是文章段落；它按电话里真实发生的顺序排列，因此篇幅由信息量决定。
+export type ConsultBeatKind = 'line' | 'ask' | 'student' | 'direction' | 'branch'
+
+export interface ConsultBeat {
+  id: string
+  kind: ConsultBeatKind
+  text: string
+  // 只对 branch 有意义：什么情况下走这条分支。
+  when?: string
+}
+
+// 同一个模块的三种打法。默认推荐项必须给出学生情况里的依据，
+// 不能只是措辞不同；咨询师可以按自己的判断换一种。
+export interface ConsultModuleOption {
+  id: string
+  title: string
+  summary: string
+  why: string
+  tradeoff: string
+  fit: string
+  risk: string
+  evidence: string[]
+  recommended: boolean
+}
+
 export interface ConsultRunSection {
   seq: number
+  moduleId: string
   title: string
   goal: string
   content: string
@@ -136,6 +164,11 @@ export interface ConsultRunSection {
   error: string
   targetChars: number
   purposeKeys: string[]
+  options: ConsultModuleOption[]
+  selectedOptionId: string
+  beats: ConsultBeat[]
+  notes: string
+  edited: boolean
   updatedAt: string
 }
 

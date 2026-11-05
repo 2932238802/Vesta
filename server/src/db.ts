@@ -203,6 +203,19 @@ function ensureConsultColumns(): void {
   if (!sectionColumns.has('purpose_keys')) {
     db.exec("ALTER TABLE consult_run_sections ADD COLUMN purpose_keys TEXT NOT NULL DEFAULT '[]'")
   }
+  const sectionAdditions: [string, string][] = [
+    ['module_id', "TEXT NOT NULL DEFAULT ''"],
+    ['options_json', "TEXT NOT NULL DEFAULT '[]'"],
+    ['selected_option_id', "TEXT NOT NULL DEFAULT ''"],
+    ['beats_json', "TEXT NOT NULL DEFAULT '[]'"],
+    ['notes', "TEXT NOT NULL DEFAULT ''"],
+    ['edited', 'INTEGER NOT NULL DEFAULT 0']
+  ]
+  for (const [name, definition] of sectionAdditions) {
+    if (!sectionColumns.has(name)) {
+      db.exec(`ALTER TABLE consult_run_sections ADD COLUMN ${name} ${definition}`)
+    }
+  }
 }
 
 ensureConsultColumns()

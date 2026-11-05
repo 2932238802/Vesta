@@ -127,7 +127,7 @@
                   left: `${item.x}px`,
                   top: `${item.y - MAP_NODE_HEIGHT / 2}px`
                 }"
-                :title="`${item.node.label}\n${item.node.summary}`"
+                :title="mapTitle(item.node)"
                 @mousedown.stop
                 @mousedown.right.prevent
                 @mouseup.right.prevent
@@ -205,14 +205,46 @@
             <p class="detail-summary">{{ selectedNode.summary }}</p>
 
             <div class="detail-metrics">
-              <span><b>{{ exampleCount(selectedNode) }}</b> 组示例</span>
+              <span><b>{{ selectedBeats.length }}</b> 个参考节拍</span>
+              <span><b>{{ exampleCount(selectedNode) }}</b> 组原文</span>
               <span><b>{{ butterflyCount(selectedNode) }}</b> 个情绪垫</span>
-              <span v-if="hasChildren(selectedNode)"><b>{{ selectedNode.children?.length ?? 0 }}</b> 个下一步</span>
+              <span v-if="hasChildren(selectedNode)"><b>{{ selectedNode.children?.length ?? 0 }}</b> 个子目的</span>
             </div>
 
             <div v-if="selectedNode.branchCondition" class="callout branch">
               <b>什么时候走这里：</b>{{ selectedNode.branchCondition }}
             </div>
+
+            <section v-if="selectedBeats.length" class="detail-section beat-section">
+              <h3>
+                下一步 · 参考节拍
+                <span class="quiet">{{ selectedBeats.length }}</span>
+              </h3>
+              <p class="beat-source">
+                来自
+                <b>{{ selectedBeatExample?.sourceLabel }}</b>
+                <template v-if="selectedBeatExample"> · {{ rangeLabel(selectedBeatExample) }}</template>
+                · 自动拆自原文，生成时会按学生情况改写
+              </p>
+              <ol class="beat-list">
+                <li
+                  v-for="(beat, index) in selectedBeats"
+                  :key="index"
+                  class="beat-item"
+                  :class="beat.kind"
+                >
+                  <span class="beat-no">{{ String(index + 1).padStart(2, '0') }}</span>
+                  <span class="beat-kind">{{ beatKindLabel(beat.kind) }}</span>
+                  <p>{{ beat.text }}</p>
+                </li>
+              </ol>
+            </section>
+            <section v-else class="detail-section">
+              <h3>下一步 · 参考节拍</h3>
+              <div class="callout gap">
+                <b>还没有参考节拍：</b>这个目的目前没有可拆的原文示例，生成时会按目的和阶段现场展开。
+              </div>
+            </section>
 
             <section v-if="selectedNode.notes?.length" class="detail-section">
               <h3>导演提示</h3>
@@ -222,13 +254,13 @@
             </section>
 
             <section class="detail-section">
-              <h3>原文示例组 <span class="quiet">{{ exampleCount(selectedNode) }}</span></h3>
+              <h3>原文对照 <span class="quiet">{{ exampleCount(selectedNode) }}</span></h3>
               <template v-if="selectedNode.examples.length">
                 <details
                   v-for="(example, index) in selectedNode.examples"
                   :key="`${example.source}-${example.from}-${example.to}-${index}`"
                   class="example"
-                  :open="index === 0 && example.turns.length <= 12"
+                  :open="!selectedBeats.length && index === 0"
                 >
                   <summary>
                     <span class="source" :class="example.source === 'july' ? 'july' : 'sep'">{{ example.sourceLabel }}</span>
@@ -269,7 +301,7 @@
             </section>
 
             <section v-if="selectedNode.children?.length" class="detail-section">
-              <h3>下一步</h3>
+              <h3>子目的 <span class="quiet">{{ selectedNode.children.length }}</span></h3>
               <div class="chip-list">
                 <button
                   v-for="child in selectedNode.children"
@@ -294,12 +326,14 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api'
 import type {
+  ConsultPurposeBeat,
   ConsultPurposeExample,
   ConsultPurposeNode,
   ConsultPurposePayload,
   ConsultPurposeStats,
   ConsultPurposeTemplate
 } from '@shared/consult-purpose'
+import { exampleToBeats } from '@shared/consult-purpose'
 
 const MAP_NODE_WIDTH = 216
 const MAP_NODE_HEIGHT = 90
@@ -370,6 +404,11 @@ const nodeById = computed(() => {
 })
 
 const selectedNode = computed(() => (selectedId.value ? nodeById.value.get(selectedId.value) ?? null : null))
+const selectedBeatInfo = computed(() =>
+  selectedNode.value ? beatInfoFor(selectedNode.value) : null
+)
+const selectedBeats = computed(() => selectedBeatInfo.value?.beats ?? [])
+const selectedBeatExample = computed(() => selectedBeatInfo.value?.example ?? null)
 
 // 选中节点后，把从根/第一阶段流到它的链路在图上标出来。
 const selectedPathIds = computed(() => new Set(selectedNode.value?.path ?? []))
@@ -408,6 +447,37 @@ function countPurposes(node: ConsultPurposeNode): number {
   let total = node.kind === 'purpose' ? 1 : 0
   for (const child of node.children ?? []) total += countPurposes(child)
   return total
+}
+
+// 参考节拍只从原文示例确定性拆出，所以按节点缓存，避免列表滚动时重复计算。
+const beatCache = new Map<
+  string,
+  { beats: ConsultPurposeBeat[]; example: ConsultPurposeExample | null }
+>()
+
+function beatInfoFor(node: ConsultPurposeNode) {
+  const cached = beatCache.get(node.id)
+  if (cached) return cached
+  const examples = node.examples ?? []
+  const example =
+    examples.find((item) => item.source === 'july') ??
+    examples.find((item) => item.turns.length >= 4 && item.turns.length <= 32) ??
+    examples[0] ??
+    null
+  const info = { example, beats: example ? exampleToBeats(example) : [] }
+  beatCache.set(node.id, info)
+  return info
+}
+
+function beatsFor(node: ConsultPurposeNode): ConsultPurposeBeat[] {
+  return beatInfoFor(node).beats
+}
+
+function beatKindLabel(kind: ConsultPurposeBeat['kind']): string {
+  if (kind === 'ask') return '提问'
+  if (kind === 'student') return '学生'
+  if (kind === 'direction') return '动作'
+  return '咨询师'
 }
 
 function stageIndex(stage: ConsultPurposeNode): number {
@@ -606,10 +676,23 @@ function mapKicker(node: ConsultPurposeNode): string {
   return '目的动作'
 }
 
+function mapTitle(node: ConsultPurposeNode): string {
+  const base = `${node.label}\n${node.summary}`
+  if (node.kind !== 'purpose') return base
+  const beats = beatsFor(node).slice(0, 4)
+  if (!beats.length) return base
+  return `${base}\n\n下一步：\n${beats
+    .map((beat) => `${beatKindLabel(beat.kind)}：${beat.text}`)
+    .join('\n')}`
+}
+
 function mapMeta(node: ConsultPurposeNode): string {
   if (node.kind === 'root') return `${stages.value.length} 个阶段`
   if (node.kind === 'stage') return `${countPurposes(node)} 个目的`
-  const parts = [`${exampleCount(node)} 组`]
+  const parts: string[] = []
+  const beats = beatsFor(node).length
+  if (beats) parts.push(`${beats} 拍`)
+  parts.push(`${exampleCount(node)} 组`)
   if (showButterflies.value && butterflyCount(node)) parts.push(`🦋 ${butterflyCount(node)}`)
   if (hasChildren(node)) parts.push(`${node.children?.length ?? 0} 个下一步`)
   return parts.join(' · ')
@@ -832,6 +915,11 @@ function stopPan() {
   window.removeEventListener('mouseup', stopPan)
 }
 
+function defaultCollapsedStages(): Set<string> {
+  // 默认把第一阶段展开：一进来就能看到目的和节拍，而不是只有 6 张阶段卡。
+  return new Set((tree.value?.children ?? []).slice(1).map((stage) => stage.id))
+}
+
 async function load() {
   loading.value = true
   loadError.value = ''
@@ -841,13 +929,14 @@ async function load() {
   try {
     const result = await api.consultPurposes()
     payload.value = result
+    beatCache.clear()
     const list = result.templates ?? []
     activeTemplateId.value =
       list.find((item) => item.id === requestedTemplate)?.id ??
       list.find((item) => item.id === result.meta.activeTemplateId)?.id ??
       list[0]?.id ??
       ''
-    mapCollapsed.value = new Set((tree.value?.children ?? []).map((stage) => stage.id))
+    mapCollapsed.value = defaultCollapsedStages()
     selectedId.value = ''
     if (requested && nodeById.value.has(requested)) {
       nextTick(() => select(requested))
@@ -864,7 +953,8 @@ function setTemplate(id: string) {
   if (id === activeTemplateId.value) return
   activeTemplateId.value = id
   selectedId.value = ''
-  mapCollapsed.value = new Set((tree.value?.children ?? []).map((stage) => stage.id))
+  beatCache.clear()
+  mapCollapsed.value = defaultCollapsedStages()
   router.replace({
     query: {
       ...route.query,
@@ -1452,6 +1542,92 @@ watch([query, onlyMainline], () => {
   border-left-color: var(--amber);
   border-style: dashed;
   background: rgba(148, 98, 28, 0.05);
+}
+
+.beat-source {
+  margin: -2px 0 9px;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.beat-source b {
+  color: var(--ink-2);
+  font-weight: 560;
+}
+
+.beat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.beat-item {
+  display: grid;
+  grid-template-columns: 25px 38px minmax(0, 1fr);
+  gap: 5px;
+  align-items: start;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.beat-item .beat-no {
+  padding-top: 3px;
+  color: var(--ink-3);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.beat-kind {
+  padding-top: 1px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 560;
+  line-height: 1.6;
+}
+
+.beat-item p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.68;
+  white-space: pre-wrap;
+}
+
+.beat-item.ask {
+  border-color: rgba(47, 111, 159, 0.22);
+  background: rgba(47, 111, 159, 0.045);
+}
+
+.beat-item.ask .beat-kind {
+  color: #2f6f9f;
+}
+
+.beat-item.student {
+  border-color: rgba(148, 98, 28, 0.2);
+  background: #fffdf6;
+}
+
+.beat-item.student .beat-kind {
+  color: var(--amber);
+}
+
+.beat-item.direction {
+  background: #f7f6f2;
+}
+
+.beat-item.direction .beat-kind {
+  color: #8a7a5a;
+}
+
+.beat-item.direction p {
+  color: var(--ink-2);
+  font-style: italic;
 }
 
 .detail-section {
