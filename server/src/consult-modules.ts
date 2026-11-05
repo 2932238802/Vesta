@@ -29,7 +29,15 @@ const RULES: ModuleRule[] = [
   {
     id: 'module.open.rapport',
     label: '开场：确认与相似性',
-    keys: ['open.confirm-call', 'trust.self-disclosure', 'trust.ask-her-result', 'trust.bridge']
+    keys: [
+      'open.confirm-call',
+      'open.expectation',
+      'open.questionnaire',
+      'trust.self-disclosure',
+      'trust.ask-her-result',
+      'trust.bridge',
+      'trust.result'
+    ]
   },
   {
     id: 'module.open.permission',
@@ -47,6 +55,11 @@ const RULES: ModuleRule[] = [
     keys: ['scan.score', 'scan.volunteer', 'scan.worries']
   },
   {
+    id: 'module.scan.conditions',
+    label: '摸底：经济与学习条件',
+    keys: ['scan.existing-course', 'scan.money', 'scan.campus']
+  },
+  {
     id: 'module.diag.choose',
     label: '担忧：先选最在意的一个',
     keys: ['diag.choose']
@@ -54,16 +67,22 @@ const RULES: ModuleRule[] = [
   { id: 'module.diag.social', label: '担忧：社交/社恐', prefixes: ['diag.social'] },
   {
     id: 'module.diag.confidence',
-    label: '担忧：不自信',
+    label: '担忧：不自信与学历落差',
     prefixes: ['diag.confidence'],
     keys: ['diag.school-gap']
   },
   { id: 'module.diag.parents', label: '担忧：父母不同意', prefixes: ['diag.parents'] },
   { id: 'module.diag.busy', label: '担忧：太忙没时间', prefixes: ['diag.busy'] },
-  { id: 'module.diag.money', label: '担忧：大学怎么赚钱', prefixes: ['diag.money'] },
+  { id: 'module.diag.money', label: '担忧：钱与经济压力', prefixes: ['diag.money'] },
   { id: 'module.diag.dorm', label: '担忧：宿舍关系', prefixes: ['diag.dorm'] },
   { id: 'module.diag.club', label: '担忧：社团要不要加', prefixes: ['diag.club'] },
   { id: 'module.diag.major', label: '担忧：专业不喜欢', prefixes: ['diag.major'] },
+  { id: 'module.diag.postgrad', label: '担忧：考研迷茫', prefixes: ['diag.postgrad'] },
+  { id: 'module.diag.english', label: '担忧：英语与四六级', prefixes: ['diag.english'] },
+  { id: 'module.diag.motivation', label: '担忧：没动力', prefixes: ['diag.motivation'] },
+  { id: 'module.diag.environment', label: '担忧：环境与室友', prefixes: ['diag.environment'] },
+  { id: 'module.diag.too-many', label: '担忧：想法太多', prefixes: ['diag.too-many'] },
+  { id: 'module.diag.ai', label: '担忧：AI 替代', prefixes: ['diag.ai'] },
   { id: 'module.diag.monitor', label: '担忧：班委竞选', prefixes: ['diag.monitor'] },
   { id: 'module.diag.class', label: '担忧：分班考试', prefixes: ['diag.class'] },
   { id: 'module.diag.union', label: '担忧：学生会', prefixes: ['diag.union'] },
@@ -80,6 +99,22 @@ const RULES: ModuleRule[] = [
       'window.opportunities',
       'window.catch',
       'window.two-paths'
+    ]
+  },
+  {
+    id: 'module.window.off',
+    label: '重定义：以终为始',
+    keys: [
+      'window.final-goal',
+      'window.competition-pool',
+      'window.442',
+      'window.ai-era',
+      'window.english-leverage',
+      'window.experience-first',
+      'window.subtract',
+      'window.long-term',
+      'window.track-uncertain',
+      'window.python-reality'
     ]
   },
   {
@@ -114,6 +149,19 @@ const RULES: ModuleRule[] = [
     prefixes: ['filter.english']
   },
   {
+    id: 'module.filter.plan',
+    label: '筛选：大学行动清单',
+    keys: [
+      'filter.timeline',
+      'filter.certificates',
+      'filter.internship',
+      'filter.tutor',
+      'filter.gpa',
+      'filter.lab',
+      'filter.postgrad-plan'
+    ]
+  },
+  {
     id: 'module.offer.plan',
     label: '承接：她打算怎么学',
     keys: ['offer.ask-plan'],
@@ -124,6 +172,11 @@ const RULES: ModuleRule[] = [
     label: '承接：自学三坑与真正需要',
     keys: ['offer.three-pitfalls', 'offer.three-needs', 'offer.confirm-need'],
     prefixes: ['offer.pitfall', 'offer.need']
+  },
+  {
+    id: 'module.offer.trust',
+    label: '承接：对比与可信度',
+    keys: ['offer.compare', 'offer.trust']
   },
   {
     id: 'module.offer.handoff',

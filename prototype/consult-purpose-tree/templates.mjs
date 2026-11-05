@@ -4,10 +4,15 @@
 // 新增模板时：写一个新的 tree-definition-*.mjs（导出 meta 和 tree），再在这里登记。
 
 import { meta as peakMeta, tree as peakTree } from './tree-definition.mjs'
+import { meta as offMeta, tree as offTree } from './tree-definition-off.mjs'
 
 export const templates = [
   {
     ...peakMeta,
     definition: peakTree
+  },
+  {
+    ...offMeta,
+    definition: offTree
   }
 ]

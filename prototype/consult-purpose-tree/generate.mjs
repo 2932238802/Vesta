@@ -58,6 +58,31 @@ function parseTranscript(text) {
       if (content) current.students.push({ speaker: student[1], text: content })
     }
   }
+  if (turns.size) return turns
+
+  // 少数稿子没有“咨询师/学生”说话人标记，逐字稿工具会退化成
+  // “编号 ## 发言人 N + 编号 正文”的段落列表。这里按“发言人 1 是咨询师”
+  // 重新编号，让这些稿子也能进入示例库。
+  let speaker = 0
+  let sequence = 0
+  for (const raw of text.split('\n')) {
+    const header = /^(\d{3}) ## 发言人 (\d+)$/.exec(raw)
+    if (header) {
+      speaker = Number(header[2])
+      continue
+    }
+    const body = /^(\d{3})    (.*)$/.exec(raw)
+    if (!body) continue
+    const content = body[2].trim()
+    if (!content) continue
+    if (speaker === 1) {
+      sequence += 1
+      current = { number: sequence, speaker: 'consultant', text: content, students: [] }
+      turns.set(sequence, current)
+    } else if (speaker === 2 && current) {
+      current.students.push({ speaker: '学生2', text: content })
+    }
+  }
   return turns
 }
 
