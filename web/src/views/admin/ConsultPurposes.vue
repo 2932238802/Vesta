@@ -193,7 +193,6 @@
                 <p class="detail-kind">{{ kindLabel(selectedNode) }}</p>
                 <h2>{{ selectedNode.label }}</h2>
               </div>
-              <code v-if="selectedNode.purposeKey" class="key-code">{{ selectedNode.purposeKey }}</code>
             </header>
 
             <div class="detail-badges">
@@ -215,11 +214,11 @@
               <b>什么时候走这里：</b>{{ selectedNode.branchCondition }}
             </div>
 
-            <section v-if="selectedBeats.length" class="detail-section beat-section">
-              <h3>
+            <details v-if="selectedBeats.length" class="detail-section beat-section" open>
+              <summary class="beat-summary">
                 下一步 · 参考节拍
                 <span class="quiet">{{ selectedBeats.length }}</span>
-              </h3>
+              </summary>
               <p class="beat-source">
                 来自
                 <b>{{ selectedBeatExample?.sourceLabel }}</b>
@@ -238,7 +237,7 @@
                   <p>{{ beat.text }}</p>
                 </li>
               </ol>
-            </section>
+            </details>
             <section v-else class="detail-section">
               <h3>下一步 · 参考节拍</h3>
               <div class="callout gap">
@@ -1477,18 +1476,6 @@ watch([query, onlyMainline], () => {
   line-height: 1.35;
 }
 
-.key-code {
-  flex: 0 0 auto;
-  max-width: 46%;
-  padding: 3px 6px;
-  border-radius: 5px;
-  background: rgba(47, 93, 70, 0.06);
-  color: var(--accent);
-  font-family: var(--mono);
-  font-size: 9.5px;
-  overflow-wrap: anywhere;
-}
-
 .detail-badges {
   display: flex;
   gap: 5px;
@@ -1646,6 +1633,42 @@ watch([query, onlyMainline], () => {
 
 .detail-section h3 .quiet {
   font-weight: 400;
+}
+
+.beat-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 7px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.beat-summary::-webkit-details-marker {
+  display: none;
+}
+
+.beat-summary .quiet {
+  font-weight: 400;
+}
+
+.beat-summary::after {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 400;
+  content: '收起';
+}
+
+.beat-section:not([open]) > .beat-summary::after {
+  content: '展开';
+}
+
+.beat-section:not([open]) > .beat-summary {
+  margin-bottom: 0;
 }
 
 .note-list {
@@ -2080,10 +2103,6 @@ watch([query, onlyMainline], () => {
   .stage-summary,
   .detail-head {
     flex-direction: column;
-  }
-
-  .key-code {
-    max-width: 100%;
   }
 }
 

@@ -184,6 +184,46 @@ function priorityFactor(factors: FactorScore[]): FactorScore {
   )[0]
 }
 
+// 英语在 C1 价值观里没有映射项，按加权缺口排序时经常被挤到第 4 位。
+// 触发条件和 Skill 的英语规则保持一致；一旦触发，就把第三项换成英语，
+// 保证“最该动的三件事”里一定有英语，但不改动任何维度分数。
+function englishGapTriggered(survey: Survey, answers: Answers, scores: ScoreResult): boolean {
+  const b9 = scores.detail['b9']
+  if (typeof b9 === 'number' && b9 < 4) return true
+  const d3 = scores.detail['d3']
+  if (typeof d3 === 'number' && d3 < 5) return true
+
+  const c2 = answers.c2
+  if (c2 && typeof c2 === 'object' && !Array.isArray(c2)) {
+    const rating = Number((c2 as Record<string, unknown>)['c2_6'])
+    if (Number.isFinite(rating) && rating > 0 && rating < 4) return true
+  }
+
+  const goal = answers.a10
+  if (goal && typeof goal === 'object' && !Array.isArray(goal)) {
+    const choice = (goal as Record<string, unknown>).choice
+    const question = survey.questions.find((item) => item.id === 'a10')
+    const option = question?.options?.find((item) => item.id === choice)
+    if (option?.label.includes('四六级') || option?.label.includes('雅思')) return true
+  }
+  return false
+}
+
+function priorityGaps(
+  survey: Survey,
+  answers: Answers,
+  scores: ScoreResult,
+  needs: Map<string, number>
+): DimScore[] {
+  const ranked = weightedPriority(ACTIONABLE(scores.dimensions), factorScores(answers, scores), needs)
+  const top = ranked.slice(0, 3)
+  if (!englishGapTriggered(survey, answers, scores)) return top
+  if (top.some((dim) => dim.key === 'b9')) return top
+  const english = scores.dimensions.find((dim) => dim.key === 'b9')
+  if (!english) return top
+  return [...top.slice(0, 2), english]
+}
+
 function needPriority(
   survey: Survey,
   answers: Answers
@@ -360,13 +400,11 @@ function buildModule(key: ModuleKey, ctx: ModuleContext): ReportBlock | null {
       name: dim.name,
       score: dim.score
     }))
-    const gaps = weightedPriority(
-      ACTIONABLE(scores.dimensions),
-      factorScores(answers, scores),
-      needs
-    )
-      .slice(0, 3)
-      .map((dim) => ({ key: dim.key, name: dim.name, score: dim.score }))
+    const gaps = priorityGaps(survey, answers, scores, needs).map((dim) => ({
+      key: dim.key,
+      name: dim.name,
+      score: dim.score
+    }))
 
     let cityNote = ''
     if (city) {
@@ -452,11 +490,7 @@ function buildModule(key: ModuleKey, ctx: ModuleContext): ReportBlock | null {
   }
 
   if (key === 'gaps') {
-    const bottom = weightedPriority(
-      ACTIONABLE(scores.dimensions),
-      factorScores(answers, scores),
-      needs
-    ).slice(0, 3)
+    const bottom = priorityGaps(survey, answers, scores, needs)
     return {
       type: 'gaps',
       title: copy.gaps.title,

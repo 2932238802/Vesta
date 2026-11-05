@@ -235,7 +235,7 @@ const OUTPUT_CONTRACT = `## 输出结构（必须遵守）
 - target.cityNote、salaryNote、closing 三个字段都必须填写。
 - strengths 必须覆盖【本次优势维度】里的每一个 key，每个 key 一条，key 原样使用，不能改写。
 - gaps 必须覆盖【本次优先补足维度】里的每一个 key，每个 key 一条，key 原样使用，不能改写。
-- cognition.paragraphs 必须写 2—5 段，结合本次选择和最低分维度分析，不能只复述题目。
+- cognition.paragraphs 必须写 2—5 段，结合本次选择和优先补足维度分析，不能只复述题目。
 - actions.items 必须正好 3 条，按先后顺序排列，每条都要能在 30 天内开始。
 - actions.closing 必须填写一句具体的收尾，不能空着。
 - consistency 只有确实存在“自评与行为明显矛盾”时才写成 { "intro": "...", "paragraphs": ["..."], "closing": "..." }，否则写 null。

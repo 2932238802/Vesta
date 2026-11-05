@@ -97,7 +97,7 @@ export const defaultTemplate: ReportTemplate = {
     },
     actions: {
       title: '接下来 30 天',
-      subtitle: '三件事，都能验证，都不需要花钱',
+      subtitle: '三件事，都能验证，从这周开始',
       item: '{{text}}',
       closing: '做完一件再开始下一件，别同时开三个',
       fallback: [
