@@ -7,7 +7,7 @@ export const defaultTemplate: ReportTemplate = {
     paper: '#fbfaf6',
     showTotal: false,
     brand: '',
-    signature: '学姐'
+    signature: ''
   },
   modules: [
     { key: 'hero', enabled: true },

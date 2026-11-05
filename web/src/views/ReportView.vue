@@ -123,7 +123,6 @@
       </section>
 
       <footer class="report-foot">
-        <p class="signature serif">{{ payload.signature }}</p>
         <p class="quiet">{{ payload.footer.note }}</p>
       </footer>
     </main>
@@ -420,10 +419,10 @@ function flash(message: string) {
 
 .sheet {
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 22px;
+  border: 1px solid color-mix(in srgb, var(--accent) 7%, var(--line));
+  border-radius: 24px;
   padding: 44px 44px 30px;
-  box-shadow: 0 1px 0 rgba(30, 28, 22, 0.02);
+  box-shadow: 0 24px 60px -54px rgba(27, 26, 23, 0.45);
 }
 
 .state {
@@ -460,6 +459,7 @@ function flash(message: string) {
   width: 100%;
   max-width: 260px;
   height: 2px;
+  border-radius: 999px;
   background: var(--line);
   overflow: hidden;
 }
@@ -495,10 +495,16 @@ function flash(message: string) {
 }
 
 .claim-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 22px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 5%, var(--surface)) 0%,
+      var(--surface) 58%
+    );
+  border: 1px solid color-mix(in srgb, var(--accent) 12%, var(--line));
+  border-radius: 24px;
   padding: 36px 40px;
+  box-shadow: 0 24px 60px -54px rgba(27, 26, 23, 0.35);
 }
 
 .claim-card h2 {
@@ -530,6 +536,10 @@ function flash(message: string) {
   gap: 16px;
 }
 
+.claim-form .input {
+  border-radius: 12px;
+}
+
 .claim-form .field span {
   font-size: 12px;
   color: var(--ink-3);
@@ -546,6 +556,7 @@ function flash(message: string) {
 
 .agree input {
   margin-top: 3px;
+  accent-color: var(--accent);
 }
 
 .claim-error {
@@ -579,19 +590,13 @@ function flash(message: string) {
 }
 
 .report-foot {
-  padding: 52px 8px 0;
+  padding: 44px 8px 0;
   display: grid;
   gap: 5px;
   font-size: 11.5px;
   color: var(--ink-3);
   text-align: center;
   line-height: 1.8;
-}
-
-.signature {
-  font-size: 22px;
-  color: var(--ink);
-  margin-bottom: 12px;
 }
 
 .shot-mask {
@@ -708,6 +713,7 @@ function flash(message: string) {
     border: 0;
     border-radius: 0;
     padding: 0;
+    box-shadow: none;
   }
 }
 </style>

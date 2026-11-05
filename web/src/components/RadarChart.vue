@@ -177,6 +177,13 @@ const tooltip = computed(() => {
   width: 100%;
   max-width: 420px;
   margin: 0 auto;
+  padding: 8px 6px 0;
+  border-radius: 24px;
+  background: radial-gradient(
+    ellipse at 50% 42%,
+    color-mix(in srgb, var(--accent) 4%, transparent),
+    transparent 68%
+  );
 }
 
 svg {
@@ -204,9 +211,10 @@ svg {
   gap: 6px;
   background: var(--ink);
   color: #fff;
-  border-radius: 8px;
-  padding: 5px 9px;
+  border-radius: 10px;
+  padding: 6px 10px;
   font-size: 11px;
+  box-shadow: 0 8px 20px -12px rgba(20, 19, 16, 0.5);
   pointer-events: none;
   white-space: nowrap;
 }
@@ -217,17 +225,26 @@ svg {
 }
 
 .data {
-  margin-top: 6px;
-  border-top: 1px solid var(--line);
+  margin-top: 10px;
+  text-align: center;
 }
 
 .data summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   list-style: none;
   cursor: pointer;
-  padding: 12px 0;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--ink-2);
   letter-spacing: 0.04em;
+}
+
+.data summary:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .data summary::-webkit-details-marker {
@@ -236,7 +253,8 @@ svg {
 
 .data summary::after {
   content: "＋";
-  margin-left: 6px;
+  margin-left: 2px;
+  opacity: 0.6;
 }
 
 .data[open] summary::after {
@@ -247,7 +265,8 @@ svg {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 28px;
-  padding-bottom: 8px;
+  padding: 8px 6px 8px;
+  text-align: left;
 }
 
 .data-row {

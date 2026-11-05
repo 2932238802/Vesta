@@ -532,10 +532,6 @@
                 <input v-model="template.theme.paper" class="input mono" type="text" maxlength="7" />
               </div>
             </label>
-            <label class="field">
-              <span>落款</span>
-              <input v-model="template.theme.signature" class="input" type="text" maxlength="40" />
-            </label>
             <label class="check full">
               <input v-model="template.theme.showTotal" type="checkbox" />
               显示总分

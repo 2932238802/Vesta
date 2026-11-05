@@ -114,21 +114,27 @@
       <template v-else-if="block.type === 'gaps'">
         <SectionHead :index="index" :title="block.title" :subtitle="block.subtitle" />
         <div class="gap-list">
-          <article v-for="item in block.items" :key="item.key" class="gap">
+          <article v-for="(item, i) in block.items" :key="item.key" class="gap">
             <header class="gap-head">
-              <h3>{{ item.name }}</h3>
-              <span class="gap-score">{{ item.score }}</span>
+              <span class="gap-index">{{ String(i + 1).padStart(2, '0') }}</span>
+              <div class="gap-heading">
+                <h3>{{ item.name }}</h3>
+                <span class="gap-meter" aria-hidden="true">
+                  <i :style="{ width: `${item.score}%` }"></i>
+                </span>
+              </div>
+              <span class="gap-score">{{ item.score }}<em>分</em></span>
             </header>
             <dl>
-              <div>
+              <div class="gap-step what">
                 <dt>补什么</dt>
                 <dd>{{ item.what }}</dd>
               </div>
-              <div>
+              <div class="gap-step how">
                 <dt>怎么补</dt>
                 <dd>{{ item.how }}</dd>
               </div>
-              <div>
+              <div class="gap-step when">
                 <dt>什么时候开始</dt>
                 <dd>{{ item.when }}</dd>
               </div>
@@ -322,47 +328,52 @@ const dateText = computed(() => {
 }
 
 .hero-claim {
-  display: inline-block;
-  margin-top: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 22px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
   font-size: 12.5px;
-  color: var(--ink-3);
-  line-height: 1.7;
-  text-decoration: underline;
-  text-decoration-color: var(--line-strong);
-  text-underline-offset: 4px;
+  color: var(--accent);
+  line-height: 1.6;
+  text-decoration: none;
+}
+
+.hero-claim::after {
+  content: '→';
+  font-size: 12px;
+  opacity: 0.65;
 }
 
 .hero-claim:hover {
-  color: var(--accent);
-  text-decoration-color: currentColor;
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
 }
 
 .target-facts {
   margin: 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  gap: 10px;
 }
 
 .target-facts > div {
-  padding: 16px 18px 16px 0;
-}
-
-.target-facts > div + div {
-  padding-left: 18px;
-  border-left: 1px solid var(--line);
+  padding: 14px 15px;
+  border: 1px solid color-mix(in srgb, var(--accent) 8%, var(--line));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 3%, var(--surface));
 }
 
 .target-facts dt {
   font-size: 10.5px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   color: var(--ink-3);
 }
 
 .target-facts dd {
   margin: 6px 0 0;
-  font-size: 15px;
+  font-size: 14.5px;
   line-height: 1.5;
   color: var(--ink);
 }
@@ -394,39 +405,57 @@ const dateText = computed(() => {
 }
 
 .target-lists {
-  margin-top: 32px;
+  margin-top: 30px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 28px;
+  gap: 16px;
 }
 
 .target-list {
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 22px 20px;
-  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--accent) 9%, var(--line));
+  border-radius: 18px;
+  padding: 20px 20px 10px;
+  background: color-mix(in srgb, var(--accent) 2.5%, var(--surface));
 }
 
 .target-list h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 18px;
+  font-weight: 550;
+  margin-bottom: 14px;
+}
+
+.target-list h3::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.55;
+}
+
+.target-list + .target-list h3::before {
+  background: #b1843c;
+  opacity: 0.65;
 }
 
 .target-item {
-  padding: 10px 0;
+  padding: 9px 0;
 }
 
 .target-item + .target-item {
-  border-top: 1px solid var(--line);
+  border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
 }
 
 .target-salary {
-  margin-top: 26px;
-  padding: 22px 24px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
-  border-left: 2px solid var(--accent);
+  margin-top: 24px;
+  padding: 20px 22px;
+  border: 1px solid color-mix(in srgb, var(--accent) 9%, var(--line));
+  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 4px 16px 16px 4px;
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
 }
 
 .target-salary p:last-child {
@@ -438,25 +467,40 @@ const dateText = computed(() => {
 
 .strength-list {
   display: grid;
-  gap: 28px;
+  gap: 12px;
+}
+
+.strength {
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 8%, var(--line));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--accent) 2.5%, var(--surface));
 }
 
 .strength-top {
   display: grid;
-  grid-template-columns: 34px 1fr;
-  gap: 10px;
+  grid-template-columns: 26px 1fr;
+  gap: 12px;
+  align-items: start;
 }
 
 .rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
   font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  padding-top: 2px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
 }
 
 .strength-body {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .strength-text {
@@ -469,81 +513,168 @@ const dateText = computed(() => {
 .gap-list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 
 .gap {
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 22px 20px;
-  background: var(--surface);
   display: flex;
   flex-direction: column;
   gap: 18px;
+  padding: 22px 20px 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--line));
+  border-radius: 20px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 5%, var(--surface)) 0%,
+      var(--surface) 46%
+    );
+  box-shadow: 0 14px 34px -30px rgba(27, 26, 23, 0.45);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.gap:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 38px -28px rgba(27, 26, 23, 0.4);
 }
 
 .gap-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
   gap: 10px;
 }
 
-.gap-head h3 {
+.gap-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.gap-heading {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.gap-heading h3 {
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 550;
+  line-height: 1.3;
+}
+
+.gap-meter {
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--line));
+  overflow: hidden;
+}
+
+.gap-meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 62%, #ffffff);
 }
 
 .gap-score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
   font-family: var(--mono);
   font-size: 13px;
-  color: var(--accent);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.gap-score em {
+  font-family: var(--sans);
+  font-style: normal;
+  font-size: 9.5px;
+  color: color-mix(in srgb, var(--accent) 65%, var(--ink-3));
 }
 
 .gap dl {
   margin: 0;
   display: grid;
-  gap: 14px;
+  gap: 15px;
 }
 
-.gap dl > div {
+.gap-step {
   display: grid;
-  gap: 4px;
+  gap: 5px;
 }
 
-.gap dt {
+.gap-step dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 10.5px;
-  letter-spacing: 0.1em;
+  font-weight: 500;
+  letter-spacing: 0.08em;
   color: var(--ink-3);
 }
 
-.gap dd {
+.gap-step dt::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.65;
+}
+
+.gap-step.how dt::before {
+  background: #4a7ba6;
+}
+
+.gap-step.when dt::before {
+  background: #b1843c;
+}
+
+.gap-step dd {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 13.5px;
+  line-height: 1.75;
   color: var(--ink-2);
 }
 
 .lead {
-  font-size: 15px;
-  line-height: 1.8;
+  font-size: 15.5px;
+  line-height: 1.85;
   color: var(--ink);
   max-width: 34em;
 }
 
 .quotes {
-  margin-top: 22px;
+  margin-top: 20px;
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .quote {
-  padding: 18px 20px;
-  border-left: 2px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 4%, transparent);
-  border-radius: 0 10px 10px 0;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 8%, var(--line));
+  border-left: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 3%, var(--surface));
+  border-radius: 4px 14px 14px 4px;
   font-size: 14px;
-  line-height: 1.85;
+  line-height: 1.9;
   color: var(--ink-2);
 }
 
@@ -556,18 +687,19 @@ const dateText = computed(() => {
 
 .prose {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   max-width: 36em;
 }
 
 .prose p {
   font-size: 14.5px;
-  line-height: 1.9;
+  line-height: 1.95;
   color: var(--ink-2);
 }
 
 .prose p.first {
-  font-size: 16px;
+  font-size: 16.5px;
+  line-height: 1.85;
   color: var(--ink);
 }
 
@@ -576,28 +708,32 @@ const dateText = computed(() => {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0;
+  gap: 10px;
 }
 
 .action-list li {
   display: grid;
-  grid-template-columns: 44px 1fr;
-  gap: 10px;
-  padding: 20px 0;
-  border-top: 1px solid var(--line);
-  align-items: baseline;
-}
-
-.action-list li:first-child {
-  border-top: 0;
-  padding-top: 0;
+  grid-template-columns: 26px 1fr;
+  gap: 12px;
+  padding: 15px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 7%, var(--line));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 2.5%, var(--surface));
+  align-items: start;
 }
 
 .action-num {
-  font-family: var(--mono);
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--accent);
-  letter-spacing: 0.06em;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
 }
 
 .action-list p {
@@ -607,10 +743,10 @@ const dateText = computed(() => {
 }
 
 .note {
-  padding: 24px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface);
+  padding: 22px 24px;
+  border: 1px solid color-mix(in srgb, var(--accent) 9%, var(--line));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
 }
 
 .note-text {
@@ -625,27 +761,33 @@ const dateText = computed(() => {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0;
+  gap: 2px;
 }
 
 .source {
   display: grid;
-  grid-template-columns: 34px 1fr;
-  gap: 10px;
-  padding: 16px 0;
-  border-top: 1px solid var(--line);
+  grid-template-columns: 24px 1fr;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
 }
 
-.source:first-child {
-  border-top: 0;
-  padding-top: 0;
+.source:hover {
+  background: color-mix(in srgb, var(--accent) 3%, transparent);
 }
 
 .source-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--accent);
   font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  padding-top: 3px;
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
 }
 
 .source-body {
@@ -689,18 +831,25 @@ const dateText = computed(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .target-facts > div:nth-child(3) {
-    border-left: 0;
-    padding-left: 0;
-  }
-
-  .target-facts > div:nth-child(n + 3) {
-    border-top: 1px solid var(--line);
-  }
-
   .target-lists {
     grid-template-columns: 1fr;
     gap: 14px;
+  }
+
+  .strength {
+    padding: 16px 17px;
+  }
+
+  .quote {
+    padding: 15px 16px;
+  }
+
+  .action-list li {
+    padding: 14px;
+  }
+
+  .source {
+    padding: 11px 10px;
   }
 
   .block {
@@ -717,8 +866,27 @@ const dateText = computed(() => {
     break-inside: avoid;
   }
 
+  .gap,
+  .strength,
+  .target-list,
+  .action-list li {
+    box-shadow: none;
+    transform: none;
+    break-inside: avoid;
+  }
+
   .hero-claim {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gap {
+    transition: none;
+  }
+
+  .gap:hover {
+    transform: none;
   }
 }
 </style>

@@ -29,7 +29,7 @@ const width = computed(() => Math.max(0, Math.min(100, props.score)))
 
 .row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
@@ -40,22 +40,26 @@ const width = computed(() => Math.max(0, Math.min(100, props.score)))
 }
 
 .value {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
   font-family: var(--mono);
-  font-size: 13px;
-  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--accent);
 }
 
 .track {
-  height: 8px;
-  border-radius: 4px;
-  background: #ece8de;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
   overflow: hidden;
 }
 
 .fill {
   height: 100%;
-  border-radius: 4px;
-  background: var(--accent);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 78%, #ffffff);
   transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
 </style>
