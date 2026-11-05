@@ -54,6 +54,21 @@
             >收藏栏</RouterLink>
           </div>
         </section>
+
+        <section class="nav-group">
+          <button
+            class="nav-toggle"
+            type="button"
+            :aria-expanded="groups.resume"
+            @click="toggleGroup('resume')"
+          >
+            <span>简历</span>
+            <span class="chev" :class="{ closed: !groups.resume }">⌄</span>
+          </button>
+          <div class="nav-links" :class="{ closed: !groups.resume }">
+            <RouterLink to="/admin/resumes" active-class="on">简历收集</RouterLink>
+          </div>
+        </section>
       </nav>
 
       <div class="account">
@@ -85,13 +100,13 @@ import { api, clearToken } from '@/api'
 const SIDEBAR_KEY = 'vesta.admin.sidebar'
 const GROUPS_KEY = 'vesta.admin.navGroups'
 
-type NavGroup = 'survey' | 'consult'
+type NavGroup = 'survey' | 'consult' | 'resume'
 
 const route = useRoute()
 const router = useRouter()
 const username = ref('')
 const sidebarOpen = ref(true)
-const groups = ref<Record<NavGroup, boolean>>({ survey: true, consult: true })
+const groups = ref<Record<NavGroup, boolean>>({ survey: true, consult: true, resume: true })
 
 function toggleGroup(key: NavGroup) {
   groups.value = { ...groups.value, [key]: !groups.value[key] }
@@ -105,7 +120,8 @@ function restoreLayout() {
     >
     groups.value = {
       survey: saved.survey !== false,
-      consult: saved.consult !== false
+      consult: saved.consult !== false,
+      resume: saved.resume !== false
     }
   } catch {
     // 本地存储不可用时保持默认展开

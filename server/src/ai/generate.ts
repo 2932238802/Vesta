@@ -176,7 +176,13 @@ function buildSearchQueries(input: {
   }
 
   const goal = input.goal
-  if (goal.includes('英语') || goal.includes('四六级') || goal.includes('雅思')) {
+  if (
+    goal.includes('英语') ||
+    goal.includes('四六级') ||
+    goal.includes('四级') ||
+    goal.includes('六级') ||
+    goal.includes('雅思')
+  ) {
     add('大学英语四六级 雅思 考试时间 报名条件 最新')
   }
   else if (goal.includes('转专业')) add('大学 转专业 申请条件 时间')

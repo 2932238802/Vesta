@@ -439,9 +439,13 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
       a10.otherPlaceholder = canonicalA10.otherPlaceholder
       changed = true
     }
-    const englishGoal = a10.options?.find((option) => option.label === '英语考试或使用')
+    // 兼容旧版本里写死的选项名，统一到新的展示文案。
+    const englishGoal = a10.options?.find(
+      (option) =>
+        option.label === '英语考试或使用' || option.label === '四六级雅思准备'
+    )
     if (englishGoal) {
-      englishGoal.label = '四六级雅思准备'
+      englishGoal.label = '四级、六级或雅思准备'
       changed = true
     }
     if (a10.notePlaceholder === '例：明年 3 月前拿到六级 500 分；没想清楚也可以写「不知道」') {

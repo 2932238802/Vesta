@@ -204,7 +204,8 @@ function englishGapTriggered(survey: Survey, answers: Answers, scores: ScoreResu
     const choice = (goal as Record<string, unknown>).choice
     const question = survey.questions.find((item) => item.id === 'a10')
     const option = question?.options?.find((item) => item.id === choice)
-    if (option?.label.includes('四六级') || option?.label.includes('雅思')) return true
+    const label = option?.label ?? ''
+    if (['四六级', '四级', '六级', '雅思'].some((key) => label.includes(key))) return true
   }
   return false
 }

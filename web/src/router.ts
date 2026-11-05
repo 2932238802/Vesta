@@ -20,6 +20,7 @@ import ConsultWorkspace from './views/admin/ConsultWorkspace.vue'
 import ConsultPurposes from './views/admin/ConsultPurposes.vue'
 import ConsultCollections from './views/admin/ConsultCollections.vue'
 import ConsultCollectionDetail from './views/admin/ConsultCollectionDetail.vue'
+import ResumeCollection from './views/admin/ResumeCollection.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -61,7 +62,8 @@ export const router = createRouter({
           path: 'consult/collections/:id',
           name: 'admin-consult-collection',
           component: ConsultCollectionDetail
-        }
+        },
+        { path: 'resumes', name: 'admin-resumes', component: ResumeCollection }
       ]
     },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFound }
@@ -87,6 +89,7 @@ const PAGE_TITLES: Record<string, string> = {
   'admin-consult-purposes': '咨询树 · 管理后台',
   'admin-consult-collections': '收藏栏 · 管理后台',
   'admin-consult-collection': '收藏详情 · 管理后台',
+  'admin-resumes': '简历收集 · 管理后台',
   'not-found': '页面不存在'
 }
 

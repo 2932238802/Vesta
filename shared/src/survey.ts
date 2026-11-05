@@ -181,7 +181,7 @@ export const defaultSurvey: Survey = {
       otherPlaceholder: '写清你要做什么',
       options: choice('a10', [
         ['课程成绩', null],
-        ['四六级雅思准备', null],
+        ['四级、六级或雅思准备', null],
         ['转专业或跨专业准备', null],
         ['作品项目竞赛', null],
         ['实习求职', null],
