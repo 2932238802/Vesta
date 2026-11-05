@@ -99,12 +99,20 @@
               <h2>生成记录</h2>
               <p class="quiet tiny">生成后记一下结果，系统以后会选得更准。</p>
             </div>
-            <button class="btn quiet tiny-btn" type="button" :disabled="loadingRuns" @click="loadRuns">
-              刷新
-            </button>
+            <div class="history-head-actions">
+              <button class="btn quiet tiny-btn" type="button" :disabled="loadingRuns" @click="loadRuns">
+                刷新
+              </button>
+              <button class="btn quiet tiny-btn" type="button" @click="toggleHistory">
+                {{ historyCollapsed ? '展开' : '收起' }}
+              </button>
+            </div>
           </header>
 
-          <div v-if="runs.length === 0" class="empty small-empty">还没有生成记录</div>
+          <p v-if="historyCollapsed" class="quiet tiny history-collapsed-note">
+            已收起 {{ runs.length }} 条生成记录，需要时点“展开”。
+          </p>
+          <div v-else-if="runs.length === 0" class="empty small-empty">还没有生成记录</div>
           <div v-else class="history-layout">
             <div class="run-list">
               <button
@@ -113,7 +121,7 @@
                 class="run-choice"
                 :class="{ on: selectedRunId === run.id }"
                 type="button"
-                @click="selectRun(run)"
+                @click="toggleRun(run)"
               >
                 <span class="run-choice-main">
                   <span class="run-choice-title">{{ runTitle(run) }}</span>
@@ -137,14 +145,40 @@
                   <p class="eyebrow">{{ formatDate(selectedRun.createdAt) }}</p>
                   <h3>{{ selectedRun.templateName }}</h3>
                 </div>
-                <button
-                  v-if="selectedRun.status === 'ready' && selectedRun.output"
-                  class="btn quiet tiny-btn"
-                  type="button"
-                  @click="copyOutput"
-                >
-                  复制全文
-                </button>
+                <div class="run-detail-actions">
+                  <template v-if="selectedRun.status === 'ready' && selectedRun.output">
+                    <button
+                      class="btn quiet tiny-btn"
+                      type="button"
+                      :disabled="exporting !== ''"
+                      @click="exportRun('docx')"
+                    >
+                      {{ exporting === 'docx' ? '导出中' : '导出 Word' }}
+                    </button>
+                    <button
+                      class="btn quiet tiny-btn"
+                      type="button"
+                      :disabled="exporting !== ''"
+                      @click="exportRun('html')"
+                    >
+                      {{ exporting === 'html' ? '导出中' : '导出 HTML' }}
+                    </button>
+                    <button
+                      class="btn quiet tiny-btn"
+                      type="button"
+                      :disabled="exporting !== ''"
+                      @click="exportRun('txt')"
+                    >
+                      {{ exporting === 'txt' ? '导出中' : '导出 TXT' }}
+                    </button>
+                    <button class="btn quiet tiny-btn" type="button" @click="copyOutput">
+                      复制全文
+                    </button>
+                  </template>
+                  <button class="btn quiet tiny-btn" type="button" @click="collapseRun">
+                    收起
+                  </button>
+                </div>
               </header>
 
               <div v-if="selectedRun.status === 'failed'" class="failure-panel">
@@ -563,6 +597,8 @@ const pendingOptions = ref<Record<number, string>>({})
 const moduleBusy = ref(0)
 const savingSeq = ref(0)
 const editorError = ref('')
+const exporting = ref<'' | 'docx' | 'html' | 'txt'>('')
+const historyCollapsed = ref(localStorage.getItem('vesta.consult.history.collapsed') === '1')
 
 let importTimer: ReturnType<typeof setTimeout> | undefined
 let pollTimer: ReturnType<typeof setTimeout> | undefined
@@ -724,6 +760,49 @@ async function selectRun(run: ConsultRun) {
     if (selectedRunId.value === run.id) {
       editorError.value = error instanceof Error ? error.message : '读取模块失败'
     }
+  }
+}
+
+// 再点一次选中的记录就收起详情，避免历史多了以后一直挂着一大块内容。
+function toggleRun(run: ConsultRun) {
+  if (selectedRunId.value === run.id) {
+    collapseRun()
+    return
+  }
+  void selectRun(run)
+}
+
+function collapseRun() {
+  selectedRunId.value = ''
+  openSectionSeq.value = 0
+}
+
+function toggleHistory() {
+  historyCollapsed.value = !historyCollapsed.value
+  localStorage.setItem('vesta.consult.history.collapsed', historyCollapsed.value ? '1' : '0')
+}
+
+async function exportRun(format: 'docx' | 'html' | 'txt') {
+  const run = selectedRun.value
+  if (!run || exporting.value) return
+  exporting.value = format
+  editorError.value = ''
+  try {
+    const blob = await api.exportConsultRun(run.id, format)
+    const name = (run.context.name || '').trim().replace(/[\\/:*?"<>|\s]+/g, '').slice(0, 24)
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    const filename = `咨询稿${name ? `-${name}` : ''}-${date}.${format}`
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    flash(`${format === 'docx' ? 'Word' : format.toUpperCase()} 已导出`)
+  } catch (error) {
+    editorError.value = error instanceof Error ? error.message : '导出失败'
+  } finally {
+    exporting.value = ''
   }
 }
 
@@ -1157,6 +1236,19 @@ onUnmounted(stopPolling)
 .run-detail-head {
   align-items: center;
   margin-bottom: 14px;
+}
+
+.run-detail-actions,
+.history-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.history-collapsed-note {
+  margin: 0;
+  padding: 10px 0 2px;
 }
 
 .run-output {

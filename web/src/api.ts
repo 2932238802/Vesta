@@ -500,6 +500,23 @@ export const api = {
   consultRun(id: string) {
     return request<{ run: ConsultRun }>(`/api/admin/consult/runs/${id}`, { auth: true })
   },
+  async exportConsultRun(id: string, format: 'docx' | 'html' | 'txt') {
+    const response = await fetch(
+      `/api/admin/consult/runs/${encodeURIComponent(id)}/export/${format}`,
+      { headers: { Authorization: `Bearer ${getToken()}` } }
+    )
+    if (!response.ok) {
+      let message = '导出失败'
+      try {
+        const data = (await response.json()) as { error?: string }
+        if (data.error) message = data.error
+      } catch {
+        // 响应不是 JSON 时保留默认提示。
+      }
+      throw new ApiError(message, response.status)
+    }
+    return response.blob()
+  },
   retryConsultRun(id: string) {
     return request<{ run: ConsultRun }>(`/api/admin/consult/runs/${id}/retry`, {
       method: 'POST',
