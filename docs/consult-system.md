@@ -72,6 +72,16 @@
 
 咨询师可以把金句、完整优秀咨询稿、公众号链接和其他参考资料收进“收藏栏”（`/admin/consult/collections`）。数据保存在 `consult_collections` 表，字段包括类型、标题、正文、链接、出处、备注、标签和置顶。
 
+收藏栏支持直接导入 Word：页面右上角的“导入 Word”可以一次选择多个 `.docx`，服务端用 `server/src/docx.ts` 解析正文并逐条写入收藏。带“咨询稿 / 咨询师 / 来访者 / 学生 / 发言人 12:34”等标记的文件默认归为“优秀咨询稿”，其余归为“其他”；正文按段落保留，标题取文件名。批量导入脚本使用同一套解析逻辑：
+
+```bash
+# 先预览，不写数据库
+npx tsx scripts/import-collections-docx.ts zxg
+
+# 写入收藏栏；按标题判重，同名只更新正文，不会重复插入
+npx tsx scripts/import-collections-docx.ts zxg --write
+```
+
 列表默认显示“金句”分类，每张卡片只显示标题和一行概要；双击卡片进入 wiki 风格的详情页（`/admin/consult/collections/:id`），正文按 Markdown 渲染，右侧是类型、出处、标签和收藏时间。
 
 收藏内容保留原文，不改写。除人工阅读外，`GET /api/admin/consult/collections/bundle` 会按类型输出一份纯文本合集，供之后的咨询稿生成器读取；当前生成流程还没有接入这批内容。

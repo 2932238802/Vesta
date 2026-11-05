@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, raw } from 'express'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -57,6 +57,7 @@ import {
   type PurposeChapterResult
 } from '../ai/purpose-consult'
 import { clampString, parseJson } from '../util'
+import { parseDocx } from '../docx'
 
 const FOREST_KEY = 'consult_forest'
 const FOREST_VERSION_KEY = 'consult_forest_version'
@@ -1131,6 +1132,32 @@ function normalizeCollectionInput(
   return { kind, title, content: content.trim(), url, source, summary, tags, pinned }
 }
 
+function createCollection(
+  input: Omit<ConsultCollectionItem, 'id' | 'createdAt' | 'updatedAt'>
+): ConsultCollectionItem {
+  const timestamp = now()
+  const id = newId('col')
+  db.prepare(
+    `INSERT INTO consult_collections
+      (id, kind, title, content, url, source, summary, tags, pinned, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    input.kind,
+    input.title,
+    input.content,
+    input.url,
+    input.source,
+    input.summary,
+    JSON.stringify(input.tags),
+    input.pinned ? 1 : 0,
+    timestamp,
+    timestamp
+  )
+  const row = db.prepare('SELECT * FROM consult_collections WHERE id = ?').get(id) as unknown as CollectionRow
+  return rowToCollection(row)
+}
+
 function collectionPlainText(items: ConsultCollectionItem[]): string {
   const sections: string[] = []
   const labels: Record<ConsultCollectionKind, string> = {
@@ -1250,31 +1277,56 @@ consultRouter.get('/collections/:id', (req, res) => {
 consultRouter.post('/collections', (req, res) => {
   try {
     const input = normalizeCollectionInput(req.body ?? {})
-    const timestamp = now()
-    const id = newId('col')
-    db.prepare(
-      `INSERT INTO consult_collections
-        (id, kind, title, content, url, source, summary, tags, pinned, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      id,
-      input.kind,
-      input.title,
-      input.content,
-      input.url,
-      input.source,
-      input.summary,
-      JSON.stringify(input.tags),
-      input.pinned ? 1 : 0,
-      timestamp,
-      timestamp
-    )
-    const row = db.prepare('SELECT * FROM consult_collections WHERE id = ?').get(id) as unknown as CollectionRow
-    res.status(201).json({ item: rowToCollection(row) })
+    res.status(201).json({ item: createCollection(input) })
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : '收藏格式不对' })
   }
 })
+
+// 直接接收 .docx 原始字节，解析正文后作为收藏。咨询稿默认归到 script。
+consultRouter.post(
+  '/collections/import-docx',
+  raw({ type: () => true, limit: '20mb' }),
+  (req, res) => {
+    try {
+      if (!Buffer.isBuffer(req.body) || !req.body.length) {
+        throw new Error('请选择要导入的 .docx 文件')
+      }
+      const header = typeof req.headers['x-file-name'] === 'string' ? req.headers['x-file-name'] : ''
+      let fileName = header
+      try {
+        fileName = decodeURIComponent(header)
+      } catch {
+        // 文件名不是编码过的就按原样使用。
+      }
+      const parsed = parseDocx(req.body)
+      const content = parsed.text.trim()
+      if (!content) throw new Error('这个 Word 文件没有可读取的正文')
+
+      const baseTitle = fileName
+        .replace(/\.docx$/i, '')
+        .replace(/[+_]+/g, ' ')
+        .replace(/\s*原文\s*$/, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+      const title = (baseTitle || content.slice(0, 48)).slice(0, MAX_COLLECTION_TITLE)
+      const isScript = /咨询稿|咨询师|来访者|学生|发言人\s*\d+|老师\s*[：:]/.test(
+        `${title}\n${content.slice(0, 2_000)}`
+      )
+      const input = normalizeCollectionInput({
+        kind: isScript ? 'script' : 'other',
+        title,
+        content: content.slice(0, MAX_COLLECTION_CONTENT),
+        source: 'Word 导入',
+        summary: `共 ${parsed.paragraphs.length} 段，约 ${content.length} 字`,
+        tags: isScript ? ['咨询稿', 'Word 导入'] : ['Word 导入']
+      })
+      res.status(201).json({ item: createCollection(input) })
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Word 解析失败' })
+    }
+  }
+)
 
 consultRouter.put('/collections/:id', (req, res) => {
   const row = db.prepare('SELECT * FROM consult_collections WHERE id = ?').get(req.params.id) as unknown as

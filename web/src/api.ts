@@ -344,6 +344,41 @@ export const api = {
       auth: true
     })
   },
+  async importConsultCollectionDocx(file: File) {
+    const response = await fetch('/api/admin/consult/collections/import-docx', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        'Content-Type':
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'X-File-Name': encodeURIComponent(file.name)
+      },
+      body: file
+    })
+    let data: unknown = null
+    const text = await response.text()
+    if (text) {
+      try {
+        data = JSON.parse(text)
+      } catch {
+        data = { error: text }
+      }
+    }
+    if (!response.ok) {
+      if (response.status === 401) {
+        clearToken()
+        if (!location.pathname.startsWith('/admin/login')) {
+          location.href = '/admin/login?expired=1'
+        }
+      }
+      const message =
+        data && typeof data === 'object' && 'error' in data
+          ? String((data as { error: unknown }).error)
+          : '导入失败'
+      throw new ApiError(message, response.status)
+    }
+    return data as { item: ConsultCollectionItem }
+  },
   updateConsultCollection(id: string, body: ConsultCollectionInput) {
     return request<{ item: ConsultCollectionItem }>(
       `/api/admin/consult/collections/${encodeURIComponent(id)}`,

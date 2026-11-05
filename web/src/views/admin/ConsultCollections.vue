@@ -7,6 +7,17 @@
       </div>
       <div class="head-actions">
         <span class="count">{{ items.length }} 条收藏</span>
+        <button class="btn ghost" type="button" :disabled="importing" @click="pickDocx">
+          {{ importing ? '导入中…' : '导入 Word' }}
+        </button>
+        <input
+          ref="fileInput"
+          class="file-input"
+          type="file"
+          accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          multiple
+          @change="onFilesPicked"
+        >
         <button class="btn" type="button" @click="startCreate(filter)">新增收藏</button>
       </div>
     </header>
@@ -35,6 +46,9 @@
         aria-label="搜索收藏"
       />
     </section>
+
+    <p v-if="importMessage" class="state-line">{{ importMessage }}</p>
+    <p v-if="importError" class="state-line error">{{ importError }}</p>
 
     <p v-if="loading" class="state-line">正在读取收藏…</p>
     <p v-else-if="loadError" class="state-line error">{{ loadError }}</p>
@@ -257,6 +271,10 @@ const form = ref<CollectionForm | null>(null)
 const formError = ref('')
 const saving = ref(false)
 const previewing = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+const importing = ref(false)
+const importMessage = ref('')
+const importError = ref('')
 let copyTimer: ReturnType<typeof setTimeout> | undefined
 
 const tabs = computed<{ value: ConsultCollectionKind; label: string }[]>(() =>
@@ -343,10 +361,55 @@ async function load() {
   try {
     const result = await api.consultCollections()
     items.value = sortItems(result.items)
+    // 默认停在“金句”；如果这一类还没有内容，就落到第一个有收藏的分类，避免像导入失败。
+    if (items.value.length && !items.value.some((item) => item.kind === filter.value)) {
+      filter.value = items.value[0].kind
+    }
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : '读取收藏失败'
   } finally {
     loading.value = false
+  }
+}
+
+function pickDocx() {
+  if (importing.value) return
+  fileInput.value?.click()
+}
+
+// 一次可以选多个 .docx：逐个上传，失败的文件单独提示，成功的立即并入列表。
+async function onFilesPicked(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = ''
+  if (!files.length || importing.value) return
+  importing.value = true
+  importMessage.value = ''
+  importError.value = ''
+  const imported: ConsultCollectionItem[] = []
+  const failed: string[] = []
+  try {
+    for (const [index, file] of files.entries()) {
+      importMessage.value = `正在解析 ${index + 1}/${files.length}：${file.name}`
+      try {
+        const result = await api.importConsultCollectionDocx(file)
+        imported.push(result.item)
+      } catch (error) {
+        failed.push(`${file.name}：${error instanceof Error ? error.message : '导入失败'}`)
+      }
+    }
+    if (imported.length) {
+      items.value = sortItems([...imported, ...items.value])
+      filter.value = imported[0].kind
+      importMessage.value = `已导入 ${imported.length} 个 Word 文件${
+        failed.length ? `，${failed.length} 个失败` : ''
+      }`
+    } else {
+      importMessage.value = ''
+    }
+    importError.value = failed.join('；')
+  } finally {
+    importing.value = false
   }
 }
 
@@ -566,6 +629,10 @@ h1 {
   color: var(--ink-3);
   font-family: var(--mono);
   font-size: 10px;
+}
+
+.file-input {
+  display: none;
 }
 
 .search {

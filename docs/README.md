@@ -126,6 +126,20 @@ node scripts/import-consult-docx.mjs "zxg/9.18+吕新蕊+260301005+热合曼+一
 - 导入只会新增或替换同名咨询树，绝不会清空其他已导入路线。
 - 导入前务必先运行一次不带 `--write` 的预览。
 
+## 收藏栏 Word 导入
+
+收藏栏（`/admin/consult/collections`）右上角可以直接选多个 `.docx` 导入；服务端解析正文后写入 `consult_collections`，咨询稿会归到“优秀咨询稿”。也可以在命令行批量导入：
+
+```bash
+# 预览解析结果
+npx tsx scripts/import-collections-docx.ts zxg
+
+# 写入收藏栏；按标题判重，同名只更新正文
+npx tsx scripts/import-collections-docx.ts zxg --write
+```
+
+脚本写入前会用 `VACUUM INTO` 备份到 `data/backups/`。`zxg/` 里是真实学员咨询稿，包含个人信息，不要提交到 Git。
+
 ## 主要页面
 
 后台按两个栏目组织：
