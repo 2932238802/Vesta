@@ -39,7 +39,7 @@ const RULES: ModuleRule[] = [
   {
     id: 'module.scan.current',
     label: '摸底：状态与家庭',
-    keys: ['scan.holiday', 'scan.parents']
+    keys: ['scan.holiday', 'scan.parents', 'scan.family-burden']
   },
   {
     id: 'module.scan.school',
@@ -52,7 +52,14 @@ const RULES: ModuleRule[] = [
     keys: ['diag.choose']
   },
   { id: 'module.diag.social', label: '担忧：社交/社恐', prefixes: ['diag.social'] },
-  { id: 'module.diag.confidence', label: '担忧：不自信', prefixes: ['diag.confidence'] },
+  {
+    id: 'module.diag.confidence',
+    label: '担忧：不自信',
+    prefixes: ['diag.confidence'],
+    keys: ['diag.school-gap']
+  },
+  { id: 'module.diag.parents', label: '担忧：父母不同意', prefixes: ['diag.parents'] },
+  { id: 'module.diag.busy', label: '担忧：太忙没时间', prefixes: ['diag.busy'] },
   { id: 'module.diag.money', label: '担忧：大学怎么赚钱', prefixes: ['diag.money'] },
   { id: 'module.diag.dorm', label: '担忧：宿舍关系', prefixes: ['diag.dorm'] },
   { id: 'module.diag.club', label: '担忧：社团要不要加', prefixes: ['diag.club'] },
@@ -85,6 +92,11 @@ const RULES: ModuleRule[] = [
     label: '重定义：就业现实',
     keys: ['window.job'],
     prefixes: ['window.job']
+  },
+  {
+    id: 'module.window.postgrad',
+    label: '重定义：升学路径',
+    keys: ['window.postgrad']
   },
   {
     id: 'module.filter.ability',
@@ -121,7 +133,7 @@ const RULES: ModuleRule[] = [
   {
     id: 'module.offer.price',
     label: '收尾：价格、分期与值不值',
-    keys: ['offer.close.price']
+    keys: ['offer.close.price', 'offer.close.self-fund', 'offer.close.risk-reversal']
   },
   {
     id: 'module.offer.parents',
