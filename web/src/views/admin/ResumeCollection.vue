@@ -140,17 +140,128 @@
           <button class="icon-btn" type="button" aria-label="关闭" @click="closeUpload">×</button>
         </header>
 
-        <label class="field">
+        <div class="field">
           <span>归到哪个专业</span>
-          <select v-model="uploadMajor" class="select">
-            <option value="" disabled>选择专业</option>
-            <optgroup v-for="group in resumeMajorGroups" :key="group.key" :label="group.name">
-              <option v-for="major in group.majors" :key="major" :value="major">
-                {{ major }}
-              </option>
-            </optgroup>
-          </select>
-        </label>
+          <div ref="majorPickerEl" class="major-picker">
+            <div class="picker-search-box">
+              <svg class="search-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="7" cy="7" r="4.4" stroke="currentColor" stroke-width="1.5" />
+                <path
+                  d="m10.4 10.4 3 3"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                />
+              </svg>
+              <input
+                ref="majorSearchInput"
+                v-model="majorQuery"
+                class="picker-search"
+                type="text"
+                placeholder="搜索专业，例如 计算机、护理"
+                autocomplete="off"
+                role="combobox"
+                aria-controls="major-options"
+                :aria-expanded="majorPickerOpen"
+                @focus="openMajorPicker"
+                @click="openMajorPicker"
+                @keydown="onMajorKeydown"
+              />
+              <button
+                v-if="majorQuery"
+                class="picker-clear"
+                type="button"
+                aria-label="清空搜索"
+                @click="majorQuery = ''"
+              >
+                ×
+              </button>
+            </div>
+
+            <div v-if="uploadMajor" class="picked-major">
+              <span class="picked-check" aria-hidden="true">
+                <svg viewBox="0 0 14 14" fill="none">
+                  <path
+                    d="m3.2 7.2 2.4 2.4 5.2-5.2"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </span>
+              <div class="picked-text">
+                <strong>{{ uploadMajor }}</strong>
+                <span>{{ groupOf(uploadMajor) }}</span>
+              </div>
+              <button class="picked-change" type="button" @click="clearMajor">更换</button>
+            </div>
+
+            <div v-if="majorPickerOpen" id="major-options" class="picker-panel" role="listbox">
+              <div v-if="!majorQuery.trim() && recentMajors.length" class="recent-block">
+                <p class="picker-label">最近使用</p>
+                <div class="recent-list">
+                  <button
+                    v-for="major in recentMajors"
+                    :key="major"
+                    class="recent-chip"
+                    type="button"
+                    @click="selectMajor(major)"
+                  >
+                    {{ major }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="results-head">
+                <span>
+                  {{ majorQuery.trim() ? `找到 ${matchedCount} 个专业` : `${totalMajors} 个专业` }}
+                </span>
+                <span class="results-tip">
+                  {{ majorQuery.trim() ? '点一下即可选中' : '输入关键词找得更快' }}
+                </span>
+              </div>
+
+              <div v-if="matchedCount" class="results-scroll">
+                <template v-for="group in pickerGroups" :key="group.key">
+                  <p class="picker-group-label">{{ group.name }}</p>
+                  <button
+                    v-for="major in group.majors"
+                    :key="major"
+                    class="major-option"
+                    :class="{ chosen: uploadMajor === major }"
+                    type="button"
+                    role="option"
+                    :aria-selected="uploadMajor === major"
+                    @click="selectMajor(major)"
+                  >
+                    <span class="option-name">{{ major }}</span>
+                    <span v-if="countFor(major)" class="option-count">{{ countFor(major) }} 张</span>
+                    <svg
+                      v-if="uploadMajor === major"
+                      class="option-check"
+                      viewBox="0 0 14 14"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="m3.2 7.2 2.4 2.4 5.2-5.2"
+                        stroke="currentColor"
+                        stroke-width="1.7"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </button>
+                </template>
+              </div>
+              <p v-else class="picker-empty">
+                没有找到「{{ majorQuery.trim() }}」，试试更短的关键词。
+              </p>
+            </div>
+          </div>
+          <p class="field-help">输入关键词最快；也可以按学科浏览。</p>
+        </div>
 
         <label class="drop-zone" :class="{ active: uploadFiles.length > 0 }">
           <input
@@ -212,9 +323,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { api, type ResumeImageSummary } from '@/api'
-import { resumeMajorGroups, resumeMajors } from '@shared/resume'
+import { isResumeMajor, resumeMajorGroups, resumeMajors } from '@shared/resume'
 
 interface UploadEntry {
   id: string
@@ -224,7 +335,14 @@ interface UploadEntry {
 
 const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const RECENT_MAJORS_KEY = 'vesta.admin.resumeRecentMajors'
+const MAX_RECENT_MAJORS = 4
 const totalMajors = resumeMajors.length
+
+const majorGroupNames = new Map<string, string>()
+for (const group of resumeMajorGroups) {
+  for (const major of group.majors) majorGroupNames.set(major, group.name)
+}
 
 const items = ref<ResumeImageSummary[]>([])
 const loading = ref(true)
@@ -243,6 +361,11 @@ const uploadFiles = ref<UploadEntry[]>([])
 const uploading = ref(false)
 const uploadError = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
+const majorQuery = ref('')
+const majorPickerOpen = ref(false)
+const majorPickerEl = ref<HTMLElement | null>(null)
+const majorSearchInput = ref<HTMLInputElement | null>(null)
+const recentMajors = ref<string[]>(loadRecentMajors())
 
 const collapsedGroups = reactive<Record<string, boolean>>({})
 for (const group of resumeMajorGroups) {
@@ -275,6 +398,24 @@ const filteredGroups = computed(() => {
     .filter((group) => group.majors.length > 0)
 })
 
+const pickerGroups = computed(() => {
+  const keyword = majorQuery.value.trim().toLowerCase()
+  if (!keyword) return resumeMajorGroups
+  return resumeMajorGroups
+    .map((group) => {
+      if (group.name.toLowerCase().includes(keyword)) return group
+      return {
+        ...group,
+        majors: group.majors.filter((major) => major.toLowerCase().includes(keyword))
+      }
+    })
+    .filter((group) => group.majors.length > 0)
+})
+
+const matchedCount = computed(() =>
+  pickerGroups.value.reduce((total, group) => total + group.majors.length, 0)
+)
+
 const activeItems = computed(() =>
   activeMajor.value
     ? items.value.filter((item) => item.major === activeMajor.value)
@@ -291,6 +432,79 @@ function countFor(major: string): number {
 
 function coveredIn(group: { majors: string[] }): number {
   return group.majors.filter((major) => countFor(major) > 0).length
+}
+
+function groupOf(major: string): string {
+  return majorGroupNames.get(major) ?? ''
+}
+
+function loadRecentMajors(): string[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(RECENT_MAJORS_KEY) ?? '[]')
+    if (!Array.isArray(saved)) return []
+    return saved
+      .filter((value): value is string => typeof value === 'string' && isResumeMajor(value))
+      .slice(0, MAX_RECENT_MAJORS)
+  } catch {
+    return []
+  }
+}
+
+function rememberMajor(major: string): void {
+  recentMajors.value = [major, ...recentMajors.value.filter((item) => item !== major)].slice(
+    0,
+    MAX_RECENT_MAJORS
+  )
+  try {
+    localStorage.setItem(RECENT_MAJORS_KEY, JSON.stringify(recentMajors.value))
+  } catch {
+    // 本地存储不可用时只影响最近使用，不影响导入
+  }
+}
+
+function openMajorPicker(): void {
+  majorPickerOpen.value = true
+}
+
+function closeMajorPicker(): void {
+  majorPickerOpen.value = false
+}
+
+function selectMajor(major: string): void {
+  uploadMajor.value = major
+  majorQuery.value = ''
+  closeMajorPicker()
+}
+
+function clearMajor(): void {
+  uploadMajor.value = ''
+  openMajorPicker()
+  void nextTick(() => majorSearchInput.value?.focus())
+}
+
+function onMajorKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && majorPickerOpen.value) {
+    event.stopPropagation()
+    closeMajorPicker()
+    return
+  }
+  if (event.key !== 'Enter') return
+  const keyword = majorQuery.value.trim()
+  if (!keyword) return
+  const exact = resumeMajors.find((major) => major === keyword)
+  const matches = pickerGroups.value.flatMap((group) => group.majors)
+  if (exact) {
+    event.preventDefault()
+    selectMajor(exact)
+  } else if (matches.length === 1) {
+    event.preventDefault()
+    selectMajor(matches[0])
+  }
+}
+
+function onDocumentPointerDown(event: PointerEvent): void {
+  if (!majorPickerOpen.value || !majorPickerEl.value) return
+  if (!majorPickerEl.value.contains(event.target as Node)) closeMajorPicker()
 }
 
 function isGroupOpen(key: string): boolean {
@@ -364,7 +578,12 @@ function openUpload(major?: string): void {
   uploadMajor.value = major || activeMajor.value || ''
   uploadError.value = ''
   uploadFiles.value = []
+  majorQuery.value = ''
+  majorPickerOpen.value = false
   uploadOpen.value = true
+  if (!uploadMajor.value) {
+    void nextTick(() => majorSearchInput.value?.focus())
+  }
 }
 
 function resetUploadFiles(): void {
@@ -376,6 +595,8 @@ function closeUpload(): void {
   if (uploading.value) return
   uploadOpen.value = false
   uploadError.value = ''
+  majorQuery.value = ''
+  majorPickerOpen.value = false
   resetUploadFiles()
 }
 
@@ -431,6 +652,7 @@ async function upload(): Promise<void> {
   uploadOpen.value = false
   resetUploadFiles()
   uploadError.value = ''
+  rememberMajor(major)
   closeMajor()
   await load()
   openMajor(major)
@@ -478,6 +700,8 @@ function onKeydown(event: KeyboardEvent): void {
   if (event.key !== 'Escape') return
   if (viewing.value) {
     viewing.value = null
+  } else if (uploadOpen.value && majorPickerOpen.value) {
+    closeMajorPicker()
   } else if (uploadOpen.value) {
     closeUpload()
   } else if (activeMajor.value) {
@@ -487,11 +711,13 @@ function onKeydown(event: KeyboardEvent): void {
 
 onMounted(() => {
   document.addEventListener('keydown', onKeydown)
+  document.addEventListener('pointerdown', onDocumentPointerDown)
   void load()
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
   if (noticeTimer !== undefined) window.clearTimeout(noticeTimer)
   clearPreviews()
   resetUploadFiles()
@@ -707,6 +933,277 @@ onUnmounted(() => {
 
 .upload-modal {
   max-width: 560px;
+}
+
+.major-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.field > span {
+  color: var(--ink-3);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.field-help {
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.picker-search-box {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.picker-search-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.search-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--ink-3);
+}
+
+.picker-search {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.picker-search::placeholder {
+  color: #aaa59a;
+}
+
+.picker-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink-3);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.picker-clear:hover {
+  color: var(--ink);
+}
+
+.picked-major {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+
+.picked-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.picked-check svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+}
+
+.picked-text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.picked-text strong {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.picked-text span {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.picked-change {
+  flex-shrink: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.picked-change:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.picker-panel {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 14px 32px -24px rgba(0, 0, 0, 0.4);
+}
+
+.recent-block {
+  padding: 12px 12px 0;
+}
+
+.picker-label {
+  color: var(--ink-3);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.recent-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.recent-chip {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.recent-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  color: var(--accent);
+}
+
+.results-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px 8px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+
+.results-tip {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.results-scroll {
+  max-height: 248px;
+  overflow-y: auto;
+  padding: 0 6px 8px;
+}
+
+.picker-group-label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 8px 6px 5px;
+  background: var(--surface);
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.major-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.major-option:hover {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  color: var(--ink);
+}
+
+.major-option.chosen {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--ink);
+}
+
+.option-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.option-count {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink-3);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.option-check {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.picker-empty {
+  padding: 18px 14px 20px;
+  color: var(--ink-3);
+  font-size: 12px;
+  text-align: center;
 }
 
 .modal-head {
@@ -1003,6 +1500,10 @@ onUnmounted(() => {
 
   .image-grid {
     grid-template-columns: 1fr;
+  }
+
+  .results-scroll {
+    max-height: 34vh;
   }
 }
 </style>
