@@ -24,7 +24,8 @@ app.use((req, res, next) => {
       "default-src 'self'",
       "script-src 'self'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data:",
+      // 简历图片预览通过 blob: URL 展示，需要单独放行。
+      "img-src 'self' data: blob:",
       "font-src 'self' data:",
       "connect-src 'self'",
       "object-src 'none'",
