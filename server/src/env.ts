@@ -67,5 +67,5 @@ export const config = {
   deepseekModel: read('DEEPSEEK_MODEL') ?? 'deepseek-chat',
   bochaApiKey: read('BOCHA_API_KEY'),
   bochaBaseUrl: read('BOCHA_BASE_URL') ?? 'https://api.bochaai.com/v1',
-  aiTimeoutMs: Number(read('AI_TIMEOUT_MS') ?? 120_000)
+  aiTimeoutMs: Number(read('AI_TIMEOUT_MS') ?? 240_000)
 }

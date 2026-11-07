@@ -29,7 +29,9 @@ export async function askDeepSeek(
         model: config.deepseekModel,
         messages,
         temperature: options.temperature ?? 0.55,
-        max_tokens: options.maxTokens ?? 4096,
+        // 报告输出较长，且池子里的模型可能是「会思考」的：
+        // reasoning_content 也计入 max_tokens，4096 经常被思考吃光、正文为空。
+        max_tokens: options.maxTokens ?? 8192,
         ...(options.json === false ? {} : { response_format: { type: 'json_object' } })
       }),
       signal: AbortSignal.timeout(config.aiTimeoutMs)
@@ -48,10 +50,17 @@ export async function askDeepSeek(
     throw new Error('DeepSeek 返回了无法解析的内容')
   }
 
-  const content = (data as { choices?: { message?: { content?: unknown } }[] }).choices?.[0]
-    ?.message?.content
+  const choice = (data as {
+    choices?: {
+      message?: { content?: unknown }
+      finish_reason?: unknown
+    }[]
+  }).choices?.[0]
+  const content = choice?.message?.content
   if (typeof content !== 'string' || !content.trim()) {
-    throw new Error('DeepSeek 没有返回内容')
+    const finish =
+      typeof choice?.finish_reason === 'string' ? `，finish_reason=${choice.finish_reason}` : ''
+    throw new Error(`DeepSeek 没有返回内容${finish}`)
   }
   return content
 }
