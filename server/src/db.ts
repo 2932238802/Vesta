@@ -326,6 +326,12 @@ function insertAfter(questions: Survey['questions'], afterId: string, question: 
 }
 
 function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
+  // 后台保存过的问卷（运营自己调过选项、加过题）一律不再自动迁移，
+  // 否则每次升级都会把她改的选项改回去。要恢复默认，只能重新发布一份默认问卷。
+  if (survey.customized) {
+    return { survey, changed: false }
+  }
+
   // 文档版问卷（《规划自测问卷-设计文档》）：以 q1 为标记，旧问卷整份替换。
   // 题目、分组、计分、报告方式全换，不再沿用旧的三段/九维结构。
   if (!survey.questions?.some((q) => q.id === 'q1')) {
@@ -549,10 +555,10 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
   // B 组改成客观事实题：旧版（1—5 分自评，或只问一题的过渡版）整组替换。
   // 用 b1a 当新版标记：B 组里没有 b1a，就认为它还是旧版，整组换掉。
   const hasNewB = questions.some((q) => q.groupId === 'b' && q.id === 'b1a')
-  if (!hasNewB) {
-    const freshB = canonical
-      .filter((q) => q.groupId === 'b')
-      .map((q) => ({ ...q, options: q.options?.map((option) => ({ ...option })) }))
+  const freshB = canonical
+    .filter((q) => q.groupId === 'b')
+    .map((q) => ({ ...q, options: q.options?.map((option) => ({ ...option })) }))
+  if (!hasNewB && freshB.length > 0) {
     const kept = questions.filter((q) => q.groupId !== 'b')
     const insertAt = kept.findIndex((q) => q.groupId === 'c')
     kept.splice(insertAt === -1 ? kept.length : insertAt, 0, ...freshB)
@@ -916,7 +922,7 @@ export function publishSurvey(survey: Survey): Survey {
   const current = getActiveSurvey()
   const version = Math.max(current.version, survey.version || 0) + 1
   const id = newId('survey')
-  const next: Survey = { ...survey, id, version }
+  const next: Survey = { ...survey, id, version, customized: true }
 
   db.exec('BEGIN')
   try {

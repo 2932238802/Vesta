@@ -118,6 +118,8 @@ export interface Survey {
   tiers: TierRule[]
   /** 报告生成方式：'doc' 走规则化报告，'ai' 走原有 AI 报告（默认） */
   reportMode?: 'ai' | 'doc'
+  /** 后台保存过的问卷：启动迁移不再改动它，避免覆盖运营自己调的选项 */
+  customized?: boolean
 }
 
 export type ModuleKey =
