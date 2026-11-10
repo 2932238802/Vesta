@@ -165,17 +165,19 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { api, type AdminSubmissionDetail } from '@/api'
 import { formatDate } from '@/format'
 import ScoreBar from '@/components/ScoreBar.vue'
 
 const route = useRoute()
+const router = useRouter()
 const id = String(route.params.id ?? '')
 const detail = ref<AdminSubmissionDetail | null>(null)
 const loading = ref(true)
 const error = ref('')
 const saving = ref(false)
+const deleting = ref(false)
 const regenerating = ref(false)
 const toast = ref('')
 
@@ -266,6 +268,26 @@ async function save() {
     flash(err instanceof Error ? err.message : '保存失败')
   } finally {
     saving.value = false
+  }
+}
+
+async function remove() {
+  const who = detail.value?.name || '这份答卷'
+  if (
+    !window.confirm(
+      `删除「${who}」的答卷和报告？删除后这条邀请链接会回到「已打开」，可以重新填写。`
+    )
+  ) {
+    return
+  }
+  deleting.value = true
+  try {
+    await api.deleteSubmission(id)
+    await router.push('/admin/submissions')
+  } catch (err) {
+    flash(err instanceof Error ? err.message : '删除失败')
+  } finally {
+    deleting.value = false
   }
 }
 

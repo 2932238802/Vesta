@@ -199,6 +199,15 @@
                     <button class="btn quiet" type="button" @click="copyLink(row)">复制链接</button>
                     <button class="btn quiet" type="button" @click="openInvite(row)">打开</button>
                   </template>
+                  <button
+                    v-if="!row.submissionId"
+                    class="btn quiet danger"
+                    type="button"
+                    :disabled="deletingInviteId === row.id"
+                    @click="removeInvite(row)"
+                  >
+                    {{ deletingInviteId === row.id ? '删除中' : '删除记录' }}
+                  </button>
                 </div>
               </td>
             </tr>
@@ -267,6 +276,7 @@ const exporting = ref(false)
 const toast = ref('')
 const savingStatus = ref('')
 const deletingId = ref('')
+const deletingInviteId = ref('')
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let dateTimer: ReturnType<typeof setTimeout> | undefined
@@ -470,6 +480,27 @@ async function copyLink(row: AdminRosterRow) {
 
 function openInvite(row: AdminRosterRow) {
   window.open(inviteUrl(row.token), '_blank')
+}
+
+async function removeInvite(row: AdminRosterRow) {
+  const who = row.name || '这条邀请记录'
+  if (
+    !confirm(
+      `删除「${who}」这条记录？删除后链接失效，列表里不再显示。已提交的答卷不受影响，请先删答卷。`
+    )
+  ) {
+    return
+  }
+  deletingInviteId.value = row.id
+  try {
+    await api.deleteInvite(row.inviteId)
+    await load()
+    flash('记录已删除')
+  } catch (err) {
+    flash(err instanceof Error ? err.message : '删除失败')
+  } finally {
+    deletingInviteId.value = ''
+  }
 }
 
 async function removeSubmission(row: AdminRosterRow) {
