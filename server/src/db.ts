@@ -350,6 +350,20 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
   }
 
   const canonical = defaultSurvey.questions
+
+  // Q7「现在在准备什么」换成新的 9 个选项；只认旧默认那套，避免覆盖运营自己配的。
+  const q7 = questions.find((q) => q.id === 'q7')
+  const canonicalQ7 = canonical.find((q) => q.id === 'q7')
+  if (q7?.options && canonicalQ7?.options) {
+    const labels = q7.options.map((option) => option.label)
+    const looksDefault =
+      labels.includes('四级') && labels.includes('六级') && labels.includes('还没开始')
+    if (looksDefault) {
+      q7.options = canonicalQ7.options.map((option) => ({ ...option }))
+      changed = true
+    }
+  }
+
   const profileAdditions: [string, string][] = [
     ['a8', 'a7'],
     ['a9', 'a8'],
@@ -604,7 +618,7 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
     changed = true
   }
 
-  for (const removedId of ['a5', 'a13', 'a15', 'a16', 'c3', 'd5', 'q17b']) {
+  for (const removedId of ['a5', 'a13', 'a15', 'a16', 'c3', 'd5', 'q7a', 'q17b']) {
     const index = questions.findIndex((q) => q.id === removedId)
     if (index >= 0) {
       questions.splice(index, 1)

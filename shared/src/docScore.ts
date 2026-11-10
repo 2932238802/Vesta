@@ -215,7 +215,9 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
   const need =
     ['q6_1', 'q6_2', 'q6_5'].includes(String(answers.q6 ?? '')) ||
     String(answers.q5 ?? '') === 'q5_1' ||
-    optionLabels(survey, answers, 'q7').some((item) => item === '四级' || item === '六级')
+    optionLabels(survey, answers, 'q7').some(
+      (item) => item.includes('四六级') || item.includes('四级') || item.includes('六级')
+    )
 
   // 低分者只答了 3 道英语题，后面 5 道是按规则跳过的，报告里要说明，不能当成「未作答」。
   const detailQuestion = survey.questions.find((item) => item.id === 'q19')

@@ -252,9 +252,13 @@ export function deadlineFact(survey: Survey, answers: Answers): DeadlineFact {
     node = '语言成绩和申请季'
     windowText = '大三开始准备，大四 9—12 月申请'
     months = monthsUntil(9)
-  } else if (preparing.includes('教资')) {
+  } else if (preparing.some((item) => item.includes('教资'))) {
     node = '教资笔试'
     windowText = '每年 3 月、9 月'
+    months = monthsUntil(3)
+  } else if (preparing.some((item) => item.includes('专升本'))) {
+    node = '专升本考试'
+    windowText = '多数省份 3—4 月'
     months = monthsUntil(3)
   }
 
@@ -326,8 +330,7 @@ export function serializeDoc(survey: Survey, answers: Answers): Record<string, u
     q22_speaking: label(survey, answers, 'q22'),
     q24_importance: num(answers, 'q24'),
     q25_reason: labels(survey, answers, 'q25'),
-    q26_future: text(answers, 'q26'),
-    q7a_other: text(answers, 'q7a')
+    q26_future: text(answers, 'q26')
   }
 }
 

@@ -119,28 +119,16 @@ export const defaultSurvey: Survey = {
       type: 'multi',
       required: true,
       options: choice('q7', [
-        ['四级', null],
-        ['六级', null],
+        ['绩点', null],
+        ['四六级', null],
         ['竞赛科研', null],
-        ['教资', null],
-        ['专升本', null],
         ['实习', null],
-        ['计算机二级', null],
-        ['驾照', null],
-        ['还没开始', null],
-        ['其他', null]
+        ['计算机二级/普通话证书/教资/初会之类的专业就业的证书', null],
+        ['专升本考试', null],
+        ['琢磨怎么实现经济独立', null],
+        ['期末考', null],
+        ['期中考', null]
       ])
-    },
-    {
-      id: 'q7a',
-      code: 'Q7a',
-      groupId: 'p1',
-      title: '其他在准备什么',
-      hint: '写一个词就行，比如普通话、作品集',
-      type: 'text',
-      required: false,
-      placeholder: '例如：普通话二甲',
-      showIf: { question: 'q7', when: ['q7_10'] }
     },
     {
       id: 'q8',
