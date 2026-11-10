@@ -28,6 +28,16 @@ export interface QuestionBranch {
   options: QuestionOption[]
 }
 
+/** 题目显示条件：命中选项（when）或数值达到（min）时生效。 */
+export interface QuestionCondition {
+  question: string
+  when?: string[]
+  /** 数字题：答案 ≥ min 时命中 */
+  min?: number
+  /** 数字题：答案 < max 时命中 */
+  max?: number
+}
+
 export interface Question {
   id: string
   code: string
@@ -50,14 +60,33 @@ export interface Question {
   otherPlaceholder?: string
   dimension?: string
   role?: 'self' | 'behavior' | 'context'
-  /** 当指定题目的答案落在 when 里的选项 id 时才显示 */
-  showIf?: { question: string; when: string[] }
-  /** 当指定题目的答案落在 when 里的选项 id 时置灰（不计必答） */
-  disableIf?: { question: string; when: string[] }
+  /** 命中条件时才显示；未命中视为“按规则跳过”，不算未作答 */
+  showIf?: QuestionCondition
+  /** 需要用多个条件同时命中时才显示（比如「四级考过」且「英语重要性 ≥6」） */
+  showIfAll?: QuestionCondition[]
+  /** 命中条件时置灰（不计必答） */
+  disableIf?: QuestionCondition
   /** 按另一道题的答案切换整道题面（题面 + 选项） */
   branches?: { question: string; map: Record<string, QuestionBranch> }
   /** 数字题的取值范围，用于渲染滑块 */
   range?: { min: number; max: number; step: number }
+}
+
+export interface JobCard {
+  title: string
+  company: string
+  city: string
+  salary: string
+  requirement: string
+  url: string
+  date?: string
+}
+
+export interface ScoreItem {
+  key: string
+  label: string
+  score: number
+  note: string
 }
 
 export interface Dimension {
@@ -298,6 +327,27 @@ export type ReportBlock =
       type: 'note'
       title: string
       text: string
+    }
+  | {
+      type: 'scorecard'
+      title: string
+      subtitle: string
+      background: ScoreItem[]
+      personal: ScoreItem[]
+      potential: { level: '低' | '中' | '高'; text: string }
+    }
+  | {
+      type: 'gap'
+      title: string
+      subtitle: string
+      lines: { label: string; value: string }[]
+      note: string
+      jobs: JobCard[]
+    }
+  | {
+      type: 'section'
+      title: string
+      paragraphs: string[]
     }
 
 export interface ClaimCopy {

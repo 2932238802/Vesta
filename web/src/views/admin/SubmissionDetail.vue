@@ -28,6 +28,9 @@
           <button class="btn small" type="button" :disabled="saving || !dirty" @click="save">
             {{ saving ? '保存中' : '保存修改' }}
           </button>
+          <button class="btn ghost small danger" type="button" :disabled="deleting" @click="remove">
+            {{ deleting ? '删除中' : '删除答卷' }}
+          </button>
         </div>
       </header>
 

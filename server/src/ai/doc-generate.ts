@@ -1,10 +1,12 @@
 import type { Answers, Survey } from '../../../shared/src/types'
 import {
+  deadlineFact,
   docFacts,
   normalizeDocAiContent,
   serializeDoc,
   type DocAiContent
 } from '../../../shared/src/doc'
+import { computeDocScores } from '../../../shared/src/docScore'
 import { config } from '../env'
 import { now } from '../db'
 import { askDeepSeek, parseJsonObject } from './deepseek'
@@ -19,12 +21,12 @@ const DOC_SKILL = `# 大学四年规划报告
 你是一名面向中国大学生的规划顾问，说话直接、克制，不贩卖焦虑，也不推课。
 
 ## 你会收到
-1. 一份问卷回答（27 题，题目编号 Q1—Q26）。
-2. 系统算好的几个事实：分层、建议卡点、关键节点。
+1. 一份问卷回答（题目编号 Q1—Q26）。
+2. 系统算好的数字：五因素得分、个人四维得分、潜力档位、目标差距、英语位置、关键节点与时间。
 
 ## 只输出 JSON
 {
-  "conclusion": "一句话结论，把表面问题和真实卡点分开说",
+  "conclusion": "一句话结论，把表面问题和真实卡点分开说，必须提到一个具体数字或事实",
   "sections": [
     { "title": "你现在卡在哪一层", "text": "..." },
     { "title": "什么时候要命", "text": "..." },
@@ -36,15 +38,16 @@ const DOC_SKILL = `# 大学四年规划报告
 
 ## 五个小标题的写法（顺序固定，不能改）
 1. 你现在卡在哪一层：从回答里挑一个最具体的卡点（词汇 / 听力 / 开口 / 方法 / 时间），说清它在考试或面试里长什么样。
-2. 什么时候要命：用系统给的关键节点和倒推时间，写清还有几个月、错过会怎样。
+2. 什么时候要命：用系统给的关键节点、剩余月份和投入总量，写清错过会怎样。数字直接用系统给的，不要自己改。
 3. 五年后的你：引用 TA 写的原话，加上想去的城市和想做的事，写一段 TA 能认出来的画面，不写鸡汤。
-4. 接下来 30 天：给 3 个能在 30 天内开始的具体动作，按先后顺序。
+4. 接下来 30 天：给 3 个能在 30 天内开始的具体动作，每条带时间点或完成标准。
 5. 给你一句实话：一句克制、具体的提醒，不威胁、不安慰。
 
 ## 硬性要求
 - 正文 800—1200 字，纯文本，不要 Markdown 标题或列表符号。
-- 不得出现「报班」「课程」「学费」「不学就来不及」「不过级就没戏」这类字样。
+- 不得出现「报班」「课程」「学费」「名额」「不学就来不及」「不过级就没戏」这类字样。
 - 不编造分数线、薪资、政策；需要事实时写「以官方最新公告为准」。
+- 分数、档位、剩余月份、投入小时数都由系统给出，报告页会单独展示；正文里引用即可，不要重新计算，也不要写出与系统数字冲突的数字。
 - 不要复述题目，不要写「你很棒」这类空话。
 - conclusion 一句话，sections 必须正好 5 条，每条 title 用上面固定标题。`
 
@@ -66,16 +69,24 @@ export async function generateDocContent(input: {
 }): Promise<{ content: DocAiContent; meta: DocAiMeta }> {
   const { survey, answers, name } = input
   const facts = docFacts(survey, answers)
+  const scores = computeDocScores(survey, answers)
+  const node = deadlineFact(survey, answers)
+  const scoreText = [...scores.background, ...scores.personal]
+    .map((item) => `${item.label}：${item.score} 分`)
+    .join('\n')
   const userPrompt = `学生：${name || '同学'}
 
 【问卷回答】
 ${answerText(survey, answers)}
 
+【系统算好的分数】（报告页会原样展示，正文引用即可，不要改数）
+${scoreText}
+潜力：${scores.potential.level}（${scores.potential.text}）
+
 【系统事实】
-分层：${facts.priority}
 建议卡点：${facts.stuck}（${facts.stuckDetail}）
 建议结论：${facts.oneLine}
-关键节点：${facts.deadline}
+关键节点：${node.node}，${node.windowText}，还剩约 ${node.months} 个月
 五年后的画面要点：${facts.future}
 
 请按 Skill 要求写报告，只输出 JSON 对象。`

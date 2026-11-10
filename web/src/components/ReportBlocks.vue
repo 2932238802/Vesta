@@ -196,6 +196,65 @@
           <p class="note-text">{{ block.text }}</p>
         </div>
       </template>
+
+      <template v-else-if="block.type === 'scorecard'">
+        <SectionHead :index="index" :title="block.title" :subtitle="block.subtitle" />
+        <div class="score-groups">
+          <section class="score-group">
+            <h3>起点（改不了，但要知道）</h3>
+            <div v-for="item in block.background" :key="item.key" class="score-row">
+              <div class="score-head">
+                <span>{{ item.label }}</span>
+                <b>{{ item.score }}</b>
+              </div>
+              <div class="score-track"><i :style="{ width: `${item.score * 10}%` }" /></div>
+              <p class="score-note">{{ item.note }}</p>
+            </div>
+          </section>
+          <section class="score-group">
+            <h3>能改的四项</h3>
+            <div v-for="item in block.personal" :key="item.key" class="score-row">
+              <div class="score-head">
+                <span>{{ item.label }}</span>
+                <b>{{ item.score }}</b>
+              </div>
+              <div class="score-track personal"><i :style="{ width: `${item.score * 10}%` }" /></div>
+              <p class="score-note">{{ item.note }}</p>
+            </div>
+          </section>
+        </div>
+        <div class="potential">
+          <span class="potential-level">潜力值 · {{ block.potential.level }}</span>
+          <p>{{ block.potential.text }}</p>
+        </div>
+      </template>
+
+      <template v-else-if="block.type === 'gap'">
+        <SectionHead :index="index" :title="block.title" :subtitle="block.subtitle" />
+        <dl class="gap-lines">
+          <div v-for="line in block.lines" :key="line.label">
+            <dt>{{ line.label }}</dt>
+            <dd>{{ line.value }}</dd>
+          </div>
+        </dl>
+        <ul v-if="block.jobs.length" class="job-list">
+          <li v-for="job in block.jobs" :key="job.url" class="job">
+            <a :href="job.url" target="_blank" rel="noopener noreferrer">{{ job.title }}</a>
+            <p>{{ job.company }} · {{ job.city }} · {{ job.salary }}</p>
+            <p class="job-req">{{ job.requirement }}</p>
+          </li>
+        </ul>
+        <p class="closing">{{ block.note }}</p>
+      </template>
+
+      <template v-else-if="block.type === 'section'">
+        <SectionHead :index="index" :title="block.title" />
+        <div class="prose">
+          <p v-for="(paragraph, i) in block.paragraphs" :key="i" :class="{ first: i === 0 }">
+            {{ paragraph }}
+          </p>
+        </div>
+      </template>
     </section>
   </article>
 </template>
@@ -659,6 +718,143 @@ const dateText = computed(() => {
   line-height: 1.85;
   color: var(--ink);
   max-width: 34em;
+}
+
+.score-groups {
+  margin-top: 22px;
+  display: grid;
+  gap: 26px;
+}
+
+.score-group h3 {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin-bottom: 14px;
+}
+
+.score-row {
+  margin-bottom: 16px;
+}
+
+.score-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.score-head b {
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--accent);
+}
+
+.score-track {
+  margin-top: 7px;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.score-track i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--accent) 45%, #b8b0a0);
+}
+
+.score-track.personal i {
+  background: var(--accent);
+}
+
+.score-note {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--ink-3);
+}
+
+.potential {
+  margin-top: 20px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--line));
+}
+
+.potential-level {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.potential p {
+  margin-top: 8px;
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: var(--ink-2);
+}
+
+.gap-lines {
+  margin-top: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.gap-lines div {
+  display: grid;
+  grid-template-columns: 8.5em 1fr;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.gap-lines dt {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.gap-lines dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--ink);
+}
+
+.job-list {
+  margin-top: 20px;
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+}
+
+.job {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.job a {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.job p {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.job-req {
+  color: var(--ink-2) !important;
 }
 
 .quotes {

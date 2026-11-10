@@ -183,6 +183,14 @@
                     >
                       打开报告
                     </a>
+                    <button
+                      class="btn quiet danger"
+                      type="button"
+                      :disabled="deletingId === row.id"
+                      @click="removeSubmission(row)"
+                    >
+                      {{ deletingId === row.id ? '删除中' : '删除答卷' }}
+                    </button>
                   </template>
                   <template v-else-if="row.stage === 'expired'">
                     <button class="btn quiet" type="button" @click="rotate(row)">换新链接</button>
@@ -258,6 +266,7 @@ const datesExpanded = ref(false)
 const exporting = ref(false)
 const toast = ref('')
 const savingStatus = ref('')
+const deletingId = ref('')
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let dateTimer: ReturnType<typeof setTimeout> | undefined
@@ -461,6 +470,28 @@ async function copyLink(row: AdminRosterRow) {
 
 function openInvite(row: AdminRosterRow) {
   window.open(inviteUrl(row.token), '_blank')
+}
+
+async function removeSubmission(row: AdminRosterRow) {
+  if (!row.submissionId) return
+  const who = row.name || '这位学员'
+  if (
+    !confirm(
+      `删除「${who}」的答卷和报告？删除后这条邀请链接会回到「已打开」，可以重新填写。`
+    )
+  ) {
+    return
+  }
+  deletingId.value = row.id
+  try {
+    await api.deleteSubmission(row.submissionId)
+    await load()
+    flash('答卷已删除')
+  } catch (err) {
+    flash(err instanceof Error ? err.message : '删除失败')
+  } finally {
+    deletingId.value = ''
+  }
 }
 
 async function rotate(row: AdminRosterRow) {
@@ -799,6 +830,10 @@ onMounted(load)
   justify-content: flex-end;
   gap: 2px;
   flex-wrap: wrap;
+}
+
+.row-actions .danger {
+  color: var(--danger);
 }
 
 .roster-table tbody tr td {

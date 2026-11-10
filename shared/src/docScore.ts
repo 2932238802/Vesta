@@ -1,0 +1,210 @@
+import type { Answers, Survey } from './types'
+import { resolveQuestion } from './doc'
+
+export interface ScoredItem {
+  key: string
+  label: string
+  score: number
+  note: string
+}
+
+export type PotentialLevel = '低' | '中' | '高'
+
+export interface DocScores {
+  /** 五因素：改不动的起点，但照常显示分数 */
+  background: ScoredItem[]
+  /** 个人四维：能改的部分，潜力值只算这四项 */
+  personal: ScoredItem[]
+  potential: { level: PotentialLevel; text: string }
+  english: {
+    need: boolean
+    stage: string
+    band: string
+    weeklyHours: number
+    weakPart: string
+    speaking: string
+    reasons: string[]
+  }
+}
+
+function optionIndex(survey: Survey, answers: Answers, id: string): number {
+  const question = survey.questions.find((item) => item.id === id)
+  if (!question) return -1
+  const value = answers[id]
+  if (typeof value !== 'string') return -1
+  const resolved = resolveQuestion(survey, answers, question)
+  return resolved.options.findIndex((option) => option.id === value)
+}
+
+function optionLabels(survey: Survey, answers: Answers, id: string): string[] {
+  const question = survey.questions.find((item) => item.id === id)
+  if (!question) return []
+  const value = answers[id]
+  if (!Array.isArray(value)) return []
+  const resolved = resolveQuestion(survey, answers, question)
+  return value
+    .map((item) => resolved.options.find((option) => option.id === item)?.label ?? '')
+    .filter(Boolean)
+}
+
+function pick(index: number, table: number[], fallback = 0): number {
+  const value = table[index]
+  return typeof value === 'number' ? value : fallback
+}
+
+function clamp(value: number, min = 0, max = 10): number {
+  return Math.min(max, Math.max(min, Math.round(value * 10) / 10))
+}
+
+function textAnswer(answers: Answers, id: string): string {
+  const value = answers[id]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+const SCHOOL = [10, 9, 8, 7.5, 7, 5.5, 4, 3, 2]
+const CITY = [8, 7, 6, 4, 3]
+const FAMILY = [9, 7, 5.5, 3.5, 1.5]
+const PRACTICE = [9, 6, 4, 2]
+const METHOD = [7, 4, 6, 5]
+const INFO = [8, 6, 4, 2]
+const EXECUTION = [8, 6, 4, 2]
+const ENVIRONMENT = [8, 6, 4, 3]
+
+const WEEKLY_HOURS = [1.5, 5, 10.5, 17.5]
+
+/** 个人四维里的一项：分数 + 依据。 */
+function methodScore(survey: Survey, answers: Answers): number {
+  let score = pick(optionIndex(survey, answers, 'q14'), METHOD, 5)
+  const words = optionIndex(survey, answers, 'q21')
+  if (words === 1 || words === 3) score -= 1
+  if (words === 0) score += 1
+  const how = optionLabels(survey, answers, 'q19')
+  if (how.includes('几乎没学')) score -= 1
+  if (how.includes('跟课') || how.includes('刷真题')) score += 1
+  return clamp(score)
+}
+
+function skillScore(survey: Survey, answers: Answers): number {
+  const picked = optionLabels(survey, answers, 'q10')
+  let score = 0
+  if (picked.some((item) => item.startsWith('底层通用能力'))) score += 3
+  if (picked.some((item) => item.startsWith('垂直技能'))) score += 3.5
+  if (picked.some((item) => item.startsWith('证书'))) score += 2
+  if (picked.some((item) => item.startsWith('还没培养出'))) score -= 1
+  if (picked.some((item) => item.startsWith('说不清'))) score -= 0.5
+  return clamp(score)
+}
+
+function cityScore(survey: Survey, answers: Answers): number {
+  let score = pick(optionIndex(survey, answers, 'q8'), CITY, 3)
+  const target = textAnswer(answers, 'q5a')
+  if (target.length >= 6) score += 2
+  else if (target.length > 0) score += 1
+  return clamp(score)
+}
+
+function schoolScore(survey: Survey, answers: Answers): number {
+  let score = pick(optionIndex(survey, answers, 'q1'), SCHOOL, 4)
+  const majorJob = optionIndex(survey, answers, 'q5')
+  if (majorJob === 0) score += 0.5
+  else if (majorJob === 1) score -= 0.5
+  return clamp(score)
+}
+
+export function computeDocScores(survey: Survey, answers: Answers): DocScores {
+  const background: ScoredItem[] = [
+    {
+      key: 'school',
+      label: '学校与专业',
+      score: schoolScore(survey, answers),
+      note: '学校层级 + 专业是否对口，改不了，是起点'
+    },
+    {
+      key: 'city',
+      label: '城市与行业',
+      score: cityScore(survey, answers),
+      note: '目标城市的机会密度 + 行业岗位写得清不清楚'
+    },
+    {
+      key: 'family',
+      label: '原生家庭托举',
+      score: pick(optionIndex(survey, answers, 'q15'), FAMILY, 5),
+      note: '家里能托住多少，改不了，但要说清楚'
+    },
+    {
+      key: 'practice',
+      label: '实习实践',
+      score: pick(optionIndex(survey, answers, 'q9'), PRACTICE, 2),
+      note: '能写进简历的校外实习和校内实践'
+    },
+    {
+      key: 'skill',
+      label: '个人技能',
+      score: skillScore(survey, answers),
+      note: '底层能力、垂直技能、证书的累计'
+    }
+  ]
+
+  const personal: ScoredItem[] = [
+    {
+      key: 'method',
+      label: '方法与习惯',
+      score: methodScore(survey, answers),
+      note: '高中到现在的学习效率，以及背单词和学英语的方式'
+    },
+    {
+      key: 'info',
+      label: '信息差',
+      score: pick(optionIndex(survey, answers, 'q16'), INFO, 4),
+      note: '对目标门槛、时间节点、报名规则的掌握程度'
+    },
+    {
+      key: 'execution',
+      label: '执行力',
+      score: pick(optionIndex(survey, answers, 'q13'), EXECUTION, 4),
+      note: '定了目标之后能不能落地、能坚持多久'
+    },
+    {
+      key: 'environment',
+      label: '环境氛围',
+      score: pick(optionIndex(survey, answers, 'q12'), ENVIRONMENT, 4),
+      note: '身边的人在做什么，对你是带动还是消耗'
+    }
+  ]
+
+  // 潜力值只用能改的四项：把每项缺口换成 0—1 的比例再加权，保证 0—100 有区分度。
+  const byKey = new Map(personal.map((item) => [item.key, item.score]))
+  const gap = (key: string) => (10 - (byKey.get(key) ?? 5)) / 10
+  const raw =
+    100 -
+    (gap('practice') * 0.4 + gap('skill') * 0.25 + gap('method') * 0.2 + gap('execution') * 0.15) * 100
+  const potentialScore = Math.round(raw)
+  const level: PotentialLevel = potentialScore >= 70 ? '高' : potentialScore >= 40 ? '中' : '低'
+  const lowKeys = ['practice', 'skill', 'method', 'execution']
+    .map((key) => ({ key, score: byKey.get(key) ?? 5 }))
+    .sort((a, b) => a.score - b.score)
+  const lowLabels = lowKeys.filter((item) => item.score < 6).map((item) => personal.find((p) => p.key === item.key)?.label)
+  const potentialText =
+    lowLabels.length > 0
+      ? `你的潜力在${level}档，卡住你的是${lowLabels.slice(0, 2).join('、')}，不是天赋。`
+      : `你的潜力在${level}档，四项里没有明显短板，接下来是把已有的往前推。`
+
+  const need =
+    ['q6_1', 'q6_2', 'q6_5'].includes(String(answers.q6 ?? '')) ||
+    optionLabels(survey, answers, 'q7').some((item) => item === '四级' || item === '六级')
+
+  return {
+    background,
+    personal,
+    potential: { level, text: potentialText },
+    english: {
+      need,
+      stage: optionLabels(survey, answers, 'q17')[0] ?? '',
+      band: optionLabels(survey, answers, 'q17b')[0] ?? '',
+      weeklyHours: pick(optionIndex(survey, answers, 'q20'), WEEKLY_HOURS, 0),
+      weakPart: optionLabels(survey, answers, 'q18')[0] ?? '',
+      speaking: optionLabels(survey, answers, 'q22')[0] ?? '',
+      reasons: optionLabels(survey, answers, 'q25')
+    }
+  }
+}

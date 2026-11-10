@@ -1017,6 +1017,33 @@ adminRouter.patch('/submissions/:id', (req, res) => {
   res.json({ ok: true })
 })
 
+adminRouter.delete('/submissions/:id', (req, res) => {
+  noStore(res)
+  const row = db
+    .prepare('SELECT id, invite_id FROM submissions WHERE id = ?')
+    .get(req.params.id) as { id: string; invite_id: string } | undefined
+  if (!row) {
+    res.status(404).json({ error: '答卷不存在' })
+    return
+  }
+
+  // 删答卷时把邀请链接放回「已打开、未提交」，同一条链接可以重新填。
+  db.exec('BEGIN')
+  try {
+    db.prepare('DELETE FROM submissions WHERE id = ?').run(row.id)
+    db.prepare(
+      "UPDATE invites SET status = 'opened', submitted_at = NULL WHERE id = ?"
+    ).run(row.invite_id)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+
+  recordEvent(row.invite_id, 'submission_deleted')
+  res.json({ ok: true })
+})
+
 adminRouter.get('/survey', (req, res) => {
   noStore(res)
   const survey = getActiveSurvey()

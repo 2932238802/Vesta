@@ -1,13 +1,16 @@
 import { defaultTemplate } from './template'
 import type {
   Answers,
+  JobCard,
   Question,
+  QuestionCondition,
   QuestionOption,
   ReportBlock,
   ReportPayload,
   Survey,
   Tier
 } from './types'
+import { computeDocScores } from './docScore'
 
 export interface ResolvedQuestion {
   visible: boolean
@@ -17,6 +20,26 @@ export interface ResolvedQuestion {
   options: QuestionOption[]
   range?: { min: number; max: number; step: number }
   branches?: Question['branches']
+}
+
+function conditionMatches(answers: Answers, condition: QuestionCondition): boolean {
+  const value = answers[condition.question]
+  if (condition.when?.length) {
+    if (Array.isArray(value)) {
+      if (!value.some((item) => typeof item === 'string' && condition.when?.includes(item))) {
+        return false
+      }
+    } else if (typeof value !== 'string' || !condition.when.includes(value)) {
+      return false
+    }
+  }
+  if (typeof condition.min === 'number') {
+    if (typeof value !== 'number' || value < condition.min) return false
+  }
+  if (typeof condition.max === 'number') {
+    if (typeof value !== 'number' || value >= condition.max) return false
+  }
+  return true
 }
 
 /** 把一道题按当前答案解析成实际要展示的题面：处理 showIf / disableIf / branches。 */
@@ -35,11 +58,11 @@ export function resolveQuestion(
     branches: question.branches
   }
 
-  if (question.showIf) {
-    const value = answers[question.showIf.question]
-    if (typeof value !== 'string' || !question.showIf.when.includes(value)) {
-      return { ...base, visible: false }
-    }
+  if (question.showIf && !conditionMatches(answers, question.showIf)) {
+    return { ...base, visible: false }
+  }
+  if (question.showIfAll?.some((condition) => !conditionMatches(answers, condition))) {
+    return { ...base, visible: false }
   }
 
   let title = question.title
@@ -56,11 +79,7 @@ export function resolveQuestion(
     }
   }
 
-  let disabled = false
-  if (question.disableIf) {
-    const value = answers[question.disableIf.question]
-    disabled = typeof value === 'string' && question.disableIf.when.includes(value)
-  }
+  const disabled = question.disableIf ? conditionMatches(answers, question.disableIf) : false
 
   return { ...base, title, hint, options, disabled }
 }
@@ -193,7 +212,14 @@ function monthsUntil(monthOfYear: number): number {
   return target - current
 }
 
-function deadlineText(survey: Survey, answers: Answers): string {
+export interface DeadlineFact {
+  node: string
+  windowText: string
+  months: number
+  text: string
+}
+
+export function deadlineFact(survey: Survey, answers: Answers): DeadlineFact {
   const first = label(survey, answers, 'q6')
   const preparing = labels(survey, answers, 'q7')
   const grade = label(survey, answers, 'q3')
@@ -239,7 +265,11 @@ function deadlineText(survey: Survey, answers: Answers): string {
         ? '时间已经很紧，优先把能落地的先落地。'
         : '这一两年是你补信息差最便宜的时候。'
 
-  return `你离 ${node}（${windowText}）还有大约 ${months} 个月。${tail}`
+  return { node, windowText, months, text: `你离 ${node}（${windowText}）还有大约 ${months} 个月。${tail}` }
+}
+
+function deadlineText(survey: Survey, answers: Answers): string {
+  return deadlineFact(survey, answers).text
 }
 
 function futureText(survey: Survey, answers: Answers): string {
@@ -295,10 +325,10 @@ export function serializeDoc(survey: Survey, answers: Answers): Record<string, u
     q20_hours: label(survey, answers, 'q20'),
     q21_words: label(survey, answers, 'q21'),
     q22_speaking: label(survey, answers, 'q22'),
-    q23_requirement: label(survey, answers, 'q23'),
     q24_importance: num(answers, 'q24'),
     q25_reason: labels(survey, answers, 'q25'),
-    q26_future: text(answers, 'q26')
+    q26_future: text(answers, 'q26'),
+    q7a_other: text(answers, 'q7a')
   }
 }
 
@@ -333,6 +363,109 @@ export function docFacts(survey: Survey, answers: Answers): DocFacts {
   }
 }
 
+const WEEKLY_HOURS = [1.5, 5, 10.5, 17.5]
+
+function weeklyHours(survey: Survey, answers: Answers): number {
+  const at = index(survey, answers, 'q20')
+  return WEEKLY_HOURS[at] ?? 0
+}
+
+function gapLines(survey: Survey, answers: Answers): { label: string; value: string }[] {
+  const first = label(survey, answers, 'q6')
+  const city = label(survey, answers, 'q8')
+  const role = text(answers, 'q5a') || text(answers, 'q2')
+  const major = text(answers, 'q2')
+  const node = deadlineFact(survey, answers)
+
+  const lines: { label: string; value: string }[] = [
+    { label: '你的第一选择', value: first || '还没确定' },
+    { label: '关键时间窗', value: `${node.node}：${node.windowText}，还剩约 ${node.months} 个月` }
+  ]
+
+  if (first === '就业') {
+    lines.push({ label: '目标城市', value: city || '还没想好' })
+    lines.push({ label: '目标岗位', value: role || '还没写清楚' })
+    lines.push({ label: '入场线（经验值）', value: '本科 + 相关实习 1 段 + 四级 425 以上；好岗位普遍看实习经历' })
+  } else if (first === '考研') {
+    lines.push({ label: '目标专业', value: major || '还没填' })
+    lines.push({ label: '入场线（经验值）', value: '过国家线 + 目标院校线；英语单科线 45 分左右，好学校更高' })
+  } else if (first === '保研') {
+    lines.push({ label: '入场线（经验值）', value: '专业排名前 10%—15%；六级 500 以上更稳；竞赛科研是加分项' })
+  } else if (first === '考公' || first === '考编') {
+    lines.push({
+      label: '入场线（经验值）',
+      value: first === '考公' ? '岗位表 + 专业限制 + 行测申论笔试；报名窗口很短' : '教师资格或岗位要求 + 笔试面试；各地公告不同'
+    })
+  } else if (first === '出国') {
+    lines.push({ label: '入场线（经验值）', value: '语言成绩（雅思 6.5 左右）+ 在校成绩 + 申请材料' })
+  } else {
+    lines.push({ label: '下一步', value: '先把第一选择定下来，后面所有门槛才谈得上对照' })
+  }
+
+  const hours = weeklyHours(survey, answers)
+  if (hours > 0) {
+    const total = Math.round(node.months * 4.33 * hours)
+    lines.push({
+      label: '按现在的投入',
+      value: `每周约 ${hours} 小时，到 ${node.node} 一共只有约 ${total} 小时`
+    })
+  }
+
+  return lines
+}
+
+function scorecardBlock(survey: Survey, answers: Answers): ReportBlock {
+  const scores = computeDocScores(survey, answers)
+  return {
+    type: 'scorecard',
+    title: '你现在的位置',
+    subtitle: '0—10 分，按你的回答算出来，不是感觉',
+    background: scores.background,
+    personal: scores.personal,
+    potential: scores.potential
+  }
+}
+
+function gapBlock(survey: Survey, answers: Answers): ReportBlock {
+  return {
+    type: 'gap',
+    title: '和目标之间还差多少',
+    subtitle: '门槛是经验值区间，以目标单位最新公告或招聘原文为准',
+    lines: gapLines(survey, answers),
+    note: '这一屏不预测结果，只把「现在的位置」和「这条路的入场线」摆在一起。',
+    jobs: []
+  }
+}
+
+function englishSection(survey: Survey, answers: Answers): ReportBlock {
+  const scores = computeDocScores(survey, answers)
+  const english = scores.english
+  const importance = typeof answers.q24 === 'number' ? answers.q24 : 0
+  const stuck = stuckLayer(survey, answers)
+
+  const position = english.stage
+    ? `你现在是「${english.stage}」${english.band ? `，最近一次四级 ${english.band}` : ''}。`
+    : '你这部分还没答，先按你勾的英语准备状态看。'
+
+  const gapParts: string[] = []
+  if (english.need && importance < 6) {
+    gapParts.push(
+      `你给英语打了 ${importance} 分，但你的目标（${label(survey, answers, 'q6') || '还在准备的方向'}）对英语有明确门槛：考研要考英语一/二、保研夏令营常是全英文面试、考编也有英语要求。这个分数和你的目标之间有一条对不上的缝——不是英语不重要，是你还没看到它在这条路上具体卡在哪。`
+    )
+  } else if (english.need) {
+    gapParts.push(
+      '这条路对英语有明确门槛，你现在的位置离它还差一截：先补最卡的那一层，不要平均用力。'
+    )
+  } else {
+    gapParts.push('你目前的方向对英语没有硬门槛，但别把英语完全放下：阅读和表达是最通用的加分项。')
+  }
+  gapParts.push(`你最卡的是${stuck.short}。`)
+
+  const plan = `这 30 天先做三件事：一、把${stuck.short}对应的材料找齐（真题、词表或听力材料）；二、每天固定 30 分钟，只练这一项；三、每周日记录一次能听/能说/能背下多少，用数字对比，不用感觉。`
+
+  return { type: 'section', title: '英语这块', paragraphs: [position, ...gapParts, plan] }
+}
+
 export function buildDocReport(input: DocReportInput): ReportPayload {
   const { survey, answers, name, slug, createdAt, claimed } = input
   const facts = docFacts(survey, answers)
@@ -350,6 +483,9 @@ export function buildDocReport(input: DocReportInput): ReportPayload {
       tierLine: '先看你现在最卡的那一层。',
       total: null
     },
+    scorecardBlock(survey, answers),
+    gapBlock(survey, answers),
+    englishSection(survey, answers),
     { type: 'note', title: '你现在卡在哪一层', text: facts.stuckDetail },
     { type: 'note', title: '什么时候要命', text: facts.deadline },
     { type: 'note', title: '五年后的你', text: facts.future }
@@ -401,8 +537,13 @@ export function buildDocReportWithAi(
   const hero = base.blocks[0]
   if (hero?.type !== 'hero' || input.content.sections.length === 0) return base
 
+  // 分数、差距、英语板块始终由系统算；AI 只替换文字段落。
+  const systemBlocks = base.blocks.filter(
+    (block) => block.type !== 'hero' && block.type !== 'note'
+  )
   const blocks: ReportBlock[] = [
     { ...hero, summary: input.content.conclusion || hero.summary },
+    ...systemBlocks,
     ...input.content.sections.map(
       (section): ReportBlock => ({ type: 'note', title: section.title, text: section.text })
     )

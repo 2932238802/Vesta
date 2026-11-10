@@ -264,6 +264,12 @@ export const api = {
   deleteInvite(id: string) {
     return request<{ ok: true }>(`/api/admin/invites/${id}`, { method: 'DELETE', auth: true })
   },
+  deleteSubmission(id: string) {
+    return request<{ ok: true }>(`/api/admin/submissions/${id}`, {
+      method: 'DELETE',
+      auth: true
+    })
+  },
   rotateInvite(id: string) {
     return request<{ token: string; path: string }>(`/api/admin/invites/${id}/rotate`, {
       method: 'POST',

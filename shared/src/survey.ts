@@ -121,14 +121,26 @@ export const defaultSurvey: Survey = {
       options: choice('q7', [
         ['四级', null],
         ['六级', null],
-        ['考研', null],
+        ['竞赛科研', null],
         ['教资', null],
         ['专升本', null],
-        ['实习就业', null],
+        ['实习', null],
         ['计算机二级', null],
         ['驾照', null],
-        ['还没开始', null]
+        ['还没开始', null],
+        ['其他', null]
       ])
+    },
+    {
+      id: 'q7a',
+      code: 'Q7a',
+      groupId: 'p1',
+      title: '其他在准备什么',
+      hint: '写一个词就行，比如普通话、作品集',
+      type: 'text',
+      required: false,
+      placeholder: '例如：普通话二甲',
+      showIf: { question: 'q7', when: ['q7_10'] }
     },
     {
       id: 'q8',
@@ -257,7 +269,7 @@ export const defaultSurvey: Survey = {
         question: 'q6',
         map: {
           q6_1: {
-            title: '保研加分规则、竞赛报名时间、科研项目怎么进，你清楚吗？',
+            title: '保研的加分规则、竞赛报名时间、科研项目怎么进，你清楚吗？',
             options: choice('q16', [
               ['都清楚', null],
               ['知道一两项', null],
@@ -266,7 +278,7 @@ export const defaultSurvey: Survey = {
             ])
           },
           q6_2: {
-            title: '目标院校专业、分数线、专业课参考书，你查过吗？',
+            title: '目标院校的分数线、考试科目、对英语和证书的要求，你查过吗？',
             options: choice('q16', [
               ['都查过', null],
               ['查过一部分', null],
@@ -275,7 +287,7 @@ export const defaultSurvey: Survey = {
             ])
           },
           q6_3: {
-            title: '你了解本专业对口的岗位、薪资和招聘要求吗？',
+            title: '本专业对口的岗位、学历、英语和证书要求，你了解吗？',
             options: choice('q16', [
               ['很了解', null],
               ['知道大概', null],
@@ -284,7 +296,7 @@ export const defaultSurvey: Survey = {
             ])
           },
           q6_4: {
-            title: '岗位表、报名时间、专业限制，你清楚吗？',
+            title: '岗位表、报名时间、专业和证书限制，你清楚吗？',
             options: choice('q16', [
               ['都清楚', null],
               ['部分清楚', null],
@@ -293,7 +305,7 @@ export const defaultSurvey: Survey = {
             ])
           },
           q6_5: {
-            title: '岗位表、报名时间、专业限制，你清楚吗？',
+            title: '岗位表、报名时间、专业和证书限制，你清楚吗？',
             options: choice('q16', [
               ['都清楚', null],
               ['部分清楚', null],
@@ -302,7 +314,7 @@ export const defaultSurvey: Survey = {
             ])
           },
           q6_6: {
-            title: '你查过大概需要什么条件吗？',
+            title: '你查过出国大概需要什么条件（语言、成绩、材料）吗？',
             options: choice('q16', [
               ['查过', null],
               ['知道大概', null],
@@ -311,7 +323,7 @@ export const defaultSurvey: Survey = {
             ])
           },
           q6_7: {
-            title: '你查过大概需要什么条件吗？',
+            title: '你查过目标方向对学历、英语或证书的要求吗？',
             options: choice('q16', [
               ['查过', null],
               ['知道大概', null],
@@ -323,42 +335,55 @@ export const defaultSurvey: Survey = {
       }
     },
     {
-      id: 'q17',
+      id: 'q24',
       code: 'Q17',
       groupId: 'p4',
-      title: '四级考过几次',
+      title: '你觉得英语对你未来有多重要',
+      hint: '0 到 10 分，越靠右越重要',
+      type: 'number',
+      required: true,
+      range: { min: 0, max: 10, step: 1 }
+    },
+    {
+      id: 'q17',
+      code: 'Q18',
+      groupId: 'p4',
+      title: '你现在的英语学到哪一步',
       type: 'single',
       required: true,
       options: choice('q17', [
-        ['0 次', null],
-        ['1 次', null],
-        ['2 次', null],
-        ['3 次以上', null]
+        ['四级还没过，正在备考四级', null],
+        ['四级已经过了，正在备考六级', null],
+        ['六级已经过了，在准备更高级别的考试（雅思 / 托福 / 考研英语 / 专八）', null]
       ])
     },
     {
       id: 'q17b',
-      code: 'Q17b',
+      code: 'Q19',
       groupId: 'p4',
-      title: '四级最高多少分',
+      title: '最近一次四级分数段',
+      hint: '按最高一次的成绩选',
       type: 'single',
       required: false,
-      disableIf: { question: 'q17', when: ['q17_1'] },
+      showIfAll: [{ question: 'q17', when: ['q17_2', 'q17_3'] }],
       options: choice('q17b', [
-        ['425 以下', null],
-        ['425–500', null],
+        ['425–450', null],
+        ['450–500', null],
         ['500–550', null],
-        ['550+', null]
+        ['550 以上', null]
       ])
     },
     {
       id: 'q18',
-      code: 'Q18',
+      code: 'Q20',
       groupId: 'p4',
       title: '上次四级哪部分丢分最多',
       type: 'single',
       required: false,
-      showIf: { question: 'q17', when: ['q17_2', 'q17_3', 'q17_4'] },
+      showIfAll: [
+        { question: 'q17', when: ['q17_2', 'q17_3'] },
+        { question: 'q24', min: 6 }
+      ],
       options: choice('q18', [
         ['听力', null],
         ['阅读', null],
@@ -368,90 +393,8 @@ export const defaultSurvey: Survey = {
       ])
     },
     {
-      id: 'q19',
-      code: 'Q19',
-      groupId: 'p4',
-      title: '你现在怎么学英语',
-      type: 'multi',
-      required: true,
-      options: choice('q19', [
-        ['背单词 App', null],
-        ['刷真题', null],
-        ['看剧看视频', null],
-        ['跟课', null],
-        ['几乎没学', null],
-        ['其他', null]
-      ])
-    },
-    {
-      id: 'q20',
-      code: 'Q20',
-      groupId: 'p4',
-      title: '一周花多少时间在英语上',
-      type: 'single',
-      required: true,
-      options: choice('q20', [
-        ['少于 3 小时', null],
-        ['3–7 小时', null],
-        ['7–14 小时', null],
-        ['14 小时以上', null]
-      ])
-    },
-    {
-      id: 'q21',
-      code: 'Q21',
-      groupId: 'p4',
-      title: '背单词的情况',
-      type: 'single',
-      required: true,
-      options: choice('q21', [
-        ['每天背、能记住', null],
-        ['背了忘、忘了背', null],
-        ['考前突击', null],
-        ['基本不背', null]
-      ])
-    },
-    {
-      id: 'q22',
-      code: 'Q22',
-      groupId: 'p4',
-      title: '你的口语和听力',
-      type: 'single',
-      required: true,
-      options: choice('q22', [
-        ['完全开不了口，四级听力也基本听不懂', null],
-        ['开不了口，但能听懂一些简单对话', null],
-        ['能听懂，也能说几句，但不流利', null],
-        ['能日常交流，比较自如', null]
-      ])
-    },
-    {
-      id: 'q23',
-      code: 'Q23',
-      groupId: 'p4',
-      title: '你知道你的目标对英语的具体要求吗',
-      type: 'single',
-      required: true,
-      options: choice('q23', [
-        ['查过具体分数或证书要求', null],
-        ['知道大概要考，但没查细节', null],
-        ['只知道英语重要，不知道具体要求', null],
-        ['觉得我的专业跟英语关系不大', null]
-      ])
-    },
-    {
-      id: 'q24',
-      code: 'Q24',
-      groupId: 'p4',
-      title: '你觉得英语对你未来有多重要',
-      hint: '0 到 10 分，越靠右越重要',
-      type: 'number',
-      required: true,
-      range: { min: 0, max: 10, step: 1 }
-    },
-    {
       id: 'q25',
-      code: 'Q25',
+      code: 'Q21',
       groupId: 'p4',
       title: '你觉得英语学不好最主要的原因是',
       hint: '最多选 2 个',
@@ -464,7 +407,70 @@ export const defaultSurvey: Survey = {
         ['没人教方法', null],
         ['坚持不下来', null],
         ['不知道学了有什么用', null],
-        ['基础太差', null]
+        ['基础太差', null],
+        ['不知道怎么开始', null]
+      ])
+    },
+    {
+      id: 'q19',
+      code: 'Q22',
+      groupId: 'p4',
+      title: '你现在怎么学英语',
+      type: 'multi',
+      required: true,
+      showIfAll: [{ question: 'q24', min: 6 }],
+      options: choice('q19', [
+        ['背单词 App', null],
+        ['刷真题', null],
+        ['看剧看视频', null],
+        ['跟课', null],
+        ['几乎没学', null],
+        ['其他', null]
+      ])
+    },
+    {
+      id: 'q20',
+      code: 'Q23',
+      groupId: 'p4',
+      title: '一周花多少时间在英语上',
+      type: 'single',
+      required: true,
+      showIfAll: [{ question: 'q24', min: 6 }],
+      options: choice('q20', [
+        ['少于 3 小时', null],
+        ['3–7 小时', null],
+        ['7–14 小时', null],
+        ['14 小时以上', null]
+      ])
+    },
+    {
+      id: 'q21',
+      code: 'Q24',
+      groupId: 'p4',
+      title: '背单词的情况',
+      type: 'single',
+      required: true,
+      showIfAll: [{ question: 'q24', min: 6 }],
+      options: choice('q21', [
+        ['每天背、能记住', null],
+        ['背了忘、忘了背', null],
+        ['考前突击', null],
+        ['基本不背', null]
+      ])
+    },
+    {
+      id: 'q22',
+      code: 'Q25',
+      groupId: 'p4',
+      title: '你的口语和听力',
+      type: 'single',
+      required: true,
+      showIfAll: [{ question: 'q24', min: 6 }],
+      options: choice('q22', [
+        ['完全开不了口，四级听力也基本听不懂', null],
+        ['开不了口，但能听懂一些简单对话', null],
+        ['能听懂，也能说几句，但不流利', null],
+        ['能日常交流，比较自如', null]
       ])
     },
     {
@@ -476,7 +482,8 @@ export const defaultSurvey: Survey = {
       type: 'text',
       required: true,
       placeholder: '一句话也行'
-    }
+    },
+
   ],
   dimensions: [],
   tiers: [
