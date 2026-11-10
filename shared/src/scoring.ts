@@ -18,17 +18,32 @@ export function rawScore(question: Question, value: AnswerValue): number | null 
   return null
 }
 
+// 同一个维度下可能混着 1—5 分和 1—10 分的题（比如学校档位）。
+// 计分前先按每题自己的满分折算成 5 分制，避免满分高的题把维度分拉爆。
+function questionMax(question: Question): number | null {
+  const scores = question.options
+    ?.map((option) => option.score)
+    .filter((score): score is number => typeof score === 'number')
+  if (!scores?.length) return null
+  return Math.max(...scores)
+}
+
 export function computeScores(survey: Survey, answers: Answers): ScoreResult {
   const detail: Record<string, number | null> = {}
+  const normalized: Record<string, number | null> = {}
 
   for (const question of survey.questions) {
-    detail[question.id] = rawScore(question, answers[question.id] ?? null)
+    const score = rawScore(question, answers[question.id] ?? null)
+    detail[question.id] = score
+    const max = questionMax(question)
+    normalized[question.id] =
+      score !== null && max ? (score / max) * 5 : null
   }
 
   const dimensions = survey.dimensions.map((dimension) => {
     const values = survey.questions
       .filter((q) => q.dimension === dimension.key)
-      .map((q) => detail[q.id])
+      .map((q) => normalized[q.id])
       .filter((v): v is number => typeof v === 'number')
 
     const average = values.length

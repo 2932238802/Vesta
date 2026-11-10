@@ -326,6 +326,12 @@ function insertAfter(questions: Survey['questions'], afterId: string, question: 
 }
 
 function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
+  // 文档版问卷（《规划自测问卷-设计文档》）：以 q1 为标记，旧问卷整份替换。
+  // 题目、分组、计分、报告方式全换，不再沿用旧的三段/九维结构。
+  if (!survey.questions?.some((q) => q.id === 'q1')) {
+    return { survey: { ...defaultSurvey, id: survey.id }, changed: true }
+  }
+
   const questions = [...survey.questions]
   let changed = false
 
@@ -342,6 +348,25 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
     const next = canonical.find((q) => q.id === id)
     if (next && !questions.some((q) => q.id === id)) {
       insertAfter(questions, afterId, next)
+      changed = true
+    }
+  }
+
+  // A1 补「双一流」：只认原来那套默认选项，插在 985/211 后面；
+  // 管理员自己改过选项就不动，避免把自定义内容覆盖掉。
+  const a1 = questions.find((q) => q.id === 'a1')
+  const canonicalA1 = canonical.find((q) => q.id === 'a1')
+  if (a1?.options && canonicalA1?.options) {
+    const labels = a1.options.map((option) => option.label)
+    const syl = canonicalA1.options.find((option) => option.label === '双一流')
+    if (
+      syl &&
+      !labels.includes('双一流') &&
+      labels.includes('985 / 211') &&
+      labels.includes('双非一本')
+    ) {
+      const index = a1.options.findIndex((option) => option.label === '985 / 211')
+      a1.options.splice(index + 1, 0, { ...syl })
       changed = true
     }
   }
@@ -450,19 +475,81 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
       a10.otherPlaceholder = canonicalA10.otherPlaceholder
       changed = true
     }
-    // 兼容旧版本里写死的选项名，统一到新的展示文案。
-    const englishGoal = a10.options?.find(
-      (option) =>
-        option.label === '英语考试或使用' || option.label === '四六级雅思准备'
+    // 兼容旧版本里写死的选项名，统一到新的展示文案。雅思拆成单独一档，这条只剩四六级。
+    const englishGoal = a10.options?.find((option) =>
+      ['英语考试或使用', '四六级雅思准备', '四级、六级或雅思准备'].includes(option.label)
     )
     if (englishGoal) {
-      englishGoal.label = '四级、六级或雅思准备'
+      englishGoal.label = '四级、六级准备'
       changed = true
+    }
+    const goalOptions = a10.options
+    if (goalOptions) {
+      const goalLabels = goalOptions.map((option) => option.label)
+      const ielts = canonicalA10.options.find((option) => option.label === '雅思准备')
+      if (
+        ielts &&
+        !goalLabels.includes('雅思准备') &&
+        goalLabels.includes('四级、六级准备')
+      ) {
+        const index = goalOptions.findIndex((option) => option.label === '四级、六级准备')
+        goalOptions.splice(index + 1, 0, { ...ielts })
+        changed = true
+      }
     }
     if (a10.notePlaceholder === '例：明年 3 月前拿到六级 500 分；没想清楚也可以写「不知道」') {
       delete a10.notePlaceholder
       changed = true
     }
+  }
+
+  // A12 的原因选项以前太笼统，换成能对上 A9 方向、A10 目标的具体处境。
+  // 只认旧默认那套，管理员改过就不动；a12_1/4/5/6/8 含义没变，老答卷还能读出来。
+  const a12 = questions.find((q) => q.id === 'a12')
+  const canonicalA12 = canonical.find((q) => q.id === 'a12')
+  if (a12 && canonicalA12) {
+    const labels = (a12.options ?? []).map((option) => option.label)
+    if (
+      a12.options &&
+      canonicalA12.options &&
+      (labels.includes('已有明确考试或申请节点') ||
+        labels.includes('某次经历受到影响') ||
+        labels.includes('看到同学行动'))
+    ) {
+      a12.options = canonicalA12.options.map((option) => ({ ...option }))
+      changed = true
+    }
+    // 已经换成新原因、但还没有「其他」这一档的，补在最后。
+    const nextLabels = (a12.options ?? []).map((option) => option.label)
+    const otherOption = canonicalA12.options?.find((option) => option.label === '其他')
+    if (
+      a12.options &&
+      otherOption &&
+      !nextLabels.includes('其他') &&
+      nextLabels.includes('还没想清楚，只是觉得现在该动起来')
+    ) {
+      a12.options.push({ ...otherOption })
+      changed = true
+    }
+    if (a12.hint === '多选，最多 2 项，不计分') {
+      a12.hint = canonicalA12.hint
+      changed = true
+    }
+  }
+
+  // B 组从 1—5 分自评改成若干道客观事实题：旧的整组替换。
+  // B 组改成客观事实题：旧版（1—5 分自评，或只问一题的过渡版）整组替换。
+  // 用 b1a 当新版标记：B 组里没有 b1a，就认为它还是旧版，整组换掉。
+  const hasNewB = questions.some((q) => q.groupId === 'b' && q.id === 'b1a')
+  if (!hasNewB) {
+    const freshB = canonical
+      .filter((q) => q.groupId === 'b')
+      .map((q) => ({ ...q, options: q.options?.map((option) => ({ ...option })) }))
+    const kept = questions.filter((q) => q.groupId !== 'b')
+    const insertAt = kept.findIndex((q) => q.groupId === 'c')
+    kept.splice(insertAt === -1 ? kept.length : insertAt, 0, ...freshB)
+    questions.splice(0, questions.length, ...kept)
+    changed = true
   }
 
   for (const id of ['c1', 'c2']) {
@@ -503,7 +590,7 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
     changed = true
   }
 
-  for (const removedId of ['a5', 'a13', 'a15', 'c3', 'd5']) {
+  for (const removedId of ['a5', 'a13', 'a15', 'a16', 'c3', 'd5']) {
     const index = questions.findIndex((q) => q.id === removedId)
     if (index >= 0) {
       questions.splice(index, 1)
@@ -516,16 +603,25 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
     changed = true
   }
 
-  const groupC = survey.groups.find((group) => group.id === 'c')
-  const groups =
-    groupC?.subtitle === '没有标准答案，选你真正相信的'
-      ? survey.groups.map((group) =>
-          group.id === 'c'
-            ? { ...group, subtitle: '每一项都按 1 到 5 分打分，分数会计入报告判定' }
-            : group
-        )
-      : survey.groups
-  if (groups !== survey.groups) changed = true
+  // 分组说明：C 组旧文案，B 组从“打 1—5 分”改成“选实际情况”。
+  const groups = survey.groups.map((group) => {
+    if (group.id === 'c' && group.subtitle === '没有标准答案，选你真正相信的') {
+      return { ...group, subtitle: '每一项都按 1 到 5 分打分，分数会计入报告判定' }
+    }
+    if (
+      group.id === 'b' &&
+      (group.subtitle === '每题 1 到 5 分，按第一反应选，不用想太久' ||
+        group.subtitle === '每题选一个最接近你现状的选项，不用纠结对错')
+    ) {
+      return { ...group, subtitle: '每题都选实际情况，选项都是可以核对的事实' }
+    }
+    if (group.id === 'a' && group.subtitle === '这些信息只用来调整参照线，学校类型不计入总分') {
+      // 学校档位现在在 B 组计分，这句「不计入总分」已经不准了。
+      return { ...group, subtitle: '先补背景和目标，没有对错，按真实情况选' }
+    }
+    return group
+  })
+  if (groups.some((group, index) => group !== survey.groups[index])) changed = true
 
   return {
     survey: changed ? { ...survey, questions, groups } : survey,
@@ -761,6 +857,7 @@ function migrate(): void {
             JSON.stringify(survey),
             surveyId
           )
+          console.log(`[db] 问卷已升级到 v${version}（${survey.questions.length} 题）`)
         }
       } catch {
         // 数据损坏时保持原样，管理员可以重新发布问卷

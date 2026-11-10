@@ -4,11 +4,13 @@ import type {
   Answers,
   ReportOverrides,
   ReportPayload,
-  ReportResponse
+  ReportResponse,
+  ScoreResult
 } from '../../../shared/src/types'
 import { computeScores } from '../../../shared/src/scoring'
 import { buildReport } from '../../../shared/src/report'
 import { buildAiReport } from '../../../shared/src/ai'
+import { buildDocReport, docPriority } from '../../../shared/src/doc'
 import { validateAnswers } from '../../../shared/src/validate'
 import {
   db,
@@ -168,7 +170,14 @@ publicRouter.post(
     }
 
     const answers = validation.answers as Answers
-    const scores = computeScores(survey, answers)
+    const scores: ScoreResult =
+      survey.reportMode === 'doc'
+        ? (() => {
+            const priority = docPriority(survey, answers)
+            const total = priority === 'A' ? 82 : priority === 'B' ? 60 : 25
+            return { total, tier: priority, dimensions: [], detail: {} }
+          })()
+        : computeScores(survey, answers)
 
     const timingInput = (req.body?.timing ?? {}) as Record<string, unknown>
     const timing: Record<string, number> = {}
@@ -219,7 +228,7 @@ publicRouter.post(
     }
 
     recordEvent(invite.id, 'submit')
-    startReportGeneration(id)
+    if (survey.reportMode !== 'doc') startReportGeneration(id)
     res.json({ slug })
   })
 )
@@ -244,6 +253,23 @@ publicRouter.get(
     const scores = parseJson(submission.scores, computeScores(survey, {}))
     const overrides = parseJson<ReportOverrides>(submission.overrides, {})
     const name = invite?.name ?? ''
+
+    // 规则化报告：直接按答案算出，不等 AI，也不走 AI 状态机。
+    // 只对文档版问卷（且答案是 q1 开头的字段）生效，旧问卷的存量答卷仍走原路径。
+    if (survey.reportMode === 'doc' && 'q1' in answers) {
+      if (req.query.poll !== '1') recordEvent(submission.invite_id, 'report_view')
+      const report = buildDocReport({
+        survey,
+        answers,
+        name,
+        slug: submission.slug,
+        createdAt: submission.created_at,
+        claimed: Boolean(submission.claimed_at)
+      })
+      const response: ReportResponse = { status: 'ready', report, name }
+      res.json(response)
+      return
+    }
 
     const buildFallback = () =>
       buildReport({

@@ -1,4 +1,5 @@
 import type { AnswerValue, Answers, ModuleKey, Question, ReportTemplate, Survey } from './types'
+import { resolveQuestion } from './doc'
 
 const MODULE_KEYS: ModuleKey[] = [
   'hero',
@@ -48,20 +49,27 @@ export function validateSurvey(survey: Survey): string[] {
       errors.push(`题目「${q.title}」指向了不存在的维度`)
     }
     if (q.type === 'single' || q.type === 'multi' || q.type === 'choiceText') {
-      if (!q.options || q.options.length < 2) {
+      const optionLists = q.branches
+        ? Object.values(q.branches.map).map((branch) => branch.options)
+        : q.options
+          ? [q.options]
+          : []
+      if (optionLists.length === 0 || optionLists.some((list) => list.length < 2)) {
         errors.push(`题目「${q.title}」至少需要两个选项`)
       } else {
-        const optionIds = new Set<string>()
-        for (const option of q.options) {
-          if (!option.id || !option.label?.trim()) {
-            errors.push(`题目「${q.title}」有空白选项`)
-          }
-          if (optionIds.has(option.id)) {
-            errors.push(`题目「${q.title}」选项 id 重复`)
-          }
-          optionIds.add(option.id)
-          if (option.score !== null && !Number.isFinite(option.score)) {
-            errors.push(`题目「${q.title}」的选项分值不是数字`)
+        for (const options of optionLists) {
+          const optionIds = new Set<string>()
+          for (const option of options) {
+            if (!option.id || !option.label?.trim()) {
+              errors.push(`题目「${q.title}」有空白选项`)
+            }
+            if (optionIds.has(option.id)) {
+              errors.push(`题目「${q.title}」选项 id 重复`)
+            }
+            optionIds.add(option.id)
+            if (option.score !== null && !Number.isFinite(option.score)) {
+              errors.push(`题目「${q.title}」的选项分值不是数字`)
+            }
           }
         }
       }
@@ -116,17 +124,25 @@ export function validateAnswers(survey: Survey, input: unknown): AnswerValidatio
   const answers: Answers = {}
 
   for (const question of survey.questions) {
+    const resolved = resolveQuestion(survey, source as Answers, question)
     const value = source[question.id]
 
+    // 被跳过的题（showIf 不满足）不要求回答；被置灰的题（disableIf 命中）不计必答。
+    if (!resolved.visible) {
+      answers[question.id] = null
+      continue
+    }
+    const required = question.required && !resolved.disabled
+
     if (isEmptyValue(value as AnswerValue)) {
-      if (question.required) missing.push(question.id)
+      if (required) missing.push(question.id)
       answers[question.id] = null
       continue
     }
 
     if (question.type === 'single') {
-      if (typeof value !== 'string' || !question.options?.some((o) => o.id === value)) {
-        errors.push(`题目「${question.title}」的选项无效`)
+      if (typeof value !== 'string' || !resolved.options.some((o) => o.id === value)) {
+        errors.push(`题目「${resolved.title}」的选项无效`)
       } else {
         answers[question.id] = value
       }
@@ -142,14 +158,14 @@ export function validateAnswers(survey: Survey, input: unknown): AnswerValidatio
       const pick = typeof record.choice === 'string' ? record.choice : ''
       const note = typeof record.note === 'string' ? record.note.trim() : ''
       const other = typeof record.other === 'string' ? record.other.trim() : ''
-      const isOther = question.options?.find((o) => o.id === pick)?.label === '其他'
-      if (!question.options?.some((o) => o.id === pick)) {
-        errors.push(`题目「${question.title}」的选项无效`)
+      const isOther = resolved.options.find((o) => o.id === pick)?.label === '其他'
+      if (!resolved.options.some((o) => o.id === pick)) {
+        errors.push(`题目「${resolved.title}」的选项无效`)
       } else if (isOther && !other) {
-        errors.push(`题目「${question.title}」选了其他，请填写具体内容`)
+        errors.push(`题目「${resolved.title}」选了其他，请填写具体内容`)
         missing.push(question.id)
       } else if (note.length > 300 || other.length > 300) {
-        errors.push(`题目「${question.title}」填写过长`)
+        errors.push(`题目「${resolved.title}」填写过长`)
       } else {
         answers[question.id] = isOther ? { choice: pick, note, other } : { choice: pick, note }
       }
@@ -158,13 +174,13 @@ export function validateAnswers(survey: Survey, input: unknown): AnswerValidatio
 
     if (question.type === 'multi') {
       if (!Array.isArray(value) || value.some((v) => typeof v !== 'string')) {
-        errors.push(`题目「${question.title}」的选项无效`)
+        errors.push(`题目「${resolved.title}」的选项无效`)
       } else {
         const ids = [...new Set(value as string[])]
-        if (ids.some((id) => !question.options?.some((o) => o.id === id))) {
-          errors.push(`题目「${question.title}」包含无效选项`)
+        if (ids.some((id) => !resolved.options.some((o) => o.id === id))) {
+          errors.push(`题目「${resolved.title}」包含无效选项`)
         } else if (question.maxSelect && ids.length > question.maxSelect) {
-          errors.push(`题目「${question.title}」最多选 ${question.maxSelect} 项`)
+          errors.push(`题目「${resolved.title}」最多选 ${question.maxSelect} 项`)
         } else {
           answers[question.id] = ids
         }

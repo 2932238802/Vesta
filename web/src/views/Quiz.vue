@@ -1,19 +1,17 @@
 <template>
   <div class="quiz" @focusin="onFocusIn">
     <header class="top">
-      <span v-if="step > 0" class="save-hint">进度自动保存在本机</span>
-      <span v-else />
-      <span class="step">
-        {{ pad(step + 1) }} <span>/ {{ pad(totalSteps) }}</span>
-      </span>
+      <button v-if="step > 0" class="back-mini" type="button" @click="back">← 上一题</button>
+      <span v-else class="save-hint">进度自动保存在本机</span>
+      <span class="step">已答 {{ answeredCount }} / 27</span>
     </header>
 
     <div class="progress">
-      <span :style="{ width: `${progress}%` }" />
+      <span :style="{ width: `${progressPct}%` }" />
     </div>
 
     <main v-if="loading" class="state">
-      <p class="quiet">正在打开问卷</p>
+      <p class="quiet">正在打开</p>
     </main>
 
     <main v-else-if="error && !survey" class="state">
@@ -22,60 +20,51 @@
       <RouterLink class="btn ghost" to="/">回到首页</RouterLink>
     </main>
 
-    <template v-else-if="survey && group">
-      <main class="sheet">
-        <div v-if="restored" class="restore">
-          <p>
-            已恢复上次的填写进度：第 {{ step + 1 }} 组，必答已填
-            {{ answeredRequired }} / {{ requiredTotal }} 题。
-          </p>
-          <div class="restore-actions">
-            <button class="btn quiet small" type="button" @click="restored = false">
-              继续填写
-            </button>
-            <button class="btn ghost small" type="button" @click="restart">
-              重新填写
-            </button>
-          </div>
+    <template v-else-if="survey && current && resolved">
+      <main v-if="restored" class="restore">
+        <p>已恢复上次的填写进度，从这一题继续。</p>
+        <div class="restore-actions">
+          <button class="btn quiet small" type="button" @click="restored = false">继续填写</button>
+          <button class="btn ghost small" type="button" @click="restart">重新填写</button>
         </div>
+      </main>
 
-        <div :key="group.id" class="group fade-in">
-          <p class="eyebrow">第 {{ step + 1 }} 组 · {{ group.code }}</p>
-          <h1 class="serif">{{ group.title }}</h1>
-          <p v-if="group.subtitle" class="sub">{{ group.subtitle }}</p>
+      <main class="sheet">
+        <div :key="current.id" class="group fade-in">
+          <p class="eyebrow">第 {{ step + 1 }} 题 · {{ current.code }}</p>
+          <h1 class="serif">{{ resolved.title }}</h1>
+          <p v-if="resolved.hint" class="sub">{{ resolved.hint }}</p>
 
-          <div class="questions">
-            <div v-for="(question, i) in groupQuestions" :id="`q-${question.id}`" :key="question.id">
-              <QuestionField
-                v-model="answers[question.id]"
-                :question="question"
-                :index="globalIndex(question.id)"
-                :invalid="invalid.includes(question.id)"
-                @touch="touch"
-              />
-            </div>
+          <div class="questions" :id="`q-${current.id}`">
+            <p v-if="resolved.disabled" class="disabled-note">还没考过，跳过这一题</p>
+            <QuestionField
+              v-model="answers[current.id]"
+              :question="currentQuestion"
+              :index="step + 1"
+              :invalid="invalid.includes(current.id)"
+              :disabled="resolved.disabled"
+              @touch="touch"
+            />
           </div>
         </div>
       </main>
 
       <footer class="foot">
-        <p
-          v-if="showMissingHint && missingInCurrent.length"
-          class="missing-hint"
-          aria-live="polite"
-        >
-          本组还有 {{ missingInCurrent.length }} 道必答题没完成
-        </p>
         <div class="foot-inner">
-          <button v-if="step > 0" class="btn ghost back" type="button" @click="back">
-            上一组
-          </button>
+          <button v-if="step > 0" class="btn ghost back" type="button" @click="back">上一题</button>
           <span v-else class="save-hint">草稿自动保存在本机</span>
           <div class="spacer" />
-          <button class="btn next" type="button" :disabled="submitting" @click="next">
-            {{ submitting ? '正在生成报告' : lastStep ? '提交并生成报告' : '下一组' }}
+          <button
+            v-if="!isSingle || resolved.disabled"
+            class="btn next"
+            type="button"
+            :disabled="submitting"
+            @click="next"
+          >
+            {{ submitting ? '正在生成报告' : isLast ? '提交并生成报告' : '下一题' }}
           </button>
         </div>
+        <p v-if="showMissingHint" class="missing-hint">这一题还没完成</p>
         <p v-if="error" class="error" aria-live="polite">{{ error }}</p>
       </footer>
     </template>
@@ -95,7 +84,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import type { Answers, InvitePayload, Question, Survey } from '@/api'
 import { ApiError, api, track } from '@/api'
-import { isEmptyValue, validateAnswers } from '@shared/validate'
+import { isEmptyValue } from '@shared/validate'
+import { resolveQuestion, visibleQuestions } from '@shared/doc'
 import QuestionField from '@/components/QuestionField.vue'
 
 const route = useRoute()
@@ -116,50 +106,44 @@ const showMissingHint = ref(false)
 
 const draftKey = `vesta:draft:${token}`
 let saveTimer: ReturnType<typeof setTimeout> | undefined
+let autoTimer: ReturnType<typeof setTimeout> | undefined
+let autoAdvancedStep = -1
 let activeId: string | null = null
 let activeSince = 0
 let submitted = false
 let exitTracked = false
 
-const totalSteps = computed(() => survey.value?.groups.length ?? 1)
-const group = computed(() => survey.value?.groups[step.value] ?? null)
-const groupQuestions = computed<Question[]>(() => {
-  if (!survey.value || !group.value) return []
-  return survey.value.questions.filter((q) => q.groupId === group.value!.id)
+const visible = computed<Question[]>(() =>
+  survey.value ? visibleQuestions(survey.value, answers.value) : []
+)
+const current = computed(() => visible.value[step.value] ?? null)
+const resolved = computed(() =>
+  survey.value && current.value ? resolveQuestion(survey.value, answers.value, current.value) : null
+)
+const currentQuestion = computed<Question | null>(() => {
+  if (!current.value || !resolved.value) return null
+  return {
+    ...current.value,
+    title: resolved.value.title,
+    hint: resolved.value.hint,
+    options: resolved.value.options
+  }
 })
-const lastStep = computed(() => step.value >= totalSteps.value - 1)
-const requiredQuestions = computed(
-  () => survey.value?.questions.filter((question) => question.required) ?? []
-)
-const requiredTotal = computed(() => requiredQuestions.value.length)
-const validation = computed(() =>
-  survey.value
-    ? validateAnswers(survey.value, answers.value)
-    : { missing: [] as string[], errors: [] as string[], ok: true }
-)
-const missingIds = computed(() => new Set(validation.value.missing))
-const answeredRequired = computed(
-  () => requiredTotal.value - validation.value.missing.length
-)
-const progress = computed(() =>
-  requiredTotal.value
-    ? Math.round((answeredRequired.value / requiredTotal.value) * 100)
-    : 0
-)
+const isSingle = computed(() => current.value?.type === 'single')
+const isLast = computed(() => step.value >= visible.value.length - 1)
 
-function pad(value: number): string {
-  return String(value).padStart(2, '0')
-}
-
-function globalIndex(id: string): number {
-  return (survey.value?.questions.findIndex((q) => q.id === id) ?? 0) + 1
-}
+const answeredCount = computed(() => {
+  if (!survey.value) return 0
+  return visible.value.filter((question) => {
+    const r = resolveQuestion(survey.value!, answers.value, question)
+    return !r.disabled && !isEmptyValue(answers.value[question.id])
+  }).length
+})
+const progressPct = computed(() => Math.min(100, Math.round((answeredCount.value / 27) * 100)))
 
 function touch(id: string) {
   const now = Date.now()
-  if (activeSince) {
-    timing.value[id] = (timing.value[id] ?? 0) + (now - activeSince)
-  }
+  if (activeSince) timing.value[id] = (timing.value[id] ?? 0) + (now - activeSince)
   activeId = id
   activeSince = now
   scheduleSave()
@@ -171,24 +155,6 @@ function onFocusIn(event: FocusEvent) {
   window.setTimeout(() => {
     target.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, 280)
-}
-
-function trackExit() {
-  if (submitted || exitTracked || !survey.value) return
-  const answeredCount = survey.value.questions.filter(
-    (question) => !isEmptyValue(answers.value[question.id])
-  ).length
-  if (answeredCount === 0 && step.value === 0) return
-  const active = groupQuestions.value.find((question) => question.id === activeId)
-  const questionId = active?.id ?? groupQuestions.value[0]?.id
-  if (!questionId) return
-  exitTracked = true
-  track(token, 'quiz_exit', {
-    questionId,
-    step: step.value,
-    answered: answeredCount,
-    total: survey.value.questions.length
-  })
 }
 
 function flushTiming() {
@@ -207,14 +173,11 @@ function scheduleSave() {
 
 function saveDraft() {
   if (!survey.value) return
-  const draft = {
-    surveyId: survey.value.id,
-    answers: answers.value,
-    step: step.value,
-    timing: timing.value
-  }
   try {
-    localStorage.setItem(draftKey, JSON.stringify(draft))
+    localStorage.setItem(
+      draftKey,
+      JSON.stringify({ surveyId: survey.value.id, answers: answers.value, step: step.value, timing: timing.value })
+    )
   } catch {
     // 存储不可用时不影响填写
   }
@@ -231,17 +194,12 @@ function restoreDraft() {
       timing?: Record<string, number>
     }
     if (draft.surveyId !== survey.value?.id) return
-    const filled = draft.answers
-      ? (survey.value?.questions.filter(
-          (question) => !isEmptyValue(draft.answers?.[question.id])
-        ).length ?? 0)
-      : 0
     if (draft.answers) answers.value = draft.answers
     if (draft.timing) timing.value = draft.timing
     if (typeof draft.step === 'number') {
-      step.value = Math.min(Math.max(draft.step, 0), totalSteps.value - 1)
+      step.value = Math.min(Math.max(draft.step, 0), Math.max(0, visible.value.length - 1))
     }
-    restored.value = filled > 0
+    restored.value = visible.value.some((question) => !isEmptyValue(answers.value[question.id]))
   } catch {
     // 草稿损坏时丢弃
   }
@@ -249,12 +207,10 @@ function restoreDraft() {
 
 function restart() {
   if (!window.confirm('重新填写会清空本机保存的答案，确定吗？')) return
-  if (saveTimer) {
-    clearTimeout(saveTimer)
-    saveTimer = undefined
-  }
+  if (saveTimer) clearTimeout(saveTimer)
   activeId = null
   activeSince = 0
+  autoAdvancedStep = -1
   answers.value = {}
   timing.value = {}
   step.value = 0
@@ -270,53 +226,41 @@ function restart() {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-function missingInCurrent(): string[] {
-  const ids = new Set(groupQuestions.value.map((question) => question.id))
-  return validation.value.missing.filter((id) => ids.has(id))
+function canAdvance(): boolean {
+  if (!current.value || !resolved.value) return true
+  if (resolved.value.disabled || !current.value.required) return true
+  return !isEmptyValue(answers.value[current.value.id])
 }
 
-function missingAll(): string[] {
-  return validation.value.missing
-}
-
-async function focusFirst(id: string) {
-  await nextTick()
-  const container = document.getElementById(`q-${id}`)
-  container?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  const control = container?.querySelector<HTMLElement>('button, input, textarea, select')
-  control?.focus({ preventScroll: true })
-}
-
-async function next() {
+function advance() {
   if (!survey.value || submitting.value) return
   error.value = ''
   flushTiming()
-
-  const missing = missingInCurrent()
-  if (missing.length) {
-    invalid.value = missing
-    showMissingHint.value = true
-    await focusFirst(missing[0])
+  if (isLast.value) {
+    void submit()
     return
   }
-
-  invalid.value = []
-  showMissingHint.value = false
-  if (group.value) {
-    track(token, 'group_complete', { groupId: group.value.id })
-  }
-
-  if (lastStep.value) {
-    await submit()
-    return
-  }
-
   step.value += 1
   saveDraft()
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
+function next() {
+  if (submitting.value) return
+  if (!canAdvance()) {
+    if (current.value) {
+      invalid.value = [current.value.id]
+      showMissingHint.value = true
+    }
+    return
+  }
+  invalid.value = []
+  showMissingHint.value = false
+  advance()
+}
+
 function back() {
+  if (submitting.value) return
   flushTiming()
   invalid.value = []
   error.value = ''
@@ -327,26 +271,12 @@ function back() {
 }
 
 function jumpToQuestion(id: string) {
-  if (!survey.value) return
-  const target = survey.value.questions.find((question) => question.id === id)
-  if (!target) return
-  const index = survey.value.groups.findIndex((groupItem) => groupItem.id === target.groupId)
+  const index = visible.value.findIndex((question) => question.id === id)
   if (index >= 0) step.value = index
 }
 
 async function submit() {
   if (!survey.value) return
-  const missing = missingAll()
-  if (missing.length) {
-    const target = survey.value.questions.find((q) => q.id === missing[0])
-    jumpToQuestion(missing[0])
-    invalid.value = missing
-    showMissingHint.value = true
-    error.value = `还有 ${missing.length} 道必答题没完成${target ? `，先看 ${target.code}` : ''}`
-    await focusFirst(missing[0])
-    return
-  }
-
   submitting.value = true
   error.value = ''
   try {
@@ -367,29 +297,41 @@ async function submit() {
         // 忽略，回落到普通提示
       }
     }
-
     if (err instanceof ApiError && err.status === 400) {
       const missingIds = Array.isArray(err.details?.missing)
         ? err.details.missing.filter((id): id is string => typeof id === 'string')
         : []
       if (missingIds.length) {
-        const target = survey.value.questions.find((q) => q.id === missingIds[0])
         jumpToQuestion(missingIds[0])
         invalid.value = missingIds
         showMissingHint.value = true
-        error.value = `还有 ${missingIds.length} 道必答题没完成${
-          target ? `，先看 ${target.code}` : ''
-        }`
+        error.value = `还有 ${missingIds.length} 道必答题没完成`
         submitting.value = false
-        await focusFirst(missingIds[0])
         return
       }
     }
-
     error.value = err instanceof Error ? err.message : '提交失败，请再试一次'
     submitting.value = false
   }
 }
+
+// 单选题选中后自动进入下一题；多选题、填空题、数字题用「下一步」确认。
+watch(
+  answers,
+  () => {
+    if (!current.value || current.value.type !== 'single') return
+    if (resolved.value?.disabled) return
+    if (isEmptyValue(answers.value[current.value.id])) return
+    if (autoAdvancedStep === step.value) return
+    autoAdvancedStep = step.value
+    if (autoTimer) clearTimeout(autoTimer)
+    autoTimer = setTimeout(() => {
+      if (autoAdvancedStep !== step.value) return
+      advance()
+    }, 250)
+  },
+  { deep: true }
+)
 
 onMounted(async () => {
   try {
@@ -410,17 +352,28 @@ onMounted(async () => {
 
 watch(answers, () => {
   if (!invalid.value.length && !showMissingHint.value) return
-  const missing = new Set(validation.value.missing)
-  invalid.value = invalid.value.filter((id) => missing.has(id))
-  if (missing.size === 0) {
-    showMissingHint.value = false
-    if (error.value.startsWith('还有')) error.value = ''
-  } else if (error.value.startsWith('还有')) {
-    error.value = ''
-  }
+  const stillMissing = invalid.value.filter((id) => {
+    const question = survey.value?.questions.find((item) => item.id === id)
+    if (!question || !survey.value) return false
+    const r = resolveQuestion(survey.value, answers.value, question)
+    if (!r.visible || r.disabled) return false
+    return isEmptyValue(answers.value[id])
+  })
+  invalid.value = stillMissing
+  if (stillMissing.length === 0) showMissingHint.value = false
 }, { deep: true })
 
 watch([answers, step, timing], scheduleSave, { deep: true })
+
+function trackExit() {
+  if (submitted || exitTracked || !survey.value) return
+  const answered = visible.value.filter((question) => !isEmptyValue(answers.value[question.id])).length
+  if (answered === 0 && step.value === 0) return
+  const questionId = current.value?.id ?? visible.value[0]?.id
+  if (!questionId) return
+  exitTracked = true
+  track(token, 'quiz_exit', { questionId, step: step.value, answered, total: 27 })
+}
 
 function onLeave() {
   trackExit()
@@ -430,6 +383,7 @@ function onLeave() {
 
 onBeforeUnmount(() => {
   if (saveTimer) clearTimeout(saveTimer)
+  if (autoTimer) clearTimeout(autoTimer)
   onLeave()
   window.removeEventListener('beforeunload', onLeave)
 })
@@ -440,17 +394,26 @@ window.addEventListener('beforeunload', onLeave)
 <style scoped>
 .quiz {
   min-height: 100vh;
-  max-width: 700px;
+  max-width: 640px;
   margin: 0 auto;
-  padding: 24px 24px 150px;
+  padding: 20px 24px 160px;
 }
 
 .top {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-bottom: 18px;
+  padding-bottom: 16px;
+}
+
+.back-mini {
+  border: 0;
+  background: none;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
 }
 
 .step {
@@ -460,31 +423,28 @@ window.addEventListener('beforeunload', onLeave)
   letter-spacing: 0.04em;
 }
 
-.step span {
-  color: var(--ink-3);
-}
-
 .progress {
   position: sticky;
   top: 0;
   z-index: 5;
-  height: 2px;
+  height: 3px;
   background: var(--line);
+  border-radius: 2px;
 }
 
 .progress span {
   display: block;
   height: 100%;
   background: var(--accent);
-  transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: width 0.35s ease;
 }
 
 .sheet {
-  padding-top: 44px;
+  padding-top: 40px;
 }
 
 .restore {
-  margin-bottom: 28px;
+  margin: 20px 0 0;
   padding: 16px 18px;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -508,8 +468,9 @@ window.addEventListener('beforeunload', onLeave)
 }
 
 h1 {
-  font-size: clamp(28px, 6vw, 38px);
+  font-size: clamp(24px, 6vw, 32px);
   font-weight: 500;
+  line-height: 1.4;
   letter-spacing: 0.01em;
 }
 
@@ -522,7 +483,17 @@ h1 {
 }
 
 .questions {
-  margin-top: 36px;
+  margin-top: 30px;
+}
+
+.disabled-note {
+  margin: 22px 0 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px dashed var(--line);
+  font-size: 13px;
+  color: var(--ink-3);
 }
 
 .foot {
@@ -531,7 +502,6 @@ h1 {
   right: 0;
   bottom: 0;
   z-index: 10;
-  background: var(--paper);
   background: color-mix(in srgb, var(--paper) 92%, transparent);
   backdrop-filter: blur(10px);
   border-top: 1px solid var(--line);
@@ -539,7 +509,7 @@ h1 {
 }
 
 .foot-inner {
-  max-width: 652px;
+  max-width: 640px;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -555,21 +525,25 @@ h1 {
   padding: 0 18px;
 }
 
+.spacer {
+  flex: 1;
+}
+
 .save-hint {
   font-size: 11.5px;
   color: var(--ink-3);
 }
 
 .missing-hint {
-  max-width: 652px;
-  margin: 0 auto 10px;
+  max-width: 640px;
+  margin: 10px auto 0;
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--danger);
   text-align: center;
 }
 
 .error {
-  max-width: 652px;
+  max-width: 640px;
   margin: 10px auto 0;
   font-size: 12px;
   color: var(--danger);
@@ -614,29 +588,28 @@ h1 {
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 0 var(--accent-soft);
   animation: pulse 1.4s infinite;
 }
 
 @keyframes pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(47, 93, 70, 0.22);
+    box-shadow: 0 0 0 0 rgba(47, 108, 158, 0.25);
   }
   70% {
-    box-shadow: 0 0 0 18px rgba(47, 93, 70, 0);
+    box-shadow: 0 0 0 18px rgba(47, 108, 158, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(47, 93, 70, 0);
+    box-shadow: 0 0 0 0 rgba(47, 108, 158, 0);
   }
 }
 
 @media (max-width: 560px) {
   .quiz {
-    padding: 20px 20px 140px;
+    padding: 16px 18px 150px;
   }
 
   .sheet {
-    padding-top: 34px;
+    padding-top: 30px;
   }
 
   .foot {
@@ -647,10 +620,6 @@ h1 {
   .next {
     min-width: 0;
     flex: 1;
-  }
-
-  .save-hint {
-    display: none;
   }
 }
 </style>

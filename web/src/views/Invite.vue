@@ -21,10 +21,6 @@
         <p v-for="line in introLines" :key="line">{{ line }}</p>
       </div>
 
-      <p class="meta">
-        {{ invite.survey.questions.length }} 道题 · 大约 {{ invite.survey.estimatedMinutes }} 分钟
-      </p>
-
       <button class="btn start" type="button" @click="start">
         {{ draftFilled > 0 ? '继续填写' : '开始填写' }}
       </button>
@@ -164,14 +160,6 @@ h1 {
   font-size: 13px;
   line-height: 1.8;
   color: var(--ink-2);
-}
-
-.meta {
-  margin-top: 18px;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  letter-spacing: 0.04em;
-  color: var(--ink-3);
 }
 
 .start {

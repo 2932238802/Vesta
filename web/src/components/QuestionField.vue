@@ -42,6 +42,7 @@
         class="option"
         :class="{ active: isSelected(option.id) }"
         :aria-pressed="isSelected(option.id)"
+        :disabled="disabled"
         @click="selectOption(option.id)"
       >
         <span class="dot" />
@@ -57,6 +58,7 @@
         class="option"
         :class="{ active: isChecked(option.id) }"
         :aria-pressed="isChecked(option.id)"
+        :disabled="disabled"
         @click="toggle(option.id)"
       >
         <span class="box" />
@@ -135,11 +137,28 @@
     </div>
 
     <div v-else-if="question.type === 'number'" class="number-input">
+      <template v-if="question.range">
+        <div class="slider-row">
+          <input
+            class="slider"
+            type="range"
+            :min="question.range.min"
+            :max="question.range.max"
+            :step="question.range.step"
+            :value="typeof modelValue === 'number' ? modelValue : question.range.min"
+            :disabled="disabled"
+            @input="updateNumber(($event.target as HTMLInputElement).value)"
+          />
+          <span class="slider-value">{{ typeof modelValue === 'number' ? modelValue : question.range.min }}</span>
+        </div>
+      </template>
       <input
+        v-else
         class="input"
         type="number"
         inputmode="numeric"
         :value="typeof modelValue === 'number' ? modelValue : ''"
+        :disabled="disabled"
         @input="updateNumber(($event.target as HTMLInputElement).value)"
       />
     </div>
@@ -186,6 +205,7 @@ const props = defineProps<{
   modelValue: AnswerValue
   index?: number
   invalid?: boolean
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -603,6 +623,31 @@ function toggle(id: string) {
   margin-top: 16px;
   padding-left: 34px;
   max-width: 220px;
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 100%;
+}
+
+.slider {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.slider-value {
+  min-width: 28px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .invalid {

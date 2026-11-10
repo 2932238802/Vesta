@@ -1175,6 +1175,9 @@ function sampleAnswers(survey: Survey): Answers {
       option = options.find((o) => o.score === 4) ?? options[options.length - 1]
     } else if (question.role === 'behavior') {
       option = options.find((o) => o.score === options[0]?.score) ?? options[0]
+    } else if (typeof options[0]?.score === 'number') {
+      // B 组客观题在预览里取中间偏上的档位，避免整份预览报告垫底。
+      option = options.find((o) => o.score === 4) ?? options[Math.floor(options.length / 2)]
     }
     if (question.type === 'choiceText') {
       answers[question.id] = {

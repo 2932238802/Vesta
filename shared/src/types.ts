@@ -22,6 +22,12 @@ export interface QuestionOption {
   score: number | null
 }
 
+export interface QuestionBranch {
+  title: string
+  hint?: string
+  options: QuestionOption[]
+}
+
 export interface Question {
   id: string
   code: string
@@ -44,6 +50,14 @@ export interface Question {
   otherPlaceholder?: string
   dimension?: string
   role?: 'self' | 'behavior' | 'context'
+  /** 当指定题目的答案落在 when 里的选项 id 时才显示 */
+  showIf?: { question: string; when: string[] }
+  /** 当指定题目的答案落在 when 里的选项 id 时置灰（不计必答） */
+  disableIf?: { question: string; when: string[] }
+  /** 按另一道题的答案切换整道题面（题面 + 选项） */
+  branches?: { question: string; map: Record<string, QuestionBranch> }
+  /** 数字题的取值范围，用于渲染滑块 */
+  range?: { min: number; max: number; step: number }
 }
 
 export interface Dimension {
@@ -69,6 +83,8 @@ export interface Survey {
   questions: Question[]
   dimensions: Dimension[]
   tiers: TierRule[]
+  /** 报告生成方式：'doc' 走规则化报告，'ai' 走原有 AI 报告（默认） */
+  reportMode?: 'ai' | 'doc'
 }
 
 export type ModuleKey =
