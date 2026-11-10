@@ -166,20 +166,10 @@ export const defaultSurvey: Survey = {
       code: 'Q10',
       groupId: 'p1',
       title: '我眼中的自己',
-      hint: '多选，选最像你的',
-      type: 'multi',
+      hint: '写几个词就行。可以参考：要强的、自信的、阳光的、敏感的、容易受别人影响、内向的、焦虑的、想努力但坚持不住、迷茫的',
+      type: 'text',
       required: true,
-      options: choice('q28', [
-        ['要强的，想证明自己', null],
-        ['自信的，敢试错', null],
-        ['阳光的，情绪稳定', null],
-        ['敏感的，容易想多', null],
-        ['容易受别人影响', null],
-        ['内向的，不太敢开口', null],
-        ['焦虑的，总怕落后', null],
-        ['想努力，但常常坚持不住', null],
-        ['迷茫的，不知道往哪走', null]
-      ])
+      placeholder: '例如：要强，但容易想多'
     },
     {
       id: 'q9',

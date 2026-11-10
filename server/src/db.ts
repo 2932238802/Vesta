@@ -459,14 +459,26 @@ function patchQ27Salary(questions: Survey['questions']): boolean {
   return true
 }
 
-/** Q10「我眼中的自己」补在理想薪资后面。 */
+/** Q10「我眼中的自己」补在理想薪资后面；从多选改成填空时也要改过来。 */
 function patchQ28Self(questions: Survey['questions']): boolean {
-  if (questions.some((q) => q.id === 'q28')) return false
   const canonical = defaultSurvey.questions.find((q) => q.id === 'q28')
+  if (!canonical) return false
+
+  const existing = questions.find((q) => q.id === 'q28')
+  if (existing) {
+    if (existing.type === 'text') return false
+    existing.type = 'text'
+    existing.hint = canonical.hint
+    existing.placeholder = canonical.placeholder
+    delete existing.options
+    delete existing.maxSelect
+    return true
+  }
+
   const anchor = questions.findIndex((q) => q.id === 'q27')
   const fallback = questions.findIndex((q) => q.id === 'q8')
   const at = anchor >= 0 ? anchor : fallback
-  if (!canonical || at < 0) return false
+  if (at < 0) return false
   questions.splice(at + 1, 0, {
     ...canonical,
     options: canonical.options?.map((option) => ({ ...option }))
