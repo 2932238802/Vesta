@@ -1044,6 +1044,40 @@ adminRouter.delete('/submissions/:id', (req, res) => {
   res.json({ ok: true })
 })
 
+adminRouter.post('/roster/batch-delete', (req, res) => {
+  noStore(res)
+  const raw: unknown[] = Array.isArray(req.body?.inviteIds)
+    ? (req.body.inviteIds as unknown[])
+    : []
+  const ids: string[] = []
+  for (const id of raw) {
+    if (typeof id !== 'string' || !id || ids.includes(id)) continue
+    ids.push(id)
+    if (ids.length >= 200) break
+  }
+  if (ids.length === 0) {
+    res.status(400).json({ error: '没有选中要删除的记录' })
+    return
+  }
+
+  let deleted = 0
+  db.exec('BEGIN')
+  try {
+    for (const inviteId of ids) {
+      // 先删答卷，再删邀请；没有答卷的记录直接删邀请。
+      db.prepare('DELETE FROM submissions WHERE invite_id = ?').run(inviteId)
+      const result = db.prepare('DELETE FROM invites WHERE id = ?').run(inviteId)
+      if (Number(result.changes) > 0) deleted += 1
+    }
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+
+  res.json({ ok: true, deleted })
+})
+
 adminRouter.get('/survey', (req, res) => {
   noStore(res)
   const survey = getActiveSurvey()

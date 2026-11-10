@@ -270,6 +270,13 @@ export const api = {
       auth: true
     })
   },
+  batchDeleteRoster(inviteIds: string[]) {
+    return request<{ ok: true; deleted: number }>('/api/admin/roster/batch-delete', {
+      method: 'POST',
+      body: { inviteIds },
+      auth: true
+    })
+  },
   rotateInvite(id: string) {
     return request<{ token: string; path: string }>(`/api/admin/invites/${id}/rotate`, {
       method: 'POST',

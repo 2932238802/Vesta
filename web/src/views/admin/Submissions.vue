@@ -72,6 +72,16 @@
     <div class="toolbar">
       <input v-model="q" class="input search" type="search" placeholder="搜索姓名、备注、渠道" />
       <span class="spacer" />
+      <span v-if="selected.size" class="quiet tiny">已选 {{ selected.size }} 条</span>
+      <button
+        v-if="selected.size"
+        class="btn ghost small danger-btn"
+        type="button"
+        :disabled="batchDeleting"
+        @click="removeSelected"
+      >
+        {{ batchDeleting ? '删除中' : '批量删除' }}
+      </button>
       <span v-if="showDateTones" class="date-hint">表格颜色按邀请日期区分</span>
       <span class="quiet tiny">{{ roster.length }} 人</span>
       <button class="btn ghost small export-btn" type="button" :disabled="exporting" @click="exportCsv">
@@ -105,6 +115,15 @@
         <table class="table roster-table">
           <thead>
             <tr>
+              <th class="select-col">
+                <input
+                  type="checkbox"
+                  :checked="allSelected"
+                  :indeterminate.prop="someSelected"
+                  aria-label="全选"
+                  @change="toggleAll($event)"
+                />
+              </th>
               <th>学员</th>
               <th>阶段</th>
               <th>分数</th>
@@ -117,8 +136,16 @@
             <tr
               v-for="row in roster"
               :key="row.id"
-              :class="[rowTone(row), { unsubmitted: !row.submissionId }]"
+              :class="[rowTone(row), { unsubmitted: !row.submissionId, picked: selected.has(row.id) }]"
             >
+              <td class="select-col">
+                <input
+                  type="checkbox"
+                  :checked="selected.has(row.id)"
+                  :aria-label="`选择 ${row.name || '未命名'}`"
+                  @change="toggleRow(row.id, $event)"
+                />
+              </td>
               <td>
                 <div class="name">{{ row.name || '未命名' }}</div>
                 <div v-if="row.note" class="note">{{ row.note }}</div>
@@ -277,6 +304,50 @@ const toast = ref('')
 const savingStatus = ref('')
 const deletingId = ref('')
 const deletingInviteId = ref('')
+const selected = ref<Set<string>>(new Set())
+const batchDeleting = ref(false)
+
+const allSelected = computed(
+  () => roster.value.length > 0 && selected.value.size === roster.value.length
+)
+const someSelected = computed(
+  () => selected.value.size > 0 && selected.value.size < roster.value.length
+)
+
+function toggleRow(id: string, event: Event) {
+  const next = new Set(selected.value)
+  if ((event.target as HTMLInputElement).checked) next.add(id)
+  else next.delete(id)
+  selected.value = next
+}
+
+function toggleAll(event: Event) {
+  const checked = (event.target as HTMLInputElement).checked
+  selected.value = checked ? new Set(roster.value.map((row) => row.id)) : new Set()
+}
+
+async function removeSelected() {
+  const ids = [...selected.value]
+  if (ids.length === 0) return
+  if (
+    !confirm(
+      `删除选中的 ${ids.length} 条记录？答卷、报告和邀请链接都会一起删掉，删完不能恢复。`
+    )
+  ) {
+    return
+  }
+  batchDeleting.value = true
+  try {
+    await api.batchDeleteRoster(ids)
+    selected.value = new Set()
+    await load()
+    flash(`已删除 ${ids.length} 条记录`)
+  } catch (err) {
+    flash(err instanceof Error ? err.message : '批量删除失败')
+  } finally {
+    batchDeleting.value = false
+  }
+}
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let dateTimer: ReturnType<typeof setTimeout> | undefined
@@ -366,6 +437,9 @@ async function load() {
     roster.value = result.roster
     counts.value = result.counts
     dateOptions.value = result.dates ?? []
+    // 只保留还在列表里的勾选，避免删除后选中计数残留。
+    const visibleIds = new Set(result.roster.map((row) => row.id))
+    selected.value = new Set([...selected.value].filter((id) => visibleIds.has(id)))
   } catch (err) {
     if (requestId !== loadRequest) return
     error.value = err instanceof Error ? err.message : '读取失败'
@@ -865,6 +939,27 @@ onMounted(load)
 
 .row-actions .danger {
   color: var(--danger);
+}
+
+.toolbar .danger-btn {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.select-col {
+  width: 34px;
+  padding-right: 0 !important;
+}
+
+.select-col input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.roster-table tbody tr.picked td {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
 .roster-table tbody tr td {
