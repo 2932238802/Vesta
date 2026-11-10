@@ -16,6 +16,84 @@
       </button>
     </div>
 
+    <div class="group-bar" role="group" aria-label="自定义分组">
+      <button
+        class="group-chip"
+        :class="{ on: groupFilter === '' }"
+        type="button"
+        @click="setGroupFilter('')"
+      >
+        全部 <b>{{ counts.all ?? 0 }}</b>
+      </button>
+      <button
+        class="group-chip"
+        :class="{ on: groupFilter === 'none' }"
+        type="button"
+        @click="setGroupFilter('none')"
+      >
+        未分组 <b>{{ ungrouped }}</b>
+      </button>
+      <button
+        v-for="group in groups"
+        :key="group.id"
+        class="group-chip"
+        :class="{ on: groupFilter === group.id }"
+        type="button"
+        @click="setGroupFilter(group.id)"
+      >
+        {{ group.name }} <b>{{ group.count }}</b>
+      </button>
+      <button class="group-chip ghost" type="button" @click="groupPanelOpen = !groupPanelOpen">
+        管理分组
+      </button>
+    </div>
+
+    <section v-if="groupPanelOpen" class="card group-panel">
+      <header class="group-panel-head">
+        <h2>分组管理</h2>
+        <span class="quiet tiny">每条记录只能在一个分组里</span>
+      </header>
+      <div class="group-create">
+        <input
+          v-model="newGroupName"
+          class="input"
+          type="text"
+          maxlength="24"
+          placeholder="新分组名称，例如：周末班"
+          @keydown.enter.prevent="createGroup"
+        />
+        <button class="btn small" type="button" :disabled="groupSaving" @click="createGroup">
+          新建分组
+        </button>
+      </div>
+      <ul v-if="groups.length" class="group-list">
+        <li v-for="group in groups" :key="group.id" class="group-item">
+          <span class="group-name">{{ group.name }}</span>
+          <span class="quiet tiny">{{ group.count }} 人</span>
+          <span class="group-item-actions">
+            <button class="btn quiet small" type="button" @click="renameGroup(group)">改名</button>
+            <button class="btn quiet small danger" type="button" @click="deleteGroup(group)">
+              删除
+            </button>
+          </span>
+        </li>
+      </ul>
+      <p v-else class="quiet tiny">还没有分组。新建后可以在上面批量归类。</p>
+
+      <div v-if="deletedGroups.length" class="group-deleted">
+        <p class="eyebrow">已删除的分组（可恢复）</p>
+        <ul class="group-list">
+          <li v-for="group in deletedGroups" :key="group.id" class="group-item">
+            <span class="group-name">{{ group.name }}</span>
+            <span class="quiet tiny">{{ group.count }} 人</span>
+            <button class="btn quiet small" type="button" @click="restoreGroup(group)">
+              恢复
+            </button>
+          </li>
+        </ul>
+      </div>
+    </section>
+
     <section class="card date-filter-card" aria-labelledby="date-filter-title">
       <div class="date-filter-head">
         <div>
@@ -23,6 +101,9 @@
           <p class="date-filter-summary">{{ dateSummary }}</p>
         </div>
         <div v-if="dateOptions.length" class="date-filter-actions">
+          <button class="btn quiet small" type="button" @click="datePanelOpen = !datePanelOpen">
+            {{ datePanelOpen ? '收起管理' : '管理日期分类' }}
+          </button>
           <button
             v-if="dateOptions.length > 12"
             class="btn quiet small"
@@ -67,12 +148,46 @@
       <p v-if="dateOptions.length && !allDatesSelected" class="date-filter-tip">
         点一下选中，再点取消；按住并拖动可以连续选择。
       </p>
+
+      <div v-if="datePanelOpen" class="date-manage">
+        <p class="eyebrow">日期分类管理</p>
+        <p class="quiet tiny">删除只影响上方的日期筛选，不会删任何答卷；删错了可以在下面恢复。</p>
+        <ul v-if="dateOptions.length" class="group-list">
+          <li v-for="day in dateOptions" :key="day.date" class="group-item">
+            <span class="group-name">{{ dateLabel(day.date) }} · {{ weekdayLabel(day.date) }}</span>
+            <span class="quiet tiny">{{ day.count }} 人</span>
+            <button class="btn quiet small danger" type="button" @click="hideDate(day)">删除</button>
+          </li>
+        </ul>
+        <div v-if="hiddenDates.length" class="group-deleted">
+          <p class="eyebrow">已删除的日期（可恢复）</p>
+          <ul class="group-list">
+            <li v-for="day in hiddenDates" :key="day.date" class="group-item">
+              <span class="group-name">{{ dateLabel(day.date) }} · {{ weekdayLabel(day.date) }}</span>
+              <span class="quiet tiny">{{ day.count }} 人</span>
+              <button class="btn quiet small" type="button" @click="restoreDate(day)">恢复</button>
+            </li>
+          </ul>
+        </div>
+      </div>
     </section>
 
     <div class="toolbar">
       <input v-model="q" class="input search" type="search" placeholder="搜索姓名、备注、渠道" />
       <span class="spacer" />
       <span v-if="selected.size" class="quiet tiny">已选 {{ selected.size }} 条</span>
+      <select
+        v-if="selected.size"
+        class="input small-select"
+        :value="''"
+        @change="assignSelected($event)"
+      >
+        <option value="">移到分组…</option>
+        <option value="__none">移出分组</option>
+        <option v-for="group in groups" :key="group.id" :value="group.id">
+          {{ group.name }}
+        </option>
+      </select>
       <button
         v-if="selected.size"
         class="btn ghost small danger-btn"
@@ -150,6 +265,7 @@
                 <div class="name">{{ row.name || '未命名' }}</div>
                 <div v-if="row.note" class="note">{{ row.note }}</div>
                 <div v-if="row.channel" class="note channel">{{ row.channel }}</div>
+                <div v-if="row.groupName" class="group-tag">{{ row.groupName }}</div>
               </td>
               <td>
                 <select
@@ -255,6 +371,9 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
   api,
   type AdminRosterDateOption,
+  type AdminRosterDeletedGroup,
+  type AdminRosterGroup,
+  type AdminRosterHiddenDate,
   type AdminRosterRow,
   type AdminRosterStage
 } from '@/api'
@@ -306,6 +425,135 @@ const deletingId = ref('')
 const deletingInviteId = ref('')
 const selected = ref<Set<string>>(new Set())
 const batchDeleting = ref(false)
+const groups = ref<AdminRosterGroup[]>([])
+const deletedGroups = ref<AdminRosterDeletedGroup[]>([])
+const ungrouped = ref(0)
+const groupFilter = ref('')
+const groupPanelOpen = ref(false)
+const newGroupName = ref('')
+const groupSaving = ref(false)
+const datePanelOpen = ref(false)
+const hiddenDates = ref<AdminRosterHiddenDate[]>([])
+
+function setGroupFilter(value: string) {
+  groupFilter.value = value
+  void load()
+}
+
+async function createGroup() {
+  const name = newGroupName.value.trim()
+  if (!name) {
+    flash('先填分组名称')
+    return
+  }
+  groupSaving.value = true
+  try {
+    await api.createRosterGroup(name)
+    newGroupName.value = ''
+    await load()
+    flash('分组已创建')
+  } catch (err) {
+    flash(err instanceof Error ? err.message : '创建失败')
+  } finally {
+    groupSaving.value = false
+  }
+}
+
+async function renameGroup(group: AdminRosterGroup) {
+  const name = window.prompt('新的分组名称', group.name)?.trim()
+  if (!name || name === group.name) return
+  groupSaving.value = true
+  try {
+    await api.renameRosterGroup(group.id, name)
+    await load()
+    flash('分组已改名')
+  } catch (err) {
+    flash(err instanceof Error ? err.message : '改名失败')
+  } finally {
+    groupSaving.value = false
+  }
+}
+
+async function deleteGroup(group: AdminRosterGroup) {
+  if (
+    !confirm(
+      `删除分组「${group.name}」？只删分组本身，里面的 ${group.count} 条记录会回到「未分组」，之后可以恢复。`
+    )
+  ) {
+    return
+  }
+  groupSaving.value = true
+  try {
+    await api.deleteRosterGroup(group.id)
+    if (groupFilter.value === group.id) groupFilter.value = ''
+    await load()
+    flash('分组已删除，可在“已删除的分组”里恢复')
+  } catch (err) {
+    flash(err instanceof Error ? err.message : '删除失败')
+  } finally {
+    groupSaving.value = false
+  }
+}
+
+async function restoreGroup(group: AdminRosterDeletedGroup) {
+  groupSaving.value = true
+  try {
+    await api.restoreRosterGroup(group.id)
+    await load()
+    flash(`分组「${group.name}」已恢复`)
+  } catch (err) {
+    flash(err instanceof Error ? err.message : '恢复失败')
+  } finally {
+    groupSaving.value = false
+  }
+}
+
+async function hideDate(day: AdminRosterDateOption) {
+  if (
+    !confirm(
+      `删除日期分类「${dateLabel(day.date)}」？只是不再出现在日期筛选里，${day.count} 条记录不会受影响，之后可以恢复。`
+    )
+  ) {
+    return
+  }
+  try {
+    await api.hideRosterDate(day.date)
+    await load()
+    flash('日期分类已删除')
+  } catch (err) {
+    flash(err instanceof Error ? err.message : '删除失败')
+  }
+}
+
+async function restoreDate(day: AdminRosterHiddenDate) {
+  try {
+    await api.restoreRosterDate(day.date)
+    await load()
+    flash('日期分类已恢复')
+  } catch (err) {
+    flash(err instanceof Error ? err.message : '恢复失败')
+  }
+}
+
+async function assignSelected(event: Event) {
+  const select = event.target as HTMLSelectElement
+  const value = select.value
+  select.value = ''
+  if (!value) return
+  const ids = [...selected.value]
+  if (ids.length === 0) return
+  const groupId = value === '__none' ? null : value
+  const label = groupId
+    ? groups.value.find((group) => group.id === groupId)?.name ?? '分组'
+    : '未分组'
+  try {
+    await api.assignRosterGroup(ids, groupId)
+    await load()
+    flash(`已把 ${ids.length} 条移到「${label}」`)
+  } catch (err) {
+    flash(err instanceof Error ? err.message : '归类失败')
+  }
+}
 
 const allSelected = computed(
   () => roster.value.length > 0 && selected.value.size === roster.value.length
@@ -431,12 +679,22 @@ async function load() {
     const result = await api.roster({
       q: q.value.trim(),
       category: category.value,
+      group: groupFilter.value || undefined,
       dates: allDatesSelected.value ? undefined : [...selectedDates.value]
     })
     if (requestId !== loadRequest) return
     roster.value = result.roster
     counts.value = result.counts
     dateOptions.value = result.dates ?? []
+    groups.value = result.groups ?? []
+    deletedGroups.value = result.deletedGroups ?? []
+    ungrouped.value = result.ungrouped ?? 0
+    hiddenDates.value = result.hiddenDates ?? []
+    // 分组被删掉后，筛选项可能失效，回到全部。
+    if (groupFilter.value && groupFilter.value !== 'none') {
+      const stillExists = groups.value.some((group) => group.id === groupFilter.value)
+      if (!stillExists) groupFilter.value = ''
+    }
     // 只保留还在列表里的勾选，避免删除后选中计数残留。
     const visibleIds = new Set(result.roster.map((row) => row.id))
     selected.value = new Set([...selected.value].filter((id) => visibleIds.has(id)))
@@ -842,6 +1100,158 @@ onMounted(load)
 
 .date-scroll-hint {
   color: var(--ink-3);
+}
+
+.group-bar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.group-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.group-chip b {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.group-chip:hover {
+  border-color: var(--ink-3);
+}
+
+.group-chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.group-chip.on b {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.group-chip.ghost {
+  border-style: dashed;
+  background: transparent;
+  color: var(--ink-3);
+}
+
+.group-panel {
+  margin-bottom: 14px;
+  padding: 16px 18px;
+}
+
+.group-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.group-panel-head h2 {
+  font-size: 14px;
+}
+
+.group-create {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.group-create .input {
+  max-width: 220px;
+  height: 36px;
+  font-size: 13px;
+}
+
+.group-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.group-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.group-item:last-child {
+  border-bottom: 0;
+}
+
+.group-name {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.group-item-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.group-deleted {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.group-deleted .eyebrow {
+  margin-bottom: 8px;
+}
+
+.group-tag {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.small-select {
+  height: 32px;
+  max-width: 160px;
+  font-size: 12.5px;
+  padding: 0 10px;
+}
+
+.date-manage {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.date-manage > .eyebrow {
+  margin-bottom: 4px;
+}
+
+.date-manage > .quiet.tiny {
+  display: block;
+  margin-bottom: 10px;
+  line-height: 1.7;
 }
 
 .toolbar {

@@ -292,19 +292,69 @@ export const api = {
       { auth: true }
     )
   },
-  roster(params: { q?: string; category?: string; dates?: string[] } = {}) {
+  roster(params: { q?: string; category?: string; dates?: string[]; group?: string } = {}) {
     return request<{
       roster: AdminRosterRow[]
       counts: Record<string, number>
       dates: AdminRosterDateOption[]
+      groups: AdminRosterGroup[]
+      deletedGroups: AdminRosterDeletedGroup[]
+      ungrouped: number
+      hiddenDates: AdminRosterHiddenDate[]
     }>(
       `/api/admin/roster${query({
         q: params.q,
         category: params.category,
+        group: params.group,
         dates: params.dates?.length ? params.dates.join(',') : undefined
       })}`,
       { auth: true }
     )
+  },
+  createRosterGroup(name: string) {
+    return request<{ group: AdminRosterGroup }>('/api/admin/roster/groups', {
+      method: 'POST',
+      body: { name },
+      auth: true
+    })
+  },
+  renameRosterGroup(id: string, name: string) {
+    return request<{ ok: true }>(`/api/admin/roster/groups/${id}`, {
+      method: 'PATCH',
+      body: { name },
+      auth: true
+    })
+  },
+  deleteRosterGroup(id: string) {
+    return request<{ ok: true }>(`/api/admin/roster/groups/${id}`, {
+      method: 'DELETE',
+      auth: true
+    })
+  },
+  restoreRosterGroup(id: string) {
+    return request<{ ok: true }>(`/api/admin/roster/groups/${id}/restore`, {
+      method: 'POST',
+      auth: true
+    })
+  },
+  assignRosterGroup(inviteIds: string[], groupId: string | null) {
+    return request<{ ok: true; assigned: number }>('/api/admin/roster/assign', {
+      method: 'POST',
+      body: { inviteIds, groupId },
+      auth: true
+    })
+  },
+  hideRosterDate(date: string) {
+    return request<{ ok: true }>(`/api/admin/roster/dates/${date}`, {
+      method: 'DELETE',
+      auth: true
+    })
+  },
+  restoreRosterDate(date: string) {
+    return request<{ ok: true }>(`/api/admin/roster/dates/${date}/restore`, {
+      method: 'POST',
+      auth: true
+    })
   },
   appointments(params: { q?: string; contactStatus?: string } = {}) {
     return request<{ appointments: AdminAppointment[] }>(
@@ -824,6 +874,8 @@ export interface AdminRosterRow {
   note: string
   channel: string
   stage: AdminRosterStage
+  groupId: string | null
+  groupName: string | null
   inviteCreatedAt: string
   openedAt: string | null
   submittedAt: string | null
@@ -836,6 +888,25 @@ export interface AdminRosterRow {
   reportSlug: string | null
   reportPath: string | null
   detailPath: string | null
+}
+
+export interface AdminRosterGroup {
+  id: string
+  name: string
+  count: number
+}
+
+export interface AdminRosterDeletedGroup {
+  id: string
+  name: string
+  count: number
+  deletedAt: string
+}
+
+export interface AdminRosterHiddenDate {
+  date: string
+  count: number
+  hiddenAt: string
 }
 
 export interface AdminRosterDateOption {

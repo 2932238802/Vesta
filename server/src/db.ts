@@ -40,6 +40,18 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token);
   CREATE INDEX IF NOT EXISTS idx_invites_created ON invites(created_at DESC);
 
+  CREATE TABLE IF NOT EXISTS roster_groups (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS roster_hidden_dates (
+    date TEXT PRIMARY KEY,
+    hidden_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS submissions (
     id TEXT PRIMARY KEY,
     slug TEXT NOT NULL UNIQUE,
@@ -162,6 +174,17 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_consult_collections_kind ON consult_collections(kind);
 `)
 
+function ensureInviteColumns(): void {
+  const columns = new Set(
+    (db.prepare('PRAGMA table_info(invites)').all() as { name: string }[]).map(
+      (column) => column.name
+    )
+  )
+  if (!columns.has('group_id')) {
+    db.exec('ALTER TABLE invites ADD COLUMN group_id TEXT')
+  }
+}
+
 function ensureSubmissionColumns(): void {
   const columns = new Set(
     (
@@ -184,6 +207,7 @@ function ensureSubmissionColumns(): void {
   }
 }
 
+ensureInviteColumns()
 ensureSubmissionColumns()
 
 function ensureConsultColumns(): void {
