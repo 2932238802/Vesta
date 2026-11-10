@@ -368,13 +368,43 @@ function patchQ25Multi(questions: Survey['questions']): boolean {
   return changed
 }
 
+/** Q18「英语现在的情况」换文案；题目被删掉时补回来，只认旧默认文案。 */
+function patchQ17EnglishStage(questions: Survey['questions']): boolean {
+  const canonical = defaultSurvey.questions.find((q) => q.id === 'q17')
+  if (!canonical) return false
+  const index = questions.findIndex((q) => q.id === 'q17')
+  if (index === -1) {
+    const at = questions.findIndex((q) => q.id === 'q24')
+    questions.splice(at === -1 ? questions.length : at, 0, {
+      ...canonical,
+      options: canonical.options?.map((option) => ({ ...option }))
+    })
+    return true
+  }
+  const q17 = questions[index]
+  const labels = (q17.options ?? []).map((option) => option.label)
+  const oldDefaults = [
+    '四级还没过，正在备考四级',
+    '四级已经过了，正在备考六级',
+    '六级已经过了，在准备更高级别的考试（雅思 / 托福 / 考研英语 / 专八）'
+  ]
+  if (!oldDefaults.every((label) => labels.includes(label))) return false
+  q17.title = canonical.title
+  q17.options = canonical.options?.map((option) => ({ ...option }))
+  return true
+}
+
 function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
   // 后台保存过的问卷（运营自己调过选项、加过题）一律不再自动迁移，
   // 否则每次升级都会把她改的选项改回去。要恢复默认，只能重新发布一份默认问卷。
   // 但「题目本身还是默认形态」的结构修正（比如单选改多选）仍然安全应用。
   if (survey.customized) {
     const patched = [...survey.questions]
-    const changed = patchQ18Multi(patched) || patchQ21Multi(patched) || patchQ25Multi(patched)
+    const changed =
+      patchQ17EnglishStage(patched) ||
+      patchQ18Multi(patched) ||
+      patchQ21Multi(patched) ||
+      patchQ25Multi(patched)
     return changed ? { survey: { ...survey, questions: patched }, changed } : { survey, changed: false }
   }
 
@@ -387,6 +417,7 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
   const questions = [...survey.questions]
   let changed = false
 
+  if (patchQ17EnglishStage(questions)) changed = true
   if (patchQ18Multi(questions)) changed = true
   if (patchQ21Multi(questions)) changed = true
   if (patchQ25Multi(questions)) changed = true

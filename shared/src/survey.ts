@@ -336,13 +336,13 @@ export const defaultSurvey: Survey = {
       id: 'q17',
       code: 'Q18',
       groupId: 'p4',
-      title: '你现在的英语学到哪一步',
+      title: '英语现在的情况',
       type: 'single',
       required: true,
       options: choice('q17', [
-        ['四级还没过，正在备考四级', null],
-        ['四级已经过了，正在备考六级', null],
-        ['六级已经过了，在准备更高级别的考试（雅思 / 托福 / 考研英语 / 专八）', null]
+        ['四级没过，正在准备', null],
+        ['四级过了，在准备六级', null],
+        ['四六级已过，正在准备更高等级的考试（考研、雅思托福之类）', null]
       ])
     },
     {
