@@ -418,10 +418,19 @@ function patchQ17EnglishStage(questions: Survey['questions']): boolean {
   return true
 }
 
+function surveyShape(survey: Survey): string {
+  return JSON.stringify({
+    questions: survey.questions,
+    groups: survey.groups,
+    tiers: survey.tiers,
+    // 老问卷没有 reportMode，按 ai 算，避免因为新增字段就判定成“变了”。
+    reportMode: survey.reportMode ?? 'ai'
+  })
+}
+
 function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
-  // 后台保存过的问卷（运营自己调过选项、加过题）一律不再自动迁移，
-  // 否则每次升级都会把她改的选项改回去。要恢复默认，只能重新发布一份默认问卷。
-  // 但「题目本身还是默认形态」的结构修正（比如单选改多选）仍然安全应用。
+  // 后台保存过的问卷（运营自己调过选项、加过题）不整份覆盖；
+  // 只应用那些「题目还是默认形态」的结构修正（单选改多选、补回被删的默认题）。
   if (survey.customized) {
     const patched = [...survey.questions]
     const changed =
@@ -429,336 +438,21 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
       patchQ18Multi(patched) ||
       patchQ21Multi(patched) ||
       patchQ25Multi(patched)
-    return changed ? { survey: { ...survey, questions: patched }, changed } : { survey, changed: false }
+    return changed
+      ? { survey: { ...survey, questions: patched }, changed }
+      : { survey, changed: false }
   }
 
-  // 文档版问卷（《规划自测问卷-设计文档》）：以 q1 为标记，旧问卷整份替换。
-  // 题目、分组、计分、报告方式全换，不再沿用旧的三段/九维结构。
-  if (!survey.questions?.some((q) => q.id === 'q1')) {
-    return { survey: { ...defaultSurvey, id: survey.id }, changed: true }
+  // 没在后台发布过的问卷（seed 或历代迁移生成）直接对齐当前默认结构。
+  // 以前的写法只做零散补丁，导致服务器上的 survey-main 一直停留在第一版题目，
+  // 后来加的题、改的文案都进不去。
+  if (surveyShape(survey) === surveyShape({ ...defaultSurvey, id: survey.id, version: survey.version })) {
+    return { survey, changed: false }
   }
-
-  const questions = [...survey.questions]
-  let changed = false
-
-  if (patchQ17EnglishStage(questions)) changed = true
-  if (patchQ18Multi(questions)) changed = true
-  if (patchQ21Multi(questions)) changed = true
-  if (patchQ25Multi(questions)) changed = true
-
-  // Q1 学校档位里的「双一流学科」统一改叫「双一流」。
-  const q1 = questions.find((q) => q.id === 'q1')
-  const shuangyiliu = q1?.options?.find((option) => option.label === '双一流学科')
-  if (shuangyiliu) {
-    shuangyiliu.label = '双一流'
-    changed = true
-  }
-
-  const canonical = defaultSurvey.questions
-
-  // Q7「现在在准备什么」换成新的 9 个选项；只认旧默认那套，避免覆盖运营自己配的。
-  const q7 = questions.find((q) => q.id === 'q7')
-  const canonicalQ7 = canonical.find((q) => q.id === 'q7')
-  if (q7?.options && canonicalQ7?.options) {
-    const labels = q7.options.map((option) => option.label)
-    const looksDefault =
-      labels.includes('四级') && labels.includes('六级') && labels.includes('还没开始')
-    if (looksDefault) {
-      q7.options = canonicalQ7.options.map((option) => ({ ...option }))
-      changed = true
-    }
-  }
-
-  const profileAdditions: [string, string][] = [
-    ['a8', 'a7'],
-    ['a9', 'a8'],
-    ['a10', 'a9'],
-    ['a11', 'a10'],
-    ['a12', 'a11'],
-    ['a14', 'a12']
-  ]
-  for (const [id, afterId] of profileAdditions) {
-    const next = canonical.find((q) => q.id === id)
-    if (next && !questions.some((q) => q.id === id)) {
-      insertAfter(questions, afterId, next)
-      changed = true
-    }
-  }
-
-  // A1 补「双一流」：只认原来那套默认选项，插在 985/211 后面；
-  // 管理员自己改过选项就不动，避免把自定义内容覆盖掉。
-  const a1 = questions.find((q) => q.id === 'a1')
-  const canonicalA1 = canonical.find((q) => q.id === 'a1')
-  if (a1?.options && canonicalA1?.options) {
-    const labels = a1.options.map((option) => option.label)
-    const syl = canonicalA1.options.find((option) => option.label === '双一流')
-    if (
-      syl &&
-      !labels.includes('双一流') &&
-      labels.includes('985 / 211') &&
-      labels.includes('双非一本')
-    ) {
-      const index = a1.options.findIndex((option) => option.label === '985 / 211')
-      a1.options.splice(index + 1, 0, { ...syl })
-      changed = true
-    }
-  }
-
-  // A8 原来只收城市和岗位，现在补上“去的原因”。
-  const a8 = questions.find((q) => q.id === 'a8')
-  const canonicalA8 = canonical.find((q) => q.id === 'a8')
-  if (a8 && canonicalA8?.fields) {
-    if (
-      a8.title === '你理想的第一份工作，在哪座城市、做什么' ||
-      (a8.fields?.length ?? 0) < canonicalA8.fields.length
-    ) {
-      a8.title = canonicalA8.title
-      a8.hint = canonicalA8.hint
-      a8.fields = canonicalA8.fields
-      changed = true
-    }
-  }
-
-  // A9 的旧选项把“考公考编”和“教师招聘”并列，两者有重合；改为公务员 / 事业单位两档。
-  const a9 = questions.find((q) => q.id === 'a9')
-  const canonicalA9 = canonical.find((q) => q.id === 'a9')
-  if (a9 && canonicalA9) {
-    const labels = (a9.options ?? []).map((option) => option.label)
-    if (
-      labels.includes('考公考编') ||
-      labels.includes('教师招聘') ||
-      labels.includes('事业单位（非教师）')
-    ) {
-      a9.options = canonicalA9.options
-      changed = true
-    }
-    if (a9.hint === '单选，不计分。教师招聘和考研不冲突，按现在最优先的一项选') {
-      a9.hint = canonicalA9.hint
-      changed = true
-    }
-  }
-
-  const d1a = canonical.find((q) => q.id === 'd1a')
-  if (d1a && !questions.some((q) => q.id === 'd1a')) {
-    insertAfter(questions, 'd4', d1a)
-    changed = true
-  }
-
-  // 英语从“学业基础”里拆出来，成为独立维度 b9。
-  const b9 = canonical.find((q) => q.id === 'b9')
-  if (b9 && !questions.some((q) => q.id === 'b9')) {
-    insertAfter(questions, 'b8', b9)
-    changed = true
-  }
-
-  const d3 = questions.find((q) => q.id === 'd3')
-  if (d3 && d3.dimension === 'b2') {
-    d3.dimension = 'b9'
-    changed = true
-  }
-
-  // 英语独立成 b9 后，B2 的锚点不再用四六级举例，避免同一件事被问三遍。
-  const b2 = questions.find((q) => q.id === 'b2')
-  const canonicalB2 = canonical.find((q) => q.id === 'b2')
-  if (b2?.anchors && canonicalB2?.anchors) {
-    if (b2.anchors.low === '四六级都没过，绩点中下，经常担心挂科') {
-      b2.anchors.low = canonicalB2.anchors.low
-      changed = true
-    }
-    if (b2.anchors.high === '四级已过、六级在准备或已过，绩点稳定在专业前列') {
-      b2.anchors.high = canonicalB2.anchors.high
-      changed = true
-    }
-  }
-
-  const c2Question = questions.find((q) => q.id === 'c2')
-  if (
-    c2Question?.type === 'matrix' &&
-    Array.isArray(c2Question.rows) &&
-    !c2Question.rows.some((row) => row.id === 'c2_6')
-  ) {
-    c2Question.rows.push({ id: 'c2_6', label: '英语', dimension: 'b9' })
-    changed = true
-  }
-
-  if (!survey.dimensions.some((dimension) => dimension.key === 'b9')) {
-    const oldDefaultWeights: Record<string, number> = { b2: 15, b4: 12, b5: 12, b6: 16 }
-    const newDefaultWeights: Record<string, number> = { b2: 8, b4: 11, b5: 11, b6: 15 }
-    const matchesOldDefaults = Object.entries(oldDefaultWeights).every(
-      ([key, weight]) =>
-        survey.dimensions.find((dimension) => dimension.key === key)?.weight === weight
-    )
-    if (matchesOldDefaults) {
-      for (const dimension of survey.dimensions) {
-        const nextWeight = newDefaultWeights[dimension.key]
-        if (typeof nextWeight === 'number') dimension.weight = nextWeight
-      }
-    }
-    survey.dimensions.push({ key: 'b9', name: '英语能力', weight: 10 })
-    changed = true
-  }
-
-  const a10 = questions.find((q) => q.id === 'a10')
-  const canonicalA10 = canonical.find((q) => q.id === 'a10')
-  if (a10 && canonicalA10?.options) {
-    const labels = (a10.options ?? []).map((option) => option.label)
-    if (labels.includes('核实升学路线') || labels.includes('建立稳定学习安排')) {
-      a10.options = canonicalA10.options
-      a10.otherLabel = canonicalA10.otherLabel
-      a10.otherPlaceholder = canonicalA10.otherPlaceholder
-      changed = true
-    }
-    // 兼容旧版本里写死的选项名，统一到新的展示文案。雅思拆成单独一档，这条只剩四六级。
-    const englishGoal = a10.options?.find((option) =>
-      ['英语考试或使用', '四六级雅思准备', '四级、六级或雅思准备'].includes(option.label)
-    )
-    if (englishGoal) {
-      englishGoal.label = '四级、六级准备'
-      changed = true
-    }
-    const goalOptions = a10.options
-    if (goalOptions) {
-      const goalLabels = goalOptions.map((option) => option.label)
-      const ielts = canonicalA10.options.find((option) => option.label === '雅思准备')
-      if (
-        ielts &&
-        !goalLabels.includes('雅思准备') &&
-        goalLabels.includes('四级、六级准备')
-      ) {
-        const index = goalOptions.findIndex((option) => option.label === '四级、六级准备')
-        goalOptions.splice(index + 1, 0, { ...ielts })
-        changed = true
-      }
-    }
-    if (a10.notePlaceholder === '例：明年 3 月前拿到六级 500 分；没想清楚也可以写「不知道」') {
-      delete a10.notePlaceholder
-      changed = true
-    }
-  }
-
-  // A12 的原因选项以前太笼统，换成能对上 A9 方向、A10 目标的具体处境。
-  // 只认旧默认那套，管理员改过就不动；a12_1/4/5/6/8 含义没变，老答卷还能读出来。
-  const a12 = questions.find((q) => q.id === 'a12')
-  const canonicalA12 = canonical.find((q) => q.id === 'a12')
-  if (a12 && canonicalA12) {
-    const labels = (a12.options ?? []).map((option) => option.label)
-    if (
-      a12.options &&
-      canonicalA12.options &&
-      (labels.includes('已有明确考试或申请节点') ||
-        labels.includes('某次经历受到影响') ||
-        labels.includes('看到同学行动'))
-    ) {
-      a12.options = canonicalA12.options.map((option) => ({ ...option }))
-      changed = true
-    }
-    // 已经换成新原因、但还没有「其他」这一档的，补在最后。
-    const nextLabels = (a12.options ?? []).map((option) => option.label)
-    const otherOption = canonicalA12.options?.find((option) => option.label === '其他')
-    if (
-      a12.options &&
-      otherOption &&
-      !nextLabels.includes('其他') &&
-      nextLabels.includes('还没想清楚，只是觉得现在该动起来')
-    ) {
-      a12.options.push({ ...otherOption })
-      changed = true
-    }
-    if (a12.hint === '多选，最多 2 项，不计分') {
-      a12.hint = canonicalA12.hint
-      changed = true
-    }
-  }
-
-  // B 组从 1—5 分自评改成若干道客观事实题：旧的整组替换。
-  // B 组改成客观事实题：旧版（1—5 分自评，或只问一题的过渡版）整组替换。
-  // 用 b1a 当新版标记：B 组里没有 b1a，就认为它还是旧版，整组换掉。
-  const hasNewB = questions.some((q) => q.groupId === 'b' && q.id === 'b1a')
-  const freshB = canonical
-    .filter((q) => q.groupId === 'b')
-    .map((q) => ({ ...q, options: q.options?.map((option) => ({ ...option })) }))
-  if (!hasNewB && freshB.length > 0) {
-    const kept = questions.filter((q) => q.groupId !== 'b')
-    const insertAt = kept.findIndex((q) => q.groupId === 'c')
-    kept.splice(insertAt === -1 ? kept.length : insertAt, 0, ...freshB)
-    questions.splice(0, questions.length, ...kept)
-    changed = true
-  }
-
-  for (const id of ['c1', 'c2']) {
-    const next = canonical.find((q) => q.id === id)
-    if (!next) continue
-    const index = questions.findIndex((q) => q.id === id)
-    if (index === -1) {
-      const dIndex = questions.findIndex((q) => q.groupId === 'd')
-      questions.splice(dIndex === -1 ? questions.length : dIndex, 0, next)
-      changed = true
-    } else if (questions[index].type !== next.type) {
-      questions[index] = next
-      changed = true
-    }
-  }
-
-  // C2 旧的提示语说“1 分是不缺，5 分是缺得明显”，和实际要表达的极性相反。
-  // 只替换这一版默认文案，不改管理员自己改过的内容。
-  const c2 = questions.find((q) => q.id === 'c2')
-  const canonicalC2 = canonical.find((q) => q.id === 'c2')
-  if (c2 && canonicalC2) {
-    if (
-      c2.hint === '每一项都打 1 到 5 分：1 分是不缺，5 分是缺得很明显。这组分数会按比重计入总分'
-    ) {
-      c2.hint = canonicalC2.hint
-      changed = true
-    }
-    if (!c2.anchors && canonicalC2.anchors) {
-      c2.anchors = canonicalC2.anchors
-      changed = true
-    }
-  }
-
-  const c1 = questions.find((q) => q.id === 'c1')
-  const canonicalC1 = canonical.find((q) => q.id === 'c1')
-  if (c1 && canonicalC1 && !c1.anchors && canonicalC1.anchors) {
-    c1.anchors = canonicalC1.anchors
-    changed = true
-  }
-
-  for (const removedId of ['a5', 'a13', 'a15', 'a16', 'c3', 'd5', 'q7a', 'q17b']) {
-    const index = questions.findIndex((q) => q.id === removedId)
-    if (index >= 0) {
-      questions.splice(index, 1)
-      changed = true
-    }
-  }
-
-  if (survey.estimatedMinutes === 5) {
-    survey = { ...survey, estimatedMinutes: defaultSurvey.estimatedMinutes }
-    changed = true
-  }
-
-  // 分组说明：C 组旧文案，B 组从“打 1—5 分”改成“选实际情况”。
-  const groups = survey.groups.map((group) => {
-    if (group.id === 'c' && group.subtitle === '没有标准答案，选你真正相信的') {
-      return { ...group, subtitle: '每一项都按 1 到 5 分打分，分数会计入报告判定' }
-    }
-    if (
-      group.id === 'b' &&
-      (group.subtitle === '每题 1 到 5 分，按第一反应选，不用想太久' ||
-        group.subtitle === '每题选一个最接近你现状的选项，不用纠结对错')
-    ) {
-      return { ...group, subtitle: '每题都选实际情况，选项都是可以核对的事实' }
-    }
-    if (group.id === 'a' && group.subtitle === '这些信息只用来调整参照线，学校类型不计入总分') {
-      // 学校档位现在在 B 组计分，这句「不计入总分」已经不准了。
-      return { ...group, subtitle: '先补背景和目标，没有对错，按真实情况选' }
-    }
-    return group
-  })
-  if (groups.some((group, index) => group !== survey.groups[index])) changed = true
 
   return {
-    survey: changed ? { ...survey, questions, groups } : survey,
-    changed
+    survey: { ...defaultSurvey, id: survey.id, version: survey.version },
+    changed: true
   }
 }
 
