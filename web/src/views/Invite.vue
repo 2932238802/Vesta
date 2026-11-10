@@ -17,10 +17,6 @@
         你离想去的地方，<br class="wide-break" />还差哪几步
       </h1>
 
-      <div v-if="introLines.length" class="intro">
-        <p v-for="line in introLines" :key="line">{{ line }}</p>
-      </div>
-
       <button class="btn start" type="button" @click="start">
         {{ draftFilled > 0 ? '继续填写' : '开始填写' }}
       </button>
@@ -57,14 +53,6 @@ const greeting = computed(() => {
   const name = invite.value?.name?.trim()
   return name ? `${name}，你好` : '你好'
 })
-
-const introLines = computed(
-  () =>
-    invite.value?.survey.intro
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean) ?? []
-)
 
 function readDraft() {
   if (!invite.value) return
@@ -147,19 +135,6 @@ h1 {
   font-weight: 500;
   line-height: 1.5;
   letter-spacing: 0.01em;
-}
-
-.intro {
-  margin-top: 26px;
-  display: grid;
-  gap: 6px;
-  max-width: 26em;
-}
-
-.intro p {
-  font-size: 13px;
-  line-height: 1.8;
-  color: var(--ink-2);
 }
 
 .start {
