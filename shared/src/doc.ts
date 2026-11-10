@@ -163,7 +163,7 @@ function oneLine(survey: Survey, answers: Answers): string {
 function stuckLayer(survey: Survey, answers: Answers): { short: string; full: string } {
   const words = index(survey, answers, 'q21') // 1 背了忘，3 基本不背
   const speaking = index(survey, answers, 'q22')
-  const weak = label(survey, answers, 'q18')
+  const weak = labels(survey, answers, 'q18')
   const how = labels(survey, answers, 'q19')
   const hours = index(survey, answers, 'q20') // 0 少于3小时
   const execution = index(survey, answers, 'q13')
@@ -174,7 +174,7 @@ function stuckLayer(survey: Survey, answers: Answers): { short: string; full: st
       full: '你现在最卡的是词汇。单词记不住，阅读和写作里会反复卡在生词上，考试里词汇量不够，后面几层都撑不起来。'
     }
   }
-  if (speaking === 0 && weak.includes('听力')) {
+  if (speaking === 0 && weak.some((item) => item.includes('听力'))) {
     return {
       short: '听力层',
       full: '你现在最卡的是听力。信息一快就丢，而听力是四级里很多人最先崩的部分，也是你开不了口的直接原因。'
@@ -323,7 +323,7 @@ export function serializeDoc(survey: Survey, answers: Answers): Record<string, u
     q15_family: label(survey, answers, 'q15'),
     q16_info: label(survey, answers, 'q16'),
     q17_cet4_times: label(survey, answers, 'q17'),
-    q18_cet4_weak: label(survey, answers, 'q18'),
+    q18_cet4_weak: labels(survey, answers, 'q18'),
     q19_how: labels(survey, answers, 'q19'),
     q20_hours: label(survey, answers, 'q20'),
     q21_words: label(survey, answers, 'q21'),

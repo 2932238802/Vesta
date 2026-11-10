@@ -17,7 +17,7 @@ export interface DocScores {
     skippedDetail: boolean
     stage: string
     weeklyHours: number
-    weakPart: string
+    weakPart: string[]
     speaking: string
     reasons: string[]
   }
@@ -234,7 +234,7 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
       skippedDetail,
       stage: singleLabel(survey, answers, 'q17'),
       weeklyHours: pick(optionIndex(survey, answers, 'q20'), WEEKLY_HOURS, 0),
-      weakPart: singleLabel(survey, answers, 'q18'),
+      weakPart: optionLabels(survey, answers, 'q18'),
       speaking: singleLabel(survey, answers, 'q22'),
       reasons: optionLabels(survey, answers, 'q25')
     }

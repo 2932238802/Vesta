@@ -350,7 +350,7 @@ export const defaultSurvey: Survey = {
       code: 'Q19',
       groupId: 'p4',
       title: '上次四级哪部分丢分最多',
-      type: 'single',
+      type: 'multi',
       required: false,
       showIfAll: [
         { question: 'q17', when: ['q17_2', 'q17_3'] },

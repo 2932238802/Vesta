@@ -325,11 +325,25 @@ function insertAfter(questions: Survey['questions'], afterId: string, question: 
   else questions.push(question)
 }
 
+/** Q18「上次四级哪部分丢分最多」从单选改成多选；只在题目本身还是默认形态时生效。 */
+function patchQ18Multi(questions: Survey['questions']): boolean {
+  const q18 = questions.find((q) => q.id === 'q18')
+  if (!q18 || q18.type !== 'single') return false
+  const labels = (q18.options ?? []).map((option) => option.label)
+  const defaults = ['听力', '阅读', '写作翻译', '完形选词', '说不清']
+  if (!defaults.every((label) => labels.includes(label))) return false
+  q18.type = 'multi'
+  return true
+}
+
 function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
   // 后台保存过的问卷（运营自己调过选项、加过题）一律不再自动迁移，
   // 否则每次升级都会把她改的选项改回去。要恢复默认，只能重新发布一份默认问卷。
+  // 但「题目本身还是默认形态」的结构修正（比如单选改多选）仍然安全应用。
   if (survey.customized) {
-    return { survey, changed: false }
+    const patched = [...survey.questions]
+    const changed = patchQ18Multi(patched)
+    return changed ? { survey: { ...survey, questions: patched }, changed } : { survey, changed: false }
   }
 
   // 文档版问卷（《规划自测问卷-设计文档》）：以 q1 为标记，旧问卷整份替换。
@@ -340,6 +354,8 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
 
   const questions = [...survey.questions]
   let changed = false
+
+  if (patchQ18Multi(questions)) changed = true
 
   // Q1 学校档位里的「双一流学科」统一改叫「双一流」。
   const q1 = questions.find((q) => q.id === 'q1')
