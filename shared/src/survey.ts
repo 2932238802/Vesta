@@ -29,7 +29,7 @@ export const defaultSurvey: Survey = {
         ['C9', null],
         ['985', null],
         ['211', null],
-        ['双一流学科', null],
+        ['双一流', null],
         ['普通一本', null],
         ['普通二本', null],
         ['民办本科', null],

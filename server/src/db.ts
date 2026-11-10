@@ -335,6 +335,14 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
   const questions = [...survey.questions]
   let changed = false
 
+  // Q1 学校档位里的「双一流学科」统一改叫「双一流」。
+  const q1 = questions.find((q) => q.id === 'q1')
+  const shuangyiliu = q1?.options?.find((option) => option.label === '双一流学科')
+  if (shuangyiliu) {
+    shuangyiliu.label = '双一流'
+    changed = true
+  }
+
   const canonical = defaultSurvey.questions
   const profileAdditions: [string, string][] = [
     ['a8', 'a7'],

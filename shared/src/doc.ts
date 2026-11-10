@@ -284,7 +284,7 @@ function futureText(survey: Survey, answers: Answers): string {
 
 export function docPriority(survey: Survey, answers: Answers): 'A' | 'B' | 'C' {
   const school = label(survey, answers, 'q1')
-  const schoolHigh = ['C9', '985', '211', '双一流学科', '普通一本'].includes(school)
+  const schoolHigh = ['C9', '985', '211', '双一流', '普通一本'].includes(school)
   const direction = index(survey, answers, 'q11')
   const execution = index(survey, answers, 'q13')
   const info = index(survey, answers, 'q16')
