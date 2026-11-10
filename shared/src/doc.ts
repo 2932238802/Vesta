@@ -224,6 +224,24 @@ function monthsUntil(monthOfYear: number): number {
   return target - current
 }
 
+const GRADE_NUMBER: Record<string, number> = { 大一: 1, 大二: 2, 大三: 3, 大四: 4 }
+
+/**
+ * 到「第 stageGrade 学年某月」还有几个月。
+ * 以前只会算“下一个 9 月”，导致大一学生也被算成半年后就要秋招/夏令营。
+ */
+function monthsToStage(monthOfYear: number, grade: number, stageGrade: number): number {
+  const now = new Date()
+  const nowYear = now.getFullYear()
+  const nowMonth = now.getMonth() + 1
+  // 学年 9 月开学：9 月及以后算新学年，1—8 月仍属上一学年。
+  const academicStartYear = nowMonth >= 9 ? nowYear : nowYear - 1
+  const enrollYear = academicStartYear - (grade - 1)
+  const targetYear = enrollYear + (stageGrade - 1) + (monthOfYear >= 9 ? 0 : 1)
+  const months = (targetYear - nowYear) * 12 + (monthOfYear - nowMonth)
+  return Math.max(0, months)
+}
+
 export interface DeadlineFact {
   node: string
   windowText: string
@@ -234,7 +252,8 @@ export interface DeadlineFact {
 export function deadlineFact(survey: Survey, answers: Answers): DeadlineFact {
   const first = label(survey, answers, 'q6')
   const preparing = labels(survey, answers, 'q7')
-  const grade = label(survey, answers, 'q3')
+  const gradeLabel = label(survey, answers, 'q3')
+  const grade = GRADE_NUMBER[gradeLabel] ?? 2
 
   let node = '四级 / 六级'
   let windowText = '每年 6 月、12 月'
@@ -242,46 +261,51 @@ export function deadlineFact(survey: Survey, answers: Answers): DeadlineFact {
 
   if (first === '考研') {
     node = '考研初试'
-    windowText = '每年 12 月'
-    months = monthsUntil(12)
+    windowText = '大四上学期 12 月'
+    months = monthsToStage(12, grade, 4)
   } else if (first === '保研') {
     node = '保研夏令营申请'
-    windowText = '大三下学期（约 5—6 月）'
-    months = monthsUntil(5)
+    windowText = '大三下学期 5—6 月'
+    months = monthsToStage(6, grade, 3)
   } else if (first === '就业') {
-    node = '秋招和大三暑假实习'
-    windowText = '9—11 月'
-    months = monthsUntil(9)
+    node = '秋招'
+    windowText = '大四上学期 9—11 月'
+    months = monthsToStage(9, grade, 4)
   } else if (first === '考公') {
     node = '国考 / 省考'
-    windowText = '11—12 月或 3—4 月'
-    months = monthsUntil(11)
+    windowText = '大四上学期 11—12 月或次年 3—4 月'
+    months = monthsToStage(11, grade, 4)
   } else if (first === '考编') {
     node = '事业编联考'
-    windowText = '3—5 月'
-    months = monthsUntil(3)
+    windowText = '大四下学期 3—5 月'
+    months = monthsToStage(3, grade, 4)
   } else if (first === '出国') {
     node = '语言成绩和申请季'
-    windowText = '大三开始准备，大四 9—12 月申请'
-    months = monthsUntil(9)
+    windowText = '大四上学期 9—12 月申请'
+    months = monthsToStage(9, grade, 4)
   } else if (preparing.some((item) => item.includes('教资'))) {
     node = '教资笔试'
     windowText = '每年 3 月、9 月'
     months = monthsUntil(3)
   } else if (preparing.some((item) => item.includes('专升本'))) {
     node = '专升本考试'
-    windowText = '多数省份 3—4 月'
-    months = monthsUntil(3)
+    windowText = '大三下学期 3—4 月'
+    months = monthsToStage(3, grade, 3)
   }
 
   const tail =
-    grade === '大一'
+    grade === 1
       ? '现在动手，后面每一步都会从容一点。'
-      : grade === '大四'
+      : grade === 4
         ? '时间已经很紧，优先把能落地的先落地。'
         : '这一两年是你补信息差最便宜的时候。'
 
-  return { node, windowText, months, text: `你离 ${node}（${windowText}）还有大约 ${months} 个月。${tail}` }
+  return {
+    node,
+    windowText,
+    months,
+    text: `你离 ${node}（${windowText}）还有大约 ${months} 个月。${tail}`
+  }
 }
 
 function deadlineText(survey: Survey, answers: Answers): string {
@@ -501,16 +525,25 @@ function englishSection(survey: Survey, answers: Answers): ReportBlock {
   }
   gapParts.push(`你最卡的是${stuck.short}。`)
 
-  const plan = `这 30 天先做三件事：一、把${stuck.short}对应的材料找齐（真题、词表或听力材料）；二、每天固定 30 分钟，只练这一项；三、每周日记录一次能听/能说/能背下多少，用数字对比，不用感觉。`
+  const plan = `这 30 天只做一件事：把${stuck.short}对应的材料固定下来，每天 30 分钟，每周日记一次数字。`
 
   const skipped = english.skippedDetail
     ? '（你给英语的重要度低于 6 分，后面 5 道细节题按规则跳过了，不是你没答。）'
     : ''
 
+  // 英语只是报告里的一块，不抢主线：没有英语门槛的方向，只留一句。
+  if (!english.need) {
+    return {
+      type: 'section',
+      title: '英语这块',
+      paragraphs: [position + skipped + '这条路对英语没有硬性门槛，保持阅读和表达就够了。']
+    }
+  }
+
   return {
     type: 'section',
     title: '英语这块',
-    paragraphs: [position + skipped, ...gapParts, plan]
+    paragraphs: [position + skipped, gapParts.join(''), plan]
   }
 }
 
