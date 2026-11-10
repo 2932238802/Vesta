@@ -3,7 +3,6 @@
     <header class="top">
       <button v-if="step > 0" class="back-mini" type="button" @click="back">← 上一题</button>
       <span v-else class="save-hint">进度自动保存在本机</span>
-      <span class="step">已答 {{ answeredCount }} / 27</span>
     </header>
 
     <div class="progress">
@@ -31,7 +30,7 @@
 
       <main class="sheet">
         <div :key="current.id" class="group fade-in">
-          <p class="eyebrow">第 {{ step + 1 }} 题 · {{ current.code }}</p>
+          <p class="eyebrow">{{ groupTitle }}</p>
           <h1 class="serif">{{ resolved.title }}</h1>
           <p v-if="resolved.hint" class="sub">{{ resolved.hint }}</p>
 
@@ -126,14 +125,16 @@ const currentQuestion = computed<Question | null>(() => {
 })
 const isLast = computed(() => step.value >= visible.value.length - 1)
 
-const answeredCount = computed(() => {
-  if (!survey.value) return 0
-  return visible.value.filter((question) => {
-    const r = resolveQuestion(survey.value!, answers.value, question)
-    return !r.disabled && !isEmptyValue(answers.value[question.id])
-  }).length
+const progressPct = computed(() =>
+  visible.value.length
+    ? Math.min(100, Math.round(((step.value + 1) / visible.value.length) * 100))
+    : 0
+)
+const groupTitle = computed(() => {
+  if (!survey.value || !current.value) return ''
+  const group = survey.value.groups.find((item) => item.id === current.value?.groupId)
+  return group?.title ?? ''
 })
-const progressPct = computed(() => Math.min(100, Math.round((answeredCount.value / 27) * 100)))
 
 function touch(id: string) {
   const now = Date.now()
@@ -415,13 +416,6 @@ window.addEventListener('beforeunload', onLeave)
   font-size: 13px;
   color: var(--ink-2);
   cursor: pointer;
-}
-
-.step {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--ink-2);
-  letter-spacing: 0.04em;
 }
 
 .progress {

@@ -172,22 +172,25 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
     }
   ]
 
-  // 潜力值只用能改的四项：把每项缺口换成 0—1 的比例再加权，保证 0—100 有区分度。
-  const byKey = new Map(personal.map((item) => [item.key, item.score]))
+  // 潜力值只用能改的四项：实习、技能、方法、执行。
+  // 实习和技能在「起点」那一组里，所以分数表要把两组并起来，不能只查 personal。
+  const allItems = [...background, ...personal]
+  const byKey = new Map(allItems.map((item) => [item.key, item.score]))
   const gap = (key: string) => (10 - (byKey.get(key) ?? 5)) / 10
   const raw =
     100 -
     (gap('practice') * 0.4 + gap('skill') * 0.25 + gap('method') * 0.2 + gap('execution') * 0.15) * 100
   const potentialScore = Math.round(raw)
   const level: PotentialLevel = potentialScore >= 70 ? '高' : potentialScore >= 40 ? '中' : '低'
-  const lowKeys = ['practice', 'skill', 'method', 'execution']
-    .map((key) => ({ key, score: byKey.get(key) ?? 5 }))
+  const lowLabels = ['practice', 'skill', 'method', 'execution']
+    .map((key) => allItems.find((item) => item.key === key))
+    .filter((item): item is ScoredItem => Boolean(item) && (item?.score ?? 10) < 6)
     .sort((a, b) => a.score - b.score)
-  const lowLabels = lowKeys.filter((item) => item.score < 6).map((item) => personal.find((p) => p.key === item.key)?.label)
+    .map((item) => item.label)
   const potentialText =
     lowLabels.length > 0
       ? `你的潜力在${level}档，卡住你的是${lowLabels.slice(0, 2).join('、')}，不是天赋。`
-      : `你的潜力在${level}档，四项里没有明显短板，接下来是把已有的往前推。`
+      : `你的潜力在${level}档，这四项里没有明显短板，接下来是把已有的往前推。`
 
   const need =
     ['q6_1', 'q6_2', 'q6_5'].includes(String(answers.q6 ?? '')) ||

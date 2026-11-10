@@ -27,22 +27,16 @@
     </main>
 
     <main v-else-if="!payload" class="state analysis">
-      <p class="eyebrow">正在分析</p>
-      <h1 class="serif">正在按你的选择整理报告</h1>
+      <div class="loader" aria-hidden="true">
+        <span class="dot d1" />
+        <span class="dot d2" />
+        <span class="dot d3" />
+      </div>
+      <h1 class="serif">正在给你写这份报告</h1>
       <p class="analysis-copy">{{ waitCopy }}</p>
       <div class="analysis-line"><span /></div>
-      <p class="quiet small">页面会自动更新，不用刷新。</p>
-      <button
-        v-if="elapsed >= 8"
-        class="btn ghost preview-btn"
-        type="button"
-        :disabled="previewLoading"
-        @click="showPreview"
-      >
-        {{ previewLoading ? '正在打开基础版' : '先看基础版' }}
-      </button>
-      <p v-if="previewNote" class="quiet small">{{ previewNote }}</p>
-      <p v-if="slow" class="quiet small">比预期久一些，可以稍后再打开这个链接。</p>
+      <p class="quiet small">页面会自动更新，不用刷新</p>
+      <p v-if="slow" class="quiet small">比预期久一点，可以先去忙别的，回来看这条链接就好。</p>
       <p v-if="pollNote" class="quiet small">{{ pollNote }}</p>
     </main>
 
@@ -162,8 +156,6 @@ const error = ref('')
 const reportNotice = ref('')
 const slow = ref(false)
 const pollNote = ref('')
-const previewNote = ref('')
-const previewLoading = ref(false)
 const reportStatus = ref('')
 const elapsed = ref(0)
 const claimed = ref(false)
@@ -185,10 +177,10 @@ let inFlight = false
 let pollFailures = 0
 
 const waitCopy = computed(() => {
-  if (elapsed.value < 12) return '正在核对目标城市、岗位和考试要求，通常需要 1—2 分钟。'
-  if (elapsed.value < 35) return '正在把九项自评和你说的情况放在一起看。'
-  if (elapsed.value < 70) return '正在整理最该先动的几件事，通常还需要一点时间。'
-  return '还在生成。你可以先看基础版，深度版完成后会自动替换。'
+  if (elapsed.value < 8) return '先读一遍你的回答，看看你现在在哪儿。'
+  if (elapsed.value < 25) return '正在把你的情况和目标放在一起看。'
+  if (elapsed.value < 60) return '正在写结论，和接下来 30 天最该做的事。'
+  return '还在写，内容有点多，再等一小会儿。'
 })
 
 const claimedSlots = computed(() =>
@@ -248,11 +240,12 @@ async function load(poll = false, preview = false) {
     error.value = ''
     if (result.status === 'pending' || result.status === 'running') {
       startPolling()
+    } else if (!payload.value) {
+      // 没生成出来也别退回基础版：继续等着，后台会重试。
+      startPolling()
+      pollNote.value = '还在写，好了会自动打开'
     } else {
       stopPolling()
-      if (!payload.value) {
-        error.value = '报告还没有准备好，请稍后再打开这个链接'
-      }
     }
   } catch (err) {
     if (!poll) {
@@ -270,20 +263,6 @@ async function load(poll = false, preview = false) {
   } finally {
     inFlight = false
     loading.value = false
-  }
-}
-
-async function showPreview() {
-  if (previewLoading.value) return
-  previewLoading.value = true
-  previewNote.value = ''
-  try {
-    await load(true, true)
-    if (!payload.value) {
-      previewNote.value = '基础版暂时没有打开，可以稍后再试。'
-    }
-  } finally {
-    previewLoading.value = false
   }
 }
 
@@ -450,8 +429,41 @@ function flash(message: string) {
   max-width: 30em;
 }
 
-.preview-btn {
-  margin-top: 22px;
+.loader {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+.loader .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.85;
+  animation: bob 1.1s ease-in-out infinite;
+}
+
+.loader .d2 {
+  animation-delay: 0.16s;
+  opacity: 0.65;
+}
+
+.loader .d3 {
+  animation-delay: 0.32s;
+  opacity: 0.45;
+}
+
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  40% {
+    transform: translateY(-7px);
+    opacity: 1;
+  }
 }
 
 .analysis-line {

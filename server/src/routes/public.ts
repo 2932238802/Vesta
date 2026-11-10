@@ -10,7 +10,7 @@ import type {
 import { computeScores } from '../../../shared/src/scoring'
 import { buildReport } from '../../../shared/src/report'
 import { buildAiReport } from '../../../shared/src/ai'
-import { buildDocReport, buildDocReportWithAi, docPriority } from '../../../shared/src/doc'
+import { buildDocReportWithAi, docPriority } from '../../../shared/src/doc'
 import { validateAnswers } from '../../../shared/src/validate'
 import {
   db,
@@ -255,23 +255,23 @@ publicRouter.get(
     const overrides = parseJson<ReportOverrides>(submission.overrides, {})
     const name = invite?.name ?? ''
 
-    // 文档版问卷：整份报告交给 AI 写；AI 没就绪时先给规则版，并在后台继续生成。
+    // 文档版问卷：整份报告交给 AI 写。没写完之前不给基础版，只让前端显示加载画面。
     // 只对 q1 开头的答卷生效，旧问卷的存量答卷仍走原路径。
     if (survey.reportMode === 'doc' && 'q1' in answers) {
       if (req.query.poll !== '1') recordEvent(submission.invite_id, 'report_view')
-      const docInput = {
-        survey,
-        answers,
-        name,
-        slug: submission.slug,
-        createdAt: submission.created_at,
-        claimed: Boolean(submission.claimed_at)
-      }
       const storedDoc = readDocContent(submission.ai_report)
       if (submission.ai_status === 'ready' && storedDoc) {
         const response: ReportResponse = {
           status: 'ready',
-          report: buildDocReportWithAi({ ...docInput, content: storedDoc }),
+          report: buildDocReportWithAi({
+            survey,
+            answers,
+            name,
+            slug: submission.slug,
+            createdAt: submission.created_at,
+            claimed: Boolean(submission.claimed_at),
+            content: storedDoc
+          }),
           name
         }
         res.json(response)
@@ -286,16 +286,10 @@ publicRouter.get(
         attempts: submission.ai_attempts,
         error: submission.ai_error
       })
-      const readyButEmpty = submission.ai_status === 'ready'
-      const failed = readyButEmpty || (submission.ai_status === 'failed' && !started)
       const response: ReportResponse = {
-        status: failed ? 'failed' : started || submission.ai_status === 'running' ? 'running' : 'pending',
-        report: buildDocReport(docInput),
-        name,
-        notice: failed
-          ? `AI 版没有生成成功：${submission.ai_error || '未知原因'}。当前显示规则版。`
-          : 'AI 版正在生成，先看规则版，完成后会自动替换。',
-        error: failed ? submission.ai_error || 'AI 生成失败' : undefined
+        status: started || submission.ai_status === 'running' ? 'running' : 'pending',
+        report: null,
+        name
       }
       res.json(response)
       return

@@ -510,19 +510,33 @@ export interface DocAiContent {
   sections: { title: string; text: string }[]
 }
 
+/** 清掉 AI / 模板常见的低级问题：重复标点、空标签留下的「、，」、多余空白。 */
+export function cleanReportText(input: string): string {
+  return input
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/([、，。；：,;:])\1+/g, '$1')
+    .replace(/[、，]\s*[，、]/g, '，')
+    .replace(/[、，]\s*([。；：])/g, '$1')
+    .replace(/^[、，。；：\s]+/, '')
+    .replace(/[、，；：\s]+$/, '')
+    .trim()
+}
+
 export function normalizeDocAiContent(raw: unknown): DocAiContent {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return { conclusion: '', sections: [] }
   }
   const record = raw as Record<string, unknown>
-  const conclusion = typeof record.conclusion === 'string' ? record.conclusion.trim() : ''
+  const conclusion =
+    typeof record.conclusion === 'string' ? cleanReportText(record.conclusion) : ''
   const list = Array.isArray(record.sections) ? record.sections : []
   const sections = list
     .map((item) => {
       if (!item || typeof item !== 'object' || Array.isArray(item)) return null
       const entry = item as Record<string, unknown>
       const title = typeof entry.title === 'string' ? entry.title.trim() : ''
-      const text = typeof entry.text === 'string' ? entry.text.trim() : ''
+      const text = typeof entry.text === 'string' ? cleanReportText(entry.text) : ''
       return title && text ? { title, text } : null
     })
     .filter((section): section is { title: string; text: string } => Boolean(section))

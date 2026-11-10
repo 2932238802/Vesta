@@ -6,9 +6,10 @@ import {
   serializeDoc,
   type DocAiContent
 } from '../../../shared/src/doc'
+import { defaultReportSkill } from '../../../shared/src/ai'
 import { computeDocScores } from '../../../shared/src/docScore'
 import { config } from '../env'
-import { now } from '../db'
+import { getReportSkill, now } from '../db'
 import { askDeepSeek, parseJsonObject } from './deepseek'
 
 export interface DocAiMeta {
@@ -62,6 +63,63 @@ function answerText(survey: Survey, answers: Answers): string {
     .join('\n')
 }
 
+const REVIEW_SKILL = `你是报告审校员，只做校对，不重写立场。
+
+## 你要检查的低级问题
+1. 空标签留下的痕迹：像「卡住你的是、，」「、，」「的是，」这种中间没有内容、只有标点的句子。
+2. 未替换的占位符或变量：{{ }}、{name}、undefined、null、NaN、XX、某同学、示例。
+3. 重复或连用标点：「，，」「。。」「、，」「；；」，以及段落开头结尾多余的顿号逗号。
+4. 语病和半截话：缺主语的句子、重复词（「你想你想」）、句子被截断。
+5. 和系统数字冲突：分数、剩余月份、每周小时数与给定数字不一致。
+6. 禁用词：报班、课程、学费、名额、不学就来不及、不过级就没戏。
+7. 没有依据的判断：凭空出现的分数线、薪资、院校要求（应写「以官方最新公告为准」）。
+
+## 输出（只输出 JSON）
+{
+  "issues": ["发现的问题，没有就空数组"],
+  "conclusion": "修正后的一句话结论",
+  "sections": [ { "title": "原标题", "text": "修正后的正文" } ]
+}
+
+## 要求
+- 五个小标题和顺序必须保持原样，不能增删。
+- 只改有问题的地方；没问题的句子原样保留，不要润色成另一种风格。
+- 不要新增事实，不要编造数字；拿不准的删掉或改成「以官方最新公告为准」。
+- 不要输出 Markdown。`
+
+/** 先用规则挑一遍明显的低级问题，避免把坏文本直接交给审校。 */
+function findTextIssues(content: DocAiContent): string[] {
+  const issues: string[] = []
+  const texts = [
+    content.conclusion,
+    ...content.sections.map((section) => `${section.title}｜${section.text}`)
+  ]
+  for (const text of texts) {
+    if (!text.trim()) {
+      issues.push('存在空段落')
+      continue
+    }
+    if (/(\{\{|\}\}|\{name\}|undefined|null|NaN|XX|示例)/.test(text)) {
+      issues.push(`出现未替换的占位内容：${text.slice(0, 40)}`)
+    }
+    if (/([、，。；：,;:])\1/.test(text) || /[、，]\s*[，、]/.test(text)) {
+      issues.push(`标点重复或连用：${text.slice(0, 40)}`)
+    }
+    if (/的是[、，]/.test(text)) {
+      issues.push(`「的是」后面缺内容：${text.slice(0, 40)}`)
+    }
+    if (/(报班|课程|学费|名额|不学就来不及|不过级就没戏)/.test(text)) {
+      issues.push(`出现禁用词：${text.slice(0, 40)}`)
+    }
+  }
+  return issues
+}
+
+function sameTitles(a: DocAiContent, b: DocAiContent): boolean {
+  if (a.sections.length !== b.sections.length) return false
+  return a.sections.every((section, index) => section.title === b.sections[index]?.title)
+}
+
 export async function generateDocContent(input: {
   survey: Survey
   answers: Answers
@@ -74,6 +132,7 @@ export async function generateDocContent(input: {
   const scoreText = [...scores.background, ...scores.personal]
     .map((item) => `${item.label}：${item.score} 分`)
     .join('\n')
+
   const userPrompt = `学生：${name || '同学'}
 
 【问卷回答】
@@ -91,8 +150,15 @@ ${scoreText}
 
 请按 Skill 要求写报告，只输出 JSON 对象。`
 
+  // 管理后台「AI 分析规则」如果被改过，就把自定义规则一起作为补充口径。
+  const customSkill = getReportSkill().trim()
+  const skill =
+    customSkill && customSkill !== defaultReportSkill
+      ? `${DOC_SKILL}\n\n---\n\n## 顾问补充规则（优先遵循）\n${customSkill}`
+      : DOC_SKILL
+
   const messages = [
-    { role: 'system' as const, content: DOC_SKILL },
+    { role: 'system' as const, content: skill },
     { role: 'user' as const, content: userPrompt }
   ]
 
@@ -112,6 +178,52 @@ ${scoreText}
 
   if (!content.conclusion || content.sections.length < 3) {
     throw new Error('AI 报告内容不完整')
+  }
+
+  // 第二次 AI：审校。只做校对和修补，标题与顺序保持不变。
+  const reviewMessages = [
+    { role: 'system' as const, content: REVIEW_SKILL },
+    {
+      role: 'user' as const,
+      content: `【学生回答】
+${answerText(survey, answers)}
+
+【系统算好的数字】（不能改）
+${scoreText}
+潜力：${scores.potential.level}
+关键节点：${node.node}，还剩约 ${node.months} 个月
+
+【待审报告】
+${JSON.stringify(content, null, 2)}
+
+请按审校要求检查并输出 JSON。`
+    }
+  ]
+
+  try {
+    const reviewed = normalizeDocAiContent(parseJsonObject(await askDeepSeek(reviewMessages)))
+    if (
+      reviewed.conclusion &&
+      reviewed.sections.length === content.sections.length &&
+      sameTitles(content, reviewed)
+    ) {
+      content = reviewed
+    }
+  } catch (error) {
+    // 审校失败不影响主报告，下面还有一轮确定性检查。
+    console.warn('[doc-report] 审校未完成，继续用初稿', error)
+  }
+
+  const issues = findTextIssues(content)
+  const blocking = issues.filter(
+    (issue) =>
+      issue.startsWith('出现未替换') || issue.startsWith('存在空段落') || issue.startsWith('出现禁用词')
+  )
+  if (blocking.length > 0) {
+    throw new Error(`AI 报告审校未通过：${blocking[0]}`)
+  }
+  if (issues.length > 0) {
+    console.warn('[doc-report] 审校遗留小问题', issues)
   }
 
   return {
