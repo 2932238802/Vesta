@@ -26,6 +26,7 @@ import {
 import { parseJson } from '../util'
 import { searchWeb, type SearchResult } from './bocha'
 import { askDeepSeek, parseJsonObject } from './deepseek'
+import { generateDocContent } from './doc-generate'
 
 export interface AiMeta {
   model: string
@@ -497,6 +498,28 @@ async function generate(submissionId: string): Promise<void> {
       .get(row.invite_id) as { name: string } | undefined
     const survey = getSurvey(row.survey_id) ?? getActiveSurvey()
     const answers = parseJson<Answers>(row.answers, {})
+
+    // 文档版问卷：整份报告交给 AI 写，按问卷答案 + 规则事实出结论。
+    if (survey.reportMode === 'doc') {
+      const { content, meta } = await generateDocContent({
+        survey,
+        answers,
+        name: invite?.name ?? ''
+      })
+      db.prepare(
+        `UPDATE submissions
+         SET ai_status = 'ready', ai_report = ?, ai_meta = ?, ai_error = '', ai_finished_at = ?
+         WHERE id = ?`
+      ).run(
+        JSON.stringify({ doc: true, content }),
+        JSON.stringify(meta),
+        now(),
+        submissionId
+      )
+      recordEvent(row.invite_id, 'ai_report_ready', { model: meta.model })
+      return
+    }
+
     const storedScores = parseJson<ScoreResult>(row.scores, computeScores(survey, answers))
     const scores =
       Array.isArray(storedScores.dimensions) && storedScores.dimensions.length

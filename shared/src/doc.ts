@@ -311,12 +311,33 @@ export interface DocReportInput {
   claimed: boolean
 }
 
+export interface DocFacts {
+  priority: 'A' | 'B' | 'C'
+  oneLine: string
+  stuck: string
+  stuckDetail: string
+  deadline: string
+  future: string
+}
+
+/** 规则版报告用到的全部事实，也给 AI 当输入，避免两套口径不一致。 */
+export function docFacts(survey: Survey, answers: Answers): DocFacts {
+  const stuck = stuckLayer(survey, answers)
+  return {
+    priority: docPriority(survey, answers),
+    oneLine: oneLine(survey, answers),
+    stuck: stuck.short,
+    stuckDetail: stuck.full,
+    deadline: deadlineText(survey, answers),
+    future: futureText(survey, answers)
+  }
+}
+
 export function buildDocReport(input: DocReportInput): ReportPayload {
   const { survey, answers, name, slug, createdAt, claimed } = input
-  const priority = docPriority(survey, answers)
-  const total = priority === 'A' ? 82 : priority === 'B' ? 60 : 25
-  const tier: Tier = priority
-  const stuck = stuckLayer(survey, answers)
+  const facts = docFacts(survey, answers)
+  const tier: Tier = facts.priority
+  const total = tier === 'A' ? 82 : tier === 'B' ? 60 : 25
   const tierRule = survey.tiers.find((item) => item.tier === tier) ?? survey.tiers[survey.tiers.length - 1]
 
   const blocks: ReportBlock[] = [
@@ -324,15 +345,15 @@ export function buildDocReport(input: DocReportInput): ReportPayload {
       type: 'hero',
       eyebrow: '学姐帮你看看现在在哪儿',
       title: survey.title,
-      summary: oneLine(survey, answers),
+      summary: facts.oneLine,
       tier,
       tierLabel: tierRule?.label ?? '',
-      tierLine: stuck.short,
+      tierLine: facts.stuck,
       total
     },
-    { type: 'note', title: '你现在卡在哪一层', text: stuck.full },
-    { type: 'note', title: '什么时候要命', text: deadlineText(survey, answers) },
-    { type: 'note', title: '五年后的你', text: futureText(survey, answers) }
+    { type: 'note', title: '你现在卡在哪一层', text: facts.stuckDetail },
+    { type: 'note', title: '什么时候要命', text: facts.deadline },
+    { type: 'note', title: '五年后的你', text: facts.future }
   ]
 
   return {
@@ -347,4 +368,45 @@ export function buildDocReport(input: DocReportInput): ReportPayload {
     footer: defaultTemplate.copy.footer,
     claimed
   }
+}
+
+export interface DocAiContent {
+  conclusion: string
+  sections: { title: string; text: string }[]
+}
+
+export function normalizeDocAiContent(raw: unknown): DocAiContent {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { conclusion: '', sections: [] }
+  }
+  const record = raw as Record<string, unknown>
+  const conclusion = typeof record.conclusion === 'string' ? record.conclusion.trim() : ''
+  const list = Array.isArray(record.sections) ? record.sections : []
+  const sections = list
+    .map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+      const entry = item as Record<string, unknown>
+      const title = typeof entry.title === 'string' ? entry.title.trim() : ''
+      const text = typeof entry.text === 'string' ? entry.text.trim() : ''
+      return title && text ? { title, text } : null
+    })
+    .filter((section): section is { title: string; text: string } => Boolean(section))
+  return { conclusion, sections }
+}
+
+/** 用 AI 内容替换规则版正文；AI 内容不完整时回落到规则版。 */
+export function buildDocReportWithAi(
+  input: DocReportInput & { content: DocAiContent }
+): ReportPayload {
+  const base = buildDocReport(input)
+  const hero = base.blocks[0]
+  if (hero?.type !== 'hero' || input.content.sections.length === 0) return base
+
+  const blocks: ReportBlock[] = [
+    { ...hero, summary: input.content.conclusion || hero.summary },
+    ...input.content.sections.map(
+      (section): ReportBlock => ({ type: 'note', title: section.title, text: section.text })
+    )
+  ]
+  return { ...base, blocks }
 }
