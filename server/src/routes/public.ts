@@ -270,7 +270,8 @@ publicRouter.get(
             slug: submission.slug,
             createdAt: submission.created_at,
             claimed: Boolean(submission.claimed_at),
-            content: storedDoc
+            content: storedDoc.content,
+            jobs: storedDoc.jobs
           }),
           name
         }

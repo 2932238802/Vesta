@@ -87,6 +87,10 @@ export interface ScoreItem {
   label: string
   score: number
   note: string
+  /** 这条赛道的入场线（经验值区间），只给五因素用 */
+  benchmark?: string
+  /** 这个分是从哪几道题来的 */
+  source?: string
 }
 
 export interface Dimension {

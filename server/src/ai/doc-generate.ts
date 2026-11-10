@@ -1,4 +1,4 @@
-import type { Answers, Survey } from '../../../shared/src/types'
+import type { Answers, JobCard, Survey } from '../../../shared/src/types'
 import {
   deadlineFact,
   docFacts,
@@ -11,6 +11,7 @@ import { computeDocScores } from '../../../shared/src/docScore'
 import { config } from '../env'
 import { getReportSkill, now } from '../db'
 import { askDeepSeek, parseJsonObject } from './deepseek'
+import { searchWeb } from './bocha'
 
 export interface DocAiMeta {
   model: string
@@ -120,11 +121,59 @@ function sameTitles(a: DocAiContent, b: DocAiContent): boolean {
   return a.sections.every((section, index) => section.title === b.sections[index]?.title)
 }
 
+function cityOf(survey: Survey, answers: Answers): string {
+  const question = survey.questions.find((item) => item.id === 'q8')
+  const value = answers.q8
+  if (!question || typeof value !== 'string') return ''
+  const label = question.options?.find((option) => option.id === value)?.label ?? ''
+  return label.includes('还没想好') ? '' : label.replace(/（.*?）/, '')
+}
+
+function salaryOf(snippet: string): string {
+  const match = snippet.match(/\d+(?:\.\d+)?\s*[-—~至]\s*\d+(?:\.\d+)?\s*[kK千万]?(?:元)?/)
+  return match?.[0]?.trim() ?? ''
+}
+
+/** 用博查抓 3 条真实招聘信息，做成可点开的卡片；失败不影响报告。 */
+async function searchJobs(survey: Survey, answers: Answers): Promise<JobCard[]> {
+  if (!config.bochaApiKey) return []
+  const city = cityOf(survey, answers)
+  const role = String(answers.q5a ?? '').trim() || String(answers.q2 ?? '').trim()
+  if (!role) return []
+
+  const queries = [
+    `${city} ${role} 招聘 应届 薪资 要求`.trim(),
+    `${role} 应届生 招聘 学历 英语 要求`
+  ]
+
+  const results = await Promise.allSettled(queries.map((query) => searchWeb(query)))
+  const items = results.flatMap((result) =>
+    result.status === 'fulfilled' ? result.value : []
+  )
+  const seen = new Set<string>()
+  const jobs: JobCard[] = []
+  for (const item of items) {
+    if (jobs.length >= 3) break
+    if (seen.has(item.url)) continue
+    seen.add(item.url)
+    jobs.push({
+      title: item.title,
+      company: item.site || '招聘页面',
+      city,
+      salary: salaryOf(item.snippet) || '薪资以原文为准',
+      requirement: item.snippet.slice(0, 90),
+      url: item.url,
+      date: item.publishedAt
+    })
+  }
+  return jobs
+}
+
 export async function generateDocContent(input: {
   survey: Survey
   answers: Answers
   name: string
-}): Promise<{ content: DocAiContent; meta: DocAiMeta }> {
+}): Promise<{ content: DocAiContent; meta: DocAiMeta; jobs: JobCard[] }> {
   const { survey, answers, name } = input
   const facts = docFacts(survey, answers)
   const scores = computeDocScores(survey, answers)
@@ -162,19 +211,31 @@ ${scoreText}
     { role: 'user' as const, content: userPrompt }
   ]
 
-  let content = normalizeDocAiContent(parseJsonObject(await askDeepSeek(messages)))
-  if (!content.conclusion || content.sections.length < 5) {
-    const repair = [
-      ...messages,
-      { role: 'assistant' as const, content: JSON.stringify(content).slice(0, 12_000) },
-      {
-        role: 'user' as const,
-        content:
-          '上面的 JSON 不完整。请补齐 conclusion，并确保 sections 正好 5 条、每条都有 title 和 text，只输出合法 JSON。'
+  // 招聘信息检索和写作并行，检索失败只是少一块卡片，不影响报告。
+  const [contentResult, jobs] = await Promise.all([
+    (async () => {
+      let text = normalizeDocAiContent(parseJsonObject(await askDeepSeek(messages)))
+      if (!text.conclusion || text.sections.length < 5) {
+        const repair = [
+          ...messages,
+          { role: 'assistant' as const, content: JSON.stringify(text).slice(0, 12_000) },
+          {
+            role: 'user' as const,
+            content:
+              '上面的 JSON 不完整。请补齐 conclusion，并确保 sections 正好 5 条、每条都有 title 和 text，只输出合法 JSON。'
+          }
+        ]
+        text = normalizeDocAiContent(parseJsonObject(await askDeepSeek(repair)))
       }
-    ]
-    content = normalizeDocAiContent(parseJsonObject(await askDeepSeek(repair)))
-  }
+      return text
+    })(),
+    searchJobs(survey, answers).catch((error) => {
+      console.warn('[doc-report] 招聘检索失败', error)
+      return [] as JobCard[]
+    })
+  ])
+
+  let content = contentResult
 
   if (!content.conclusion || content.sections.length < 3) {
     throw new Error('AI 报告内容不完整')
@@ -228,19 +289,42 @@ ${JSON.stringify(content, null, 2)}
 
   return {
     content,
+    jobs,
     meta: { model: config.deepseekModel, generatedAt: now() }
   }
 }
 
-export function readDocContent(raw: string | null): DocAiContent | null {
+export interface StoredDocReport {
+  content: DocAiContent
+  jobs: JobCard[]
+}
+
+export function readDocContent(raw: string | null): StoredDocReport | null {
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as unknown
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
-    const record = parsed as { doc?: unknown; content?: unknown }
+    const record = parsed as { doc?: unknown; content?: unknown; jobs?: unknown }
     if (record.doc !== true) return null
     const content = normalizeDocAiContent(record.content)
-    return content.conclusion && content.sections.length ? content : null
+    if (!content.conclusion && content.sections.length === 0) return null
+    const rawJobs = Array.isArray(record.jobs) ? record.jobs : []
+    const jobs: JobCard[] = []
+    for (const item of rawJobs) {
+      if (!item || typeof item !== 'object') continue
+      const job = item as Record<string, unknown>
+      if (typeof job.url !== 'string' || !/^https?:\/\//i.test(job.url)) continue
+      jobs.push({
+        title: String(job.title ?? '招聘信息'),
+        company: String(job.company ?? ''),
+        city: String(job.city ?? ''),
+        salary: String(job.salary ?? ''),
+        requirement: String(job.requirement ?? ''),
+        url: job.url,
+        date: typeof job.date === 'string' ? job.date : undefined
+      })
+    }
+    return { content, jobs }
   } catch {
     return null
   }

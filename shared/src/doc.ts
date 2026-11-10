@@ -370,6 +370,14 @@ function weeklyHours(survey: Survey, answers: Answers): number {
   return WEEKLY_HOURS[at] ?? 0
 }
 
+function salaryRange(city: string): string {
+  if (city === '北上广深') return '应届 6—10k（经验值，行业差异大）'
+  if (city.startsWith('新一线')) return '应届 5—8k（经验值）'
+  if (city === '家乡省会') return '应届 4—7k（经验值）'
+  if (city === '回家乡小城') return '应届 3—5k（经验值）'
+  return '还没有目标城市，先按你所在城市看'
+}
+
 function gapLines(survey: Survey, answers: Answers): { label: string; value: string }[] {
   const first = label(survey, answers, 'q6')
   const city = label(survey, answers, 'q8')
@@ -385,7 +393,11 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
   if (first === '就业') {
     lines.push({ label: '目标城市', value: city || '还没想好' })
     lines.push({ label: '目标岗位', value: role || '还没写清楚' })
-    lines.push({ label: '入场线（经验值）', value: '本科 + 相关实习 1 段 + 四级 425 以上；好岗位普遍看实习经历' })
+    lines.push({ label: '应届薪资区间（经验值）', value: salaryRange(city) })
+    lines.push({
+      label: '入场线（经验值）',
+      value: '本科 + 相关实习 1 段 + 四级 425 以上；好岗位普遍看实习经历'
+    })
   } else if (first === '考研') {
     lines.push({ label: '目标专业', value: major || '还没填' })
     lines.push({ label: '入场线（经验值）', value: '过国家线 + 目标院校线；英语单科线 45 分左右，好学校更高' })
@@ -411,6 +423,16 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
     })
   }
 
+  const english = computeDocScores(survey, answers).english
+  if (english.stage) {
+    lines.push({
+      label: '门槛对照',
+      value: `你现在是「${english.stage}」${english.band ? `，最近一次四级 ${english.band}` : ''}；${
+        english.need ? '这条路对英语有要求，先把它算进计划' : '这条路对英语没有硬性门槛'
+      }`
+    })
+  }
+
   return lines
 }
 
@@ -426,14 +448,14 @@ function scorecardBlock(survey: Survey, answers: Answers): ReportBlock {
   }
 }
 
-function gapBlock(survey: Survey, answers: Answers): ReportBlock {
+function gapBlock(survey: Survey, answers: Answers, jobs: JobCard[] = []): ReportBlock {
   return {
     type: 'gap',
     title: '和目标之间还差多少',
     subtitle: '门槛是经验值区间，以目标单位最新公告或招聘原文为准',
     lines: gapLines(survey, answers),
     note: '这一屏不预测结果，只把「现在的位置」和「这条路的入场线」摆在一起。',
-    jobs: []
+    jobs: jobs.slice(0, 3)
   }
 }
 
@@ -463,10 +485,21 @@ function englishSection(survey: Survey, answers: Answers): ReportBlock {
 
   const plan = `这 30 天先做三件事：一、把${stuck.short}对应的材料找齐（真题、词表或听力材料）；二、每天固定 30 分钟，只练这一项；三、每周日记录一次能听/能说/能背下多少，用数字对比，不用感觉。`
 
-  return { type: 'section', title: '英语这块', paragraphs: [position, ...gapParts, plan] }
+  const skipped = english.skippedDetail
+    ? '（你给英语的重要度低于 6 分，后面 5 道细节题按规则跳过了，不是你没答。）'
+    : ''
+
+  return {
+    type: 'section',
+    title: '英语这块',
+    paragraphs: [position + skipped, ...gapParts, plan]
+  }
 }
 
-export function buildDocReport(input: DocReportInput): ReportPayload {
+export function buildDocReport(
+  input: DocReportInput,
+  jobs: JobCard[] = []
+): ReportPayload {
   const { survey, answers, name, slug, createdAt, claimed } = input
   const facts = docFacts(survey, answers)
   const tier: Tier = facts.priority
@@ -484,7 +517,7 @@ export function buildDocReport(input: DocReportInput): ReportPayload {
       total: null
     },
     scorecardBlock(survey, answers),
-    gapBlock(survey, answers),
+    gapBlock(survey, answers, jobs),
     englishSection(survey, answers),
     { type: 'note', title: '你现在卡在哪一层', text: facts.stuckDetail },
     { type: 'note', title: '什么时候要命', text: facts.deadline },
@@ -545,9 +578,9 @@ export function normalizeDocAiContent(raw: unknown): DocAiContent {
 
 /** 用 AI 内容替换规则版正文；AI 内容不完整时回落到规则版。 */
 export function buildDocReportWithAi(
-  input: DocReportInput & { content: DocAiContent }
+  input: DocReportInput & { content: DocAiContent; jobs?: JobCard[] }
 ): ReportPayload {
-  const base = buildDocReport(input)
+  const base = buildDocReport(input, input.jobs ?? [])
   const hero = base.blocks[0]
   if (hero?.type !== 'hero' || input.content.sections.length === 0) return base
 

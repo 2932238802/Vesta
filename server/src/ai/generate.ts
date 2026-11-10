@@ -501,7 +501,7 @@ async function generate(submissionId: string): Promise<void> {
 
     // 文档版问卷：整份报告交给 AI 写，按问卷答案 + 规则事实出结论。
     if (survey.reportMode === 'doc') {
-      const { content, meta } = await generateDocContent({
+      const { content, meta, jobs } = await generateDocContent({
         survey,
         answers,
         name: invite?.name ?? ''
@@ -511,7 +511,7 @@ async function generate(submissionId: string): Promise<void> {
          SET ai_status = 'ready', ai_report = ?, ai_meta = ?, ai_error = '', ai_finished_at = ?
          WHERE id = ?`
       ).run(
-        JSON.stringify({ doc: true, content }),
+        JSON.stringify({ doc: true, content, jobs }),
         JSON.stringify(meta),
         now(),
         submissionId

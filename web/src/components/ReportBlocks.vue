@@ -208,7 +208,8 @@
                 <b>{{ item.score }}</b>
               </div>
               <div class="score-track"><i :style="{ width: `${item.score * 10}%` }" /></div>
-              <p class="score-note">{{ item.note }}</p>
+              <p v-if="item.benchmark" class="score-benchmark">入场线：{{ item.benchmark }}</p>
+              <p class="score-note">{{ item.note }}<template v-if="item.source"> · {{ item.source }}</template></p>
             </div>
           </section>
           <section class="score-group">
@@ -219,7 +220,7 @@
                 <b>{{ item.score }}</b>
               </div>
               <div class="score-track personal"><i :style="{ width: `${item.score * 10}%` }" /></div>
-              <p class="score-note">{{ item.note }}</p>
+              <p class="score-note">{{ item.note }}<template v-if="item.source"> · {{ item.source }}</template></p>
             </div>
           </section>
         </div>
@@ -777,6 +778,13 @@ const dateText = computed(() => {
   font-size: 12px;
   line-height: 1.65;
   color: var(--ink-3);
+}
+
+.score-benchmark {
+  margin-top: 5px;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--accent) 70%, var(--ink-3));
 }
 
 .potential {

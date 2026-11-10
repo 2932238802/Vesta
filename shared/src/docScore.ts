@@ -1,12 +1,7 @@
-import type { Answers, Survey } from './types'
+import type { Answers, ScoreItem, Survey } from './types'
 import { resolveQuestion } from './doc'
 
-export interface ScoredItem {
-  key: string
-  label: string
-  score: number
-  note: string
-}
+export type ScoredItem = ScoreItem
 
 export type PotentialLevel = '低' | '中' | '高'
 
@@ -18,6 +13,8 @@ export interface DocScores {
   potential: { level: PotentialLevel; text: string }
   english: {
     need: boolean
+    /** 低分者后 5 道英语题是按规则跳过的 */
+    skippedDetail: boolean
     stage: string
     band: string
     weeklyHours: number
@@ -45,6 +42,16 @@ function optionLabels(survey: Survey, answers: Answers, id: string): string[] {
   return value
     .map((item) => resolved.options.find((option) => option.id === item)?.label ?? '')
     .filter(Boolean)
+}
+
+/** 单选题取选项文字；多选题用 optionLabels。 */
+function singleLabel(survey: Survey, answers: Answers, id: string): string {
+  const question = survey.questions.find((item) => item.id === id)
+  if (!question) return ''
+  const value = answers[id]
+  if (typeof value !== 'string') return ''
+  const resolved = resolveQuestion(survey, answers, question)
+  return resolved.options.find((option) => option.id === value)?.label ?? ''
 }
 
 function pick(index: number, table: number[], fallback = 0): number {
@@ -117,31 +124,41 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
       key: 'school',
       label: '学校与专业',
       score: schoolScore(survey, answers),
-      note: '学校层级 + 专业是否对口，改不了，是起点'
+      note: '学校层级 + 专业是否对口，改不了，是起点',
+      benchmark: '常规入场线 6.0—8.0',
+      source: 'Q1 学校 + Q5 是否对口'
     },
     {
       key: 'city',
       label: '城市与行业',
       score: cityScore(survey, answers),
-      note: '目标城市的机会密度 + 行业岗位写得清不清楚'
+      note: '目标城市的机会密度 + 行业岗位写得清不清楚',
+      benchmark: '常规入场线 6.0—8.0',
+      source: 'Q8 城市 + Q5a 岗位'
     },
     {
       key: 'family',
       label: '原生家庭托举',
       score: pick(optionIndex(survey, answers, 'q15'), FAMILY, 5),
-      note: '家里能托住多少，改不了，但要说清楚'
+      note: '家里能托住多少，改不了，但要说清楚',
+      benchmark: '背景项，不设门槛',
+      source: 'Q15 家庭支持'
     },
     {
       key: 'practice',
       label: '实习实践',
       score: pick(optionIndex(survey, answers, 'q9'), PRACTICE, 2),
-      note: '能写进简历的校外实习和校内实践'
+      note: '能写进简历的校外实习和校内实践',
+      benchmark: '常规入场线 6.0—8.5',
+      source: 'Q9 实习实践'
     },
     {
       key: 'skill',
       label: '个人技能',
       score: skillScore(survey, answers),
-      note: '底层能力、垂直技能、证书的累计'
+      note: '底层能力、垂直技能、证书的累计',
+      benchmark: '常规入场线 7.0—9.0',
+      source: 'Q10 能力储备'
     }
   ]
 
@@ -150,19 +167,22 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
       key: 'method',
       label: '方法与习惯',
       score: methodScore(survey, answers),
-      note: '高中到现在的学习效率，以及背单词和学英语的方式'
+      note: '高中到现在的学习效率，以及背单词和学英语的方式',
+      source: 'Q14 高中状态 + Q21 背单词 + Q19 怎么学'
     },
     {
       key: 'info',
       label: '信息差',
       score: pick(optionIndex(survey, answers, 'q16'), INFO, 4),
-      note: '对目标门槛、时间节点、报名规则的掌握程度'
+      note: '对目标门槛、时间节点、报名规则的掌握程度',
+      source: 'Q16 信息差'
     },
     {
       key: 'execution',
       label: '执行力',
       score: pick(optionIndex(survey, answers, 'q13'), EXECUTION, 4),
-      note: '定了目标之后能不能落地、能坚持多久'
+      note: '定了目标之后能不能落地、能坚持多久',
+      source: 'Q13 执行力'
     },
     {
       key: 'environment',
@@ -192,9 +212,17 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
       ? `你的潜力在${level}档，卡住你的是${lowLabels.slice(0, 2).join('、')}，不是天赋。`
       : `你的潜力在${level}档，这四项里没有明显短板，接下来是把已有的往前推。`
 
+  // 客观有英语需求：升学/考编，或专业本身对口（Q5 想从事本专业），或正在准备四六级。
   const need =
     ['q6_1', 'q6_2', 'q6_5'].includes(String(answers.q6 ?? '')) ||
+    String(answers.q5 ?? '') === 'q5_1' ||
     optionLabels(survey, answers, 'q7').some((item) => item === '四级' || item === '六级')
+
+  // 低分者只答了 3 道英语题，后面 5 道是按规则跳过的，报告里要说明，不能当成「未作答」。
+  const detailQuestion = survey.questions.find((item) => item.id === 'q19')
+  const skippedDetail = detailQuestion
+    ? !resolveQuestion(survey, answers, detailQuestion).visible
+    : false
 
   return {
     background,
@@ -202,11 +230,12 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
     potential: { level, text: potentialText },
     english: {
       need,
-      stage: optionLabels(survey, answers, 'q17')[0] ?? '',
-      band: optionLabels(survey, answers, 'q17b')[0] ?? '',
+      skippedDetail,
+      stage: singleLabel(survey, answers, 'q17'),
+      band: singleLabel(survey, answers, 'q17b'),
       weeklyHours: pick(optionIndex(survey, answers, 'q20'), WEEKLY_HOURS, 0),
-      weakPart: optionLabels(survey, answers, 'q18')[0] ?? '',
-      speaking: optionLabels(survey, answers, 'q22')[0] ?? '',
+      weakPart: singleLabel(survey, answers, 'q18'),
+      speaking: singleLabel(survey, answers, 'q22'),
       reasons: optionLabels(survey, answers, 'q25')
     }
   }
