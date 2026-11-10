@@ -36,6 +36,8 @@ export interface QuestionCondition {
   min?: number
   /** 数字题：答案 < max 时命中 */
   max?: number
+  /** 答案命中这些选项时不显示（比如口语已经“比较自如”就不用再问原因） */
+  not?: string[]
 }
 
 export interface Question {

@@ -39,6 +39,15 @@ function conditionMatches(answers: Answers, condition: QuestionCondition): boole
   if (typeof condition.max === 'number') {
     if (typeof value !== 'number' || value >= condition.max) return false
   }
+  if (condition.not?.length) {
+    if (Array.isArray(value)) {
+      if (value.some((item) => typeof item === 'string' && condition.not?.includes(item))) {
+        return false
+      }
+    } else if (typeof value === 'string' && condition.not.includes(value)) {
+      return false
+    }
+  }
   return true
 }
 

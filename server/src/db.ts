@@ -438,6 +438,14 @@ function patchQ22Order(questions: Survey['questions']): boolean {
   return true
 }
 
+/** Q21「英语学不好的原因」：口语听力已经比较自如时不再问。 */
+function patchQ25SkipWhenSpeakingWell(questions: Survey['questions']): boolean {
+  const q25 = questions.find((q) => q.id === 'q25')
+  if (!q25 || q25.showIf) return false
+  q25.showIf = { question: 'q22', not: ['q22_4'] }
+  return true
+}
+
 function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
   // 后台保存过的问卷（运营自己调过选项、加过题）不整份覆盖；
   // 只应用那些「题目还是默认形态」的结构修正（单选改多选、补回被删的默认题）。
@@ -448,7 +456,8 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
       patchQ18Multi(patched) ||
       patchQ21Multi(patched) ||
       patchQ25Multi(patched) ||
-      patchQ22Order(patched)
+      patchQ22Order(patched) ||
+      patchQ25SkipWhenSpeakingWell(patched)
     return changed
       ? { survey: { ...survey, questions: patched }, changed }
       : { survey, changed: false }

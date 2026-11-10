@@ -386,6 +386,8 @@ export const defaultSurvey: Survey = {
       title: '你觉得英语学不好最主要的原因是',
       type: 'multi',
       required: true,
+      // 口语听力已经「能日常交流、比较自如」的人，不必再问学不好的原因。
+      showIf: { question: 'q22', not: ['q22_4'] },
       options: choice('q25', [
         ['没时间', null],
         ['记不住', null],
