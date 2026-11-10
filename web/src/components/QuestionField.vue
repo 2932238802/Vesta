@@ -5,6 +5,10 @@
       <div class="q-copy">
         <h3 class="q-title">
           {{ question.title }}
+          <span v-if="question.type === 'multi'" class="tag multi">多选</span>
+          <span v-if="question.type === 'multi' && question.maxSelect" class="tag">
+            最多 {{ question.maxSelect }} 项
+          </span>
           <span v-if="!question.required" class="optional">选填</span>
         </h3>
         <p v-if="question.hint" class="q-hint">{{ question.hint }}</p>
@@ -372,6 +376,26 @@ function toggle(id: string) {
   font-weight: 400;
   color: var(--ink-3);
   letter-spacing: 0.08em;
+}
+
+.tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.7;
+  letter-spacing: 0.04em;
+  vertical-align: 2px;
+  white-space: nowrap;
+}
+
+.tag.multi {
+  color: #fff;
+  background: var(--accent);
 }
 
 .q-hint {

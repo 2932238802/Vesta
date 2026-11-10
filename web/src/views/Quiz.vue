@@ -54,13 +54,7 @@
           <button v-if="step > 0" class="btn ghost back" type="button" @click="back">上一题</button>
           <span v-else class="save-hint">草稿自动保存在本机</span>
           <div class="spacer" />
-          <button
-            v-if="!isSingle || resolved.disabled"
-            class="btn next"
-            type="button"
-            :disabled="submitting"
-            @click="next"
-          >
+          <button class="btn next" type="button" :disabled="submitting" @click="next">
             {{ submitting ? '正在生成报告' : isLast ? '提交并生成报告' : '下一题' }}
           </button>
         </div>
@@ -112,6 +106,7 @@ let activeId: string | null = null
 let activeSince = 0
 let submitted = false
 let exitTracked = false
+let restoring = false
 
 const visible = computed<Question[]>(() =>
   survey.value ? visibleQuestions(survey.value, answers.value) : []
@@ -129,7 +124,6 @@ const currentQuestion = computed<Question | null>(() => {
     options: resolved.value.options
   }
 })
-const isSingle = computed(() => current.value?.type === 'single')
 const isLast = computed(() => step.value >= visible.value.length - 1)
 
 const answeredCount = computed(() => {
@@ -241,6 +235,7 @@ function advance() {
     return
   }
   step.value += 1
+  autoAdvancedStep = -1
   saveDraft()
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -266,6 +261,8 @@ function back() {
   error.value = ''
   showMissingHint.value = false
   step.value = Math.max(0, step.value - 1)
+  // 回到上一题后重新选择，仍然要能自动进到下一题，所以把「这一题已自动跳过一次」的标记清掉。
+  autoAdvancedStep = -1
   saveDraft()
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -319,6 +316,7 @@ async function submit() {
 watch(
   answers,
   () => {
+    if (restoring) return
     if (!current.value || current.value.type !== 'single') return
     if (resolved.value?.disabled) return
     if (isEmptyValue(answers.value[current.value.id])) return
@@ -341,8 +339,11 @@ onMounted(async () => {
       await router.replace(`/r/${payload.reportSlug}`)
       return
     }
+    restoring = true
     survey.value = payload.survey
     restoreDraft()
+    await nextTick()
+    restoring = false
   } catch (err) {
     error.value = err instanceof Error ? err.message : '链接无法打开'
   } finally {
