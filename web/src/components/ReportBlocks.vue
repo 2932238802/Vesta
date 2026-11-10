@@ -19,7 +19,7 @@
         <p class="eyebrow">{{ block.title }} · {{ block.eyebrow }}</p>
         <h1 class="hero-title">{{ block.summary }}</h1>
         <div class="hero-foot">
-          <span class="tier-chip">
+          <span v-if="block.tierLabel" class="tier-chip">
             <b>{{ block.tier }}</b>
             {{ block.tierLabel }}
           </span>

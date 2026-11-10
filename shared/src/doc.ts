@@ -337,8 +337,6 @@ export function buildDocReport(input: DocReportInput): ReportPayload {
   const { survey, answers, name, slug, createdAt, claimed } = input
   const facts = docFacts(survey, answers)
   const tier: Tier = facts.priority
-  const total = tier === 'A' ? 82 : tier === 'B' ? 60 : 25
-  const tierRule = survey.tiers.find((item) => item.tier === tier) ?? survey.tiers[survey.tiers.length - 1]
 
   const blocks: ReportBlock[] = [
     {
@@ -347,9 +345,10 @@ export function buildDocReport(input: DocReportInput): ReportPayload {
       title: survey.title,
       summary: facts.oneLine,
       tier,
-      tierLabel: tierRule?.label ?? '',
-      tierLine: facts.stuck,
-      total
+      // 分层 A/B/C 只给顾问看，报告里不显示档位和分数。
+      tierLabel: '',
+      tierLine: '先看你现在最卡的那一层。',
+      total: null
     },
     { type: 'note', title: '你现在卡在哪一层', text: facts.stuckDetail },
     { type: 'note', title: '什么时候要命', text: facts.deadline },
