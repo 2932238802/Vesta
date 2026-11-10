@@ -428,6 +428,16 @@ function surveyShape(survey: Survey): string {
   })
 }
 
+/** Q18「口语和听力」提前到「英语现在的情况」后面。 */
+function patchQ22Order(questions: Survey['questions']): boolean {
+  const q17 = questions.findIndex((q) => q.id === 'q17')
+  const q22 = questions.findIndex((q) => q.id === 'q22')
+  if (q17 < 0 || q22 < 0 || q22 === q17 + 1) return false
+  const [item] = questions.splice(q22, 1)
+  questions.splice(q17 + 1, 0, item)
+  return true
+}
+
 function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
   // 后台保存过的问卷（运营自己调过选项、加过题）不整份覆盖；
   // 只应用那些「题目还是默认形态」的结构修正（单选改多选、补回被删的默认题）。
@@ -437,7 +447,8 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
       patchQ17EnglishStage(patched) ||
       patchQ18Multi(patched) ||
       patchQ21Multi(patched) ||
-      patchQ25Multi(patched)
+      patchQ25Multi(patched) ||
+      patchQ22Order(patched)
     return changed
       ? { survey: { ...survey, questions: patched }, changed }
       : { survey, changed: false }

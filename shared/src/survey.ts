@@ -346,8 +346,23 @@ export const defaultSurvey: Survey = {
       ])
     },
     {
-      id: 'q18',
+      id: 'q22',
       code: 'Q19',
+      groupId: 'p4',
+      title: '你的口语和听力',
+      type: 'single',
+      required: true,
+      showIfAll: [{ question: 'q24', min: 6 }],
+      options: choice('q22', [
+        ['完全开不了口，四级听力也基本听不懂', null],
+        ['开不了口，但能听懂一些简单对话', null],
+        ['能听懂，也能说几句，但不流利', null],
+        ['能日常交流，比较自如', null]
+      ])
+    },
+    {
+      id: 'q18',
+      code: 'Q20',
       groupId: 'p4',
       title: '上次四级哪部分丢分最多',
       type: 'multi',
@@ -366,7 +381,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q25',
-      code: 'Q20',
+      code: 'Q21',
       groupId: 'p4',
       title: '你觉得英语学不好最主要的原因是',
       type: 'multi',
@@ -383,7 +398,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q19',
-      code: 'Q21',
+      code: 'Q22',
       groupId: 'p4',
       title: '你现在怎么学英语',
       type: 'multi',
@@ -400,7 +415,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q20',
-      code: 'Q22',
+      code: 'Q23',
       groupId: 'p4',
       title: '一周花多少时间在英语上',
       type: 'single',
@@ -415,7 +430,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q21',
-      code: 'Q23',
+      code: 'Q24',
       groupId: 'p4',
       title: '背单词的情况',
       type: 'multi',
@@ -426,21 +441,6 @@ export const defaultSurvey: Survey = {
         ['背了忘、忘了背', null],
         ['考前突击', null],
         ['基本不背', null]
-      ])
-    },
-    {
-      id: 'q22',
-      code: 'Q24',
-      groupId: 'p4',
-      title: '你的口语和听力',
-      type: 'single',
-      required: true,
-      showIfAll: [{ question: 'q24', min: 6 }],
-      options: choice('q22', [
-        ['完全开不了口，四级听力也基本听不懂', null],
-        ['开不了口，但能听懂一些简单对话', null],
-        ['能听懂，也能说几句，但不流利', null],
-        ['能日常交流，比较自如', null]
       ])
     },
     {
