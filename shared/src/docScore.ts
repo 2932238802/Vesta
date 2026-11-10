@@ -16,7 +16,6 @@ export interface DocScores {
     /** 低分者后 5 道英语题是按规则跳过的 */
     skippedDetail: boolean
     stage: string
-    band: string
     weeklyHours: number
     weakPart: string
     speaking: string
@@ -232,7 +231,6 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
       need,
       skippedDetail,
       stage: singleLabel(survey, answers, 'q17'),
-      band: singleLabel(survey, answers, 'q17b'),
       weeklyHours: pick(optionIndex(survey, answers, 'q20'), WEEKLY_HOURS, 0),
       weakPart: singleLabel(survey, answers, 'q18'),
       speaking: singleLabel(survey, answers, 'q22'),

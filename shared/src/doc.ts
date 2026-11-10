@@ -319,7 +319,6 @@ export function serializeDoc(survey: Survey, answers: Answers): Record<string, u
     q15_family: label(survey, answers, 'q15'),
     q16_info: label(survey, answers, 'q16'),
     q17_cet4_times: label(survey, answers, 'q17'),
-    q17_cet4_score: label(survey, answers, 'q17b'),
     q18_cet4_weak: label(survey, answers, 'q18'),
     q19_how: labels(survey, answers, 'q19'),
     q20_hours: label(survey, answers, 'q20'),
@@ -427,7 +426,7 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
   if (english.stage) {
     lines.push({
       label: '门槛对照',
-      value: `你现在是「${english.stage}」${english.band ? `，最近一次四级 ${english.band}` : ''}；${
+      value: `你现在是「${english.stage}」；${
         english.need ? '这条路对英语有要求，先把它算进计划' : '这条路对英语没有硬性门槛'
       }`
     })
@@ -466,7 +465,7 @@ function englishSection(survey: Survey, answers: Answers): ReportBlock {
   const stuck = stuckLayer(survey, answers)
 
   const position = english.stage
-    ? `你现在是「${english.stage}」${english.band ? `，最近一次四级 ${english.band}` : ''}。`
+    ? `你现在是「${english.stage}」。`
     : '你这部分还没答，先按你勾的英语准备状态看。'
 
   const gapParts: string[] = []

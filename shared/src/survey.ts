@@ -358,24 +358,8 @@ export const defaultSurvey: Survey = {
       ])
     },
     {
-      id: 'q17b',
-      code: 'Q19',
-      groupId: 'p4',
-      title: '最近一次四级分数段',
-      hint: '按最高一次的成绩选',
-      type: 'single',
-      required: false,
-      showIfAll: [{ question: 'q17', when: ['q17_2', 'q17_3'] }],
-      options: choice('q17b', [
-        ['425–450', null],
-        ['450–500', null],
-        ['500–550', null],
-        ['550 以上', null]
-      ])
-    },
-    {
       id: 'q18',
-      code: 'Q20',
+      code: 'Q19',
       groupId: 'p4',
       title: '上次四级哪部分丢分最多',
       type: 'single',
@@ -394,7 +378,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q25',
-      code: 'Q21',
+      code: 'Q20',
       groupId: 'p4',
       title: '你觉得英语学不好最主要的原因是',
       hint: '最多选 2 个',
@@ -413,7 +397,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q19',
-      code: 'Q22',
+      code: 'Q21',
       groupId: 'p4',
       title: '你现在怎么学英语',
       type: 'multi',
@@ -430,7 +414,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q20',
-      code: 'Q23',
+      code: 'Q22',
       groupId: 'p4',
       title: '一周花多少时间在英语上',
       type: 'single',
@@ -445,7 +429,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q21',
-      code: 'Q24',
+      code: 'Q23',
       groupId: 'p4',
       title: '背单词的情况',
       type: 'single',
@@ -460,7 +444,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q22',
-      code: 'Q25',
+      code: 'Q24',
       groupId: 'p4',
       title: '你的口语和听力',
       type: 'single',
@@ -475,7 +459,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q26',
-      code: 'Q26',
+      code: 'Q25',
       groupId: 'p4',
       title: '五年后，你希望自己是什么样',
       hint: '一句话也行，想到什么写什么',

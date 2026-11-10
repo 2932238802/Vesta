@@ -598,7 +598,7 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
     changed = true
   }
 
-  for (const removedId of ['a5', 'a13', 'a15', 'a16', 'c3', 'd5']) {
+  for (const removedId of ['a5', 'a13', 'a15', 'a16', 'c3', 'd5', 'q17b']) {
     const index = questions.findIndex((q) => q.id === removedId)
     if (index >= 0) {
       questions.splice(index, 1)
