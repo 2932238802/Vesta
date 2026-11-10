@@ -161,14 +161,17 @@ function oneLine(survey: Survey, answers: Answers): string {
 }
 
 function stuckLayer(survey: Survey, answers: Answers): { short: string; full: string } {
-  const words = index(survey, answers, 'q21') // 1 背了忘，3 基本不背
+  const words = labels(survey, answers, 'q21')
+  const forgetsWords = words.some(
+    (item) => item.includes('背了忘') || item.includes('基本不背')
+  )
   const speaking = index(survey, answers, 'q22')
   const weak = labels(survey, answers, 'q18')
   const how = labels(survey, answers, 'q19')
   const hours = index(survey, answers, 'q20') // 0 少于3小时
   const execution = index(survey, answers, 'q13')
 
-  if (words === 1 || words === 3) {
+  if (forgetsWords) {
     return {
       short: '词汇层',
       full: '你现在最卡的是词汇。单词记不住，阅读和写作里会反复卡在生词上，考试里词汇量不够，后面几层都撑不起来。'
@@ -326,7 +329,7 @@ export function serializeDoc(survey: Survey, answers: Answers): Record<string, u
     q18_cet4_weak: labels(survey, answers, 'q18'),
     q19_how: labels(survey, answers, 'q19'),
     q20_hours: label(survey, answers, 'q20'),
-    q21_words: label(survey, answers, 'q21'),
+    q21_words: labels(survey, answers, 'q21'),
     q22_speaking: label(survey, answers, 'q22'),
     q24_importance: num(answers, 'q24'),
     q25_reason: labels(survey, answers, 'q25'),

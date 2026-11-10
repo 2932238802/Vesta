@@ -336,13 +336,24 @@ function patchQ18Multi(questions: Survey['questions']): boolean {
   return true
 }
 
+/** Q21「背单词的情况」从单选改成多选；同样只认默认选项。 */
+function patchQ21Multi(questions: Survey['questions']): boolean {
+  const q21 = questions.find((q) => q.id === 'q21')
+  if (!q21 || q21.type !== 'single') return false
+  const labels = (q21.options ?? []).map((option) => option.label)
+  const defaults = ['每天背、能记住', '背了忘、忘了背', '考前突击', '基本不背']
+  if (!defaults.every((label) => labels.includes(label))) return false
+  q21.type = 'multi'
+  return true
+}
+
 function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
   // 后台保存过的问卷（运营自己调过选项、加过题）一律不再自动迁移，
   // 否则每次升级都会把她改的选项改回去。要恢复默认，只能重新发布一份默认问卷。
   // 但「题目本身还是默认形态」的结构修正（比如单选改多选）仍然安全应用。
   if (survey.customized) {
     const patched = [...survey.questions]
-    const changed = patchQ18Multi(patched)
+    const changed = patchQ18Multi(patched) || patchQ21Multi(patched)
     return changed ? { survey: { ...survey, questions: patched }, changed } : { survey, changed: false }
   }
 
@@ -356,6 +367,7 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
   let changed = false
 
   if (patchQ18Multi(questions)) changed = true
+  if (patchQ21Multi(questions)) changed = true
 
   // Q1 学校档位里的「双一流学科」统一改叫「双一流」。
   const q1 = questions.find((q) => q.id === 'q1')

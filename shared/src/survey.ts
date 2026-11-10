@@ -420,7 +420,7 @@ export const defaultSurvey: Survey = {
       code: 'Q23',
       groupId: 'p4',
       title: '背单词的情况',
-      type: 'single',
+      type: 'multi',
       required: true,
       showIfAll: [{ question: 'q24', min: 6 }],
       options: choice('q21', [

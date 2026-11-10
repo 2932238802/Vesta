@@ -81,9 +81,9 @@ const WEEKLY_HOURS = [1.5, 5, 10.5, 17.5]
 /** 个人四维里的一项：分数 + 依据。 */
 function methodScore(survey: Survey, answers: Answers): number {
   let score = pick(optionIndex(survey, answers, 'q14'), METHOD, 5)
-  const words = optionIndex(survey, answers, 'q21')
-  if (words === 1 || words === 3) score -= 1
-  if (words === 0) score += 1
+  const words = optionLabels(survey, answers, 'q21')
+  if (words.some((item) => item.includes('背了忘') || item.includes('基本不背'))) score -= 1
+  if (words.some((item) => item.includes('每天背'))) score += 1
   const how = optionLabels(survey, answers, 'q19')
   if (how.includes('几乎没学')) score -= 1
   if (how.includes('跟课') || how.includes('刷真题')) score += 1
