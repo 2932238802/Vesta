@@ -347,13 +347,34 @@ function patchQ21Multi(questions: Survey['questions']): boolean {
   return true
 }
 
+/** Q25「英语学不好的原因」不限选几项；顺带把还是单选的默认题改成多选。 */
+function patchQ25Multi(questions: Survey['questions']): boolean {
+  const q25 = questions.find((q) => q.id === 'q25')
+  if (!q25) return false
+  let changed = false
+  if (q25.maxSelect !== undefined) {
+    delete q25.maxSelect
+    changed = true
+  }
+  const labels = (q25.options ?? []).map((option) => option.label)
+  const defaults = ['没时间', '记不住', '没人教方法', '坚持不下来', '基础太差']
+  if (
+    q25.type === 'single' &&
+    defaults.every((label) => labels.includes(label))
+  ) {
+    q25.type = 'multi'
+    changed = true
+  }
+  return changed
+}
+
 function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
   // 后台保存过的问卷（运营自己调过选项、加过题）一律不再自动迁移，
   // 否则每次升级都会把她改的选项改回去。要恢复默认，只能重新发布一份默认问卷。
   // 但「题目本身还是默认形态」的结构修正（比如单选改多选）仍然安全应用。
   if (survey.customized) {
     const patched = [...survey.questions]
-    const changed = patchQ18Multi(patched) || patchQ21Multi(patched)
+    const changed = patchQ18Multi(patched) || patchQ21Multi(patched) || patchQ25Multi(patched)
     return changed ? { survey: { ...survey, questions: patched }, changed } : { survey, changed: false }
   }
 
@@ -368,6 +389,7 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
 
   if (patchQ18Multi(questions)) changed = true
   if (patchQ21Multi(questions)) changed = true
+  if (patchQ25Multi(questions)) changed = true
 
   // Q1 学校档位里的「双一流学科」统一改叫「双一流」。
   const q1 = questions.find((q) => q.id === 'q1')

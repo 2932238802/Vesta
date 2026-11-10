@@ -369,10 +369,8 @@ export const defaultSurvey: Survey = {
       code: 'Q20',
       groupId: 'p4',
       title: '你觉得英语学不好最主要的原因是',
-      hint: '最多选 2 个',
       type: 'multi',
       required: true,
-      maxSelect: 2,
       options: choice('q25', [
         ['没时间', null],
         ['记不住', null],
