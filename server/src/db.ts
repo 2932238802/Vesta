@@ -446,6 +446,19 @@ function patchQ25SkipWhenSpeakingWell(questions: Survey['questions']): boolean {
   return true
 }
 
+/** Q9「你的理想薪资」补回城市题后面（历史问卷里有这道选择题，改版时漏掉了）。 */
+function patchQ27Salary(questions: Survey['questions']): boolean {
+  if (questions.some((q) => q.id === 'q27')) return false
+  const canonical = defaultSurvey.questions.find((q) => q.id === 'q27')
+  const q8 = questions.findIndex((q) => q.id === 'q8')
+  if (!canonical || q8 < 0) return false
+  questions.splice(q8 + 1, 0, {
+    ...canonical,
+    options: canonical.options?.map((option) => ({ ...option }))
+  })
+  return true
+}
+
 function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
   // 后台保存过的问卷（运营自己调过选项、加过题）不整份覆盖；
   // 只应用那些「题目还是默认形态」的结构修正（单选改多选、补回被删的默认题）。
@@ -457,7 +470,8 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
       patchQ21Multi(patched) ||
       patchQ25Multi(patched) ||
       patchQ22Order(patched) ||
-      patchQ25SkipWhenSpeakingWell(patched)
+      patchQ25SkipWhenSpeakingWell(patched) ||
+      patchQ27Salary(patched)
     return changed
       ? { survey: { ...survey, questions: patched }, changed }
       : { survey, changed: false }

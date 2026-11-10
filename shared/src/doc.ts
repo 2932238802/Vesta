@@ -326,6 +326,7 @@ export function serializeDoc(survey: Survey, answers: Answers): Record<string, u
     q6_first_choice: label(survey, answers, 'q6'),
     q7_preparing: labels(survey, answers, 'q7'),
     q8_city: label(survey, answers, 'q8'),
+    q27_salary: label(survey, answers, 'q27'),
     q9_practice: label(survey, answers, 'q9'),
     q10_skills: labels(survey, answers, 'q10'),
     q11_direction: label(survey, answers, 'q11'),
@@ -408,6 +409,8 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
     lines.push({ label: '目标城市', value: city || '还没想好' })
     lines.push({ label: '目标岗位', value: role || '还没写清楚' })
     lines.push({ label: '应届薪资区间（经验值）', value: salaryRange(city) })
+    const expected = label(survey, answers, 'q27')
+    if (expected) lines.push({ label: '你写的期望月薪', value: expected })
     lines.push({
       label: '入场线（经验值）',
       value: '本科 + 相关实习 1 段 + 四级 425 以上；好岗位普遍看实习经历'
