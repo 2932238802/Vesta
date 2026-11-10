@@ -363,7 +363,7 @@ export function serializeDoc(survey: Survey, answers: Answers): Record<string, u
     q17_cet4_times: label(survey, answers, 'q17'),
     q18_cet4_weak: labels(survey, answers, 'q18'),
     q19_how: labels(survey, answers, 'q19'),
-    q20_hours: label(survey, answers, 'q20'),
+    q20_weekly_hours: label(survey, answers, 'q20'),
     q21_words: labels(survey, answers, 'q21'),
     q22_speaking: label(survey, answers, 'q22'),
     q24_importance: num(answers, 'q24'),

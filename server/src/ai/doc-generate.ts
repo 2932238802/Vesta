@@ -190,6 +190,7 @@ export async function generateDocContent(input: {
   const scoreText = [...scores.background, ...scores.personal]
     .map((item) => `${item.label}：${item.score} 分`)
     .join('\n')
+  const weekly = scores.english.weeklyHours
 
   const userPrompt = `学生：${name || '同学'}
 
@@ -199,6 +200,7 @@ ${answerText(survey, answers)}
 【系统算好的分数】（报告页会原样展示，正文引用即可，不要改数）
 ${scoreText}
 潜力：${scores.potential.level}（${scores.potential.text}）
+每周英语投入：约 ${weekly} 小时（这是「一周」的总时长，不是每天）
 
 【系统事实】
 建议卡点：${facts.stuck}（${facts.stuckDetail}）
