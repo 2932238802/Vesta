@@ -327,6 +327,7 @@ export function serializeDoc(survey: Survey, answers: Answers): Record<string, u
     q7_preparing: labels(survey, answers, 'q7'),
     q8_city: label(survey, answers, 'q8'),
     q27_salary: label(survey, answers, 'q27'),
+    q28_self: labels(survey, answers, 'q28'),
     q9_practice: label(survey, answers, 'q9'),
     q10_skills: labels(survey, answers, 'q10'),
     q11_direction: label(survey, answers, 'q11'),
