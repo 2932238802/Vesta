@@ -10,7 +10,8 @@ import type {
   Survey,
   Tier
 } from './types'
-import { computeDocScores } from './docScore'
+import { computeDocScores, type DocScores } from './docScore'
+import { inferDirectionKey, jobDirections } from './job-map'
 
 export interface ResolvedQuestion {
   visible: boolean
@@ -418,6 +419,454 @@ function salaryRange(city: string): string {
   return '还没有目标城市，先按你所在城市看'
 }
 
+/** 简历盘点：现在能写进简历的，不用等到“什么都准备好了”。 */
+function resumeNow(survey: Survey, answers: Answers): string {
+  const parts: string[] = []
+  const practice = label(survey, answers, 'q9')
+  if (practice) {
+    parts.push(
+      practice.includes('兼职')
+        ? '一段兼职（可写成沟通、执行、抗压）'
+        : practice
+    )
+  }
+  const skills = labels(survey, answers, 'q10').filter(
+    (item) => !item.includes('还没培养出') && !item.includes('说不清')
+  )
+  if (skills.length) parts.push(`技能：${skills.join('、')}`)
+  const direction = label(survey, answers, 'q11')
+  if (direction && !direction.includes('没落地') && !direction.includes('完全不知道')) {
+    parts.push(`方向：${direction}`)
+  }
+  return parts.length ? parts.join('；') : '暂时还没有能写进简历的经历或技能'
+}
+
+/** 简历缺口：只列能在这 22 个月里补上的，不把“没有”说成“不行”。 */
+function resumeMissing(survey: Survey, answers: Answers): string {
+  const skills = labels(survey, answers, 'q10')
+  const direction = label(survey, answers, 'q11')
+  const gaps: string[] = []
+  if (skills.some((item) => item.includes('还没培养出'))) gaps.push('一项能展示的技能')
+  if (direction.includes('没落地')) gaps.push('一个落地的项目或作品')
+  gaps.push('一段相关实习')
+  return [...new Set(gaps)].slice(0, 3).join('、')
+}
+
+/** 「你的底牌」：只从回答里列已经存在、能直接用的东西；不够就不凑。 */
+function assetsBlock(
+  survey: Survey,
+  answers: Answers,
+  scores: DocScores
+): ReportBlock | null {
+  const items: { key: string; name: string; text: string }[] = []
+  const practice = label(survey, answers, 'q9')
+  const preparing = labels(survey, answers, 'q7')
+  const family = label(survey, answers, 'q15')
+  const info = label(survey, answers, 'q16')
+  const self = text(answers, 'q28')
+  const future = text(answers, 'q26')
+
+  if (practice && (practice.includes('兼职') || practice.includes('实习'))) {
+    items.push({
+      key: 'practice',
+      name: '你做过一段兼职或实习',
+      text: `你写过「${practice}」。和专业无关也可以写进简历，按“在哪、做什么、怎么做的、结果是什么”写成条目，而不是只写“做过兼职”。`
+    })
+  }
+
+  if (preparing.some((item) => item.includes('经济独立')) || future.includes('经济独立')) {
+    items.push({
+      key: 'independence',
+      name: '你已经把经济独立当成目标',
+      text: `你提到「${future || preparing.find((item) => item.includes('经济独立'))}」。它会直接影响你选城市、选岗位、接不接第一份实习；把它拆成“先覆盖一部分生活费”，第一步会具体。`
+    })
+  }
+
+  if (self) {
+    items.push({
+      key: 'self-awareness',
+      name: '你对自己有具体描述',
+      text: `你写的是「${self}」。把它分成两列：能改的（每天投入多少时间、要不要主动找实习）和暂时改不了的（性格底色、家庭条件）。计划只从能改的那列开始。`
+    })
+  }
+
+  if (info === '知道大概') {
+    items.push({
+      key: 'info',
+      name: '你不是完全不了解',
+      text: '你说自己对目标门槛“知道大概”。现在缺的不是从零了解，而是把“大概”变成 3 条具体公告、3 条岗位要求和 1 个时间点。'
+    })
+  }
+
+  if (family && (family.includes('一般') || family.includes('会想办法'))) {
+    items.push({
+      key: 'family',
+      name: '家里能给你一个缓冲',
+      text: `你说家里「${family}」。这不是强托举，但意味着你不用在所有选择上只看“今天能不能赚到钱”，可以为接下来这段准备期留一点投入空间。`
+    })
+  }
+
+  const allScores = [...scores.background, ...scores.personal]
+    .filter((item) => !items.some((picked) => picked.key === item.key))
+    .sort((a, b) => b.score - a.score)
+  for (const item of allScores) {
+    if (items.length >= 3) break
+    if (item.score < 5) continue
+    items.push({
+      key: item.key,
+      name: `${item.label} ${item.score} 分`,
+      text: `这是你现有起点里分数较高的一项，可以先用它去换第一段经历，不代表已经够了。`
+    })
+  }
+
+  if (!items.length) return null
+
+  return {
+    type: 'assets',
+    title: '你现在能用的东西',
+    subtitle: '只列答卷里已经有的，不凑数',
+    items: items.slice(0, 3),
+    note: '这些不是评价，只是你下一步可以拿来用的起点。'
+  }
+}
+
+function usedForJob(job: JobCard, directionName?: string): string {
+  const target = directionName ? `「${directionName}」` : '目标岗位'
+  const parts = ['学历、英语、实习要求']
+  if (job.salary && job.salary !== '薪资以原文为准') parts.push('薪资')
+  return `用来核对${target}的${parts.join('、')}`
+}
+
+/** 学校档位换算成学历层次：专科 / 本科（C9 到民办本科都按本科算）。 */
+function jobDegree(school: string): '本科' | '专科' | '' {
+  if (!school) return ''
+  return school.includes('专科') ? '专科' : '本科'
+}
+
+function salaryRangeNumbers(raw: string): { min: number; max: number } | null {
+  const values = [...raw.replace(/,/g, '').matchAll(/(\d+(?:\.\d+)?)/g)]
+    .map((item) => Number(item[1]))
+    .filter((value) => Number.isFinite(value))
+  if (!values.length) return null
+  const hasK = /k|千/i.test(raw)
+  const normalized = values.map((value) => (hasK && value < 100 ? value * 1000 : value))
+  const min = Math.min(...normalized)
+  const max = Math.max(...normalized)
+  if (min < 1000 || max > 100000) return null
+  return { min, max }
+}
+
+/**
+ * 把招聘原文逐条对到填卷人的答卷上：
+ * 已经符合的写「你符合」，还差什么写「你还缺」，不替学生判断“能不能录用”。
+ */
+function jobMatch(
+  survey: Survey,
+  answers: Answers,
+  job: JobCard
+): { meets: string[]; missing: string[] } {
+  const req = `${job.title} ${job.requirement}`.replace(/\s+/g, '')
+  const meets: string[] = []
+  const missing: string[] = []
+
+  const school = label(survey, answers, 'q1')
+  const degree = jobDegree(school)
+  const major = text(answers, 'q2').replace(/专业$/, '')
+  const practice = label(survey, answers, 'q9')
+  const skills = labels(survey, answers, 'q10')
+  const english = label(survey, answers, 'q17')
+  const expectation = label(survey, answers, 'q27')
+
+  // 学历
+  if (/本科及以上|本科以上|本科/.test(req)) {
+    if (degree === '本科') meets.push(`学历：岗位要本科，你的档位是${school}（本科）`)
+    else if (degree === '专科') {
+      missing.push('学历：岗位写的是本科，你目前是专科，投递前先确认是否接受专升本或同等学力')
+    } else {
+      missing.push('学历：岗位写的是本科，问卷里还没填学校档位')
+    }
+  } else if (/大专|专科/.test(req)) {
+    meets.push(`学历：岗位接受大专${degree === '本科' ? '，你本科更稳' : '，你的档位够线'}`)
+  }
+
+  // 专业：只有原文明确写了“专业”范围时才做对照，避免把“英语读写”当专业要求。
+  if (/不限专业|专业不限/.test(req)) {
+    meets.push('专业：这条不限专业')
+  } else if (major && /专业/.test(req)) {
+    const tradeAligned =
+      /国际贸易|国际经济与贸易|外贸/.test(req) &&
+      /国际经济与贸易|国际贸易|外贸/.test(major)
+    const broadAligned =
+      /经济|金融|商务英语|英语/.test(req) &&
+      /经济|贸易|金融|商务英语|英语/.test(major)
+    const field = /金融/.test(req)
+      ? '经济金融'
+      : /商务英语/.test(req)
+        ? '商务英语'
+        : /英语/.test(req)
+          ? '英语'
+          : '经济贸易'
+    if (tradeAligned) {
+      meets.push(`专业：岗位要国际贸易/外贸相关，你的${major}对口`)
+    } else if (broadAligned) {
+      meets.push(`专业：岗位要${field}相关，你的${major}在相关范围内`)
+    } else {
+      missing.push(`专业：原文写了专业范围，${major}不在列出的方向里，投递时确认是否接受相近专业`)
+    }
+  } else if (major) {
+    if (
+      /国际贸易实务|外贸实务|单证|报关/.test(req) &&
+      /国际经济与贸易|国际贸易|外贸/.test(major)
+    ) {
+      meets.push(`专业：岗位要国际贸易实务/单证知识，你的${major}课程对口`)
+    } else {
+      meets.push(`专业：原文没写专业限制，${major}不会被卡`)
+    }
+  }
+
+  // 英语
+  if (/六级|CET-?6/i.test(req)) {
+    if (english.includes('四六级已过')) meets.push('英语：岗位要六级，你四六级已过')
+    else if (english.includes('四级过了')) missing.push('英语：岗位要六级，你四级已过、六级还在准备')
+    else missing.push('英语：岗位要六级，你四级还没过')
+  } else if (/四级|CET-?4/i.test(req)) {
+    if (english.includes('四级没过')) missing.push('英语：岗位要四级，你正在准备、还没过')
+    else if (english) meets.push('英语：岗位要四级，你已经过了')
+    else missing.push('英语：岗位要四级，问卷里还没填英语现状')
+  } else if (/英语读写|英语/.test(req)) {
+    if (english.includes('四级没过')) missing.push('英语：岗位要英语读写，你四级还没过')
+    else if (english) meets.push('英语：岗位要英语读写，你有四六级基础')
+  }
+
+  // 实习/经验
+  if (/实习|工作经验|相关经验/.test(req)) {
+    if (practice.includes('有 1–3 段')) meets.push('实习：你有一段能写进简历的校外实习')
+    else if (practice.includes('只有校内实践')) missing.push('实习：岗位看重相关实习，你现在只有校内实践')
+    else if (practice.includes('兼职')) missing.push('实习：岗位看重相关实习，你的兼职和专业无关')
+    else if (practice.includes('一段都没有')) missing.push('实习：岗位看重相关实习，你目前还没有')
+  }
+
+  // 证书
+  if (/证书/.test(req)) {
+    if (skills.some((item) => item.includes('证书'))) {
+      meets.push('证书：你已经有证书项，可以在简历里单独列一行')
+    } else if (/单证员|报关员/.test(req)) {
+      missing.push('证书：岗位优先单证员/报关员证书，你现在还没有；可以安排在大二/大三考')
+    } else {
+      missing.push('证书：岗位提到相关证书优先，你的证书项还是空的')
+    }
+  }
+
+  // 薪资：只判断和 Q27 期望有没有重叠，不做“给得起/给不起”的结论。
+  const expected = salaryRangeNumbers(expectation)
+  const offered = salaryRangeNumbers(job.salary)
+  if (expected && offered) {
+    if (offered.max >= expected.min && offered.min <= expected.max) {
+      meets.push(`薪资：原文 ${job.salary}，和你的期望（${expectation}）有重叠`)
+    } else if (offered.max < expected.min) {
+      missing.push(`薪资：原文 ${job.salary}，低于你写的期望（${expectation}），可当底线参考`)
+    }
+  }
+
+  if (!meets.length) {
+    meets.push(
+      `应届身份：这是应届/助理岗，你现在就能按实习或校招投${
+        major ? `，专业是${major}` : ''
+      }`
+    )
+  }
+  if (!missing.length) {
+    missing.push(
+      practice.includes('有 1–3 段')
+        ? '匹配度：要求基本对上，下一步把每条要求写进简历里的具体经历'
+        : '相关实习：简历上还缺一段和目标方向对得上的经历'
+    )
+  }
+
+  return { meets: meets.slice(0, 2), missing: missing.slice(0, 2) }
+}
+
+function withJobMatch(
+  survey: Survey,
+  answers: Answers,
+  job: JobCard,
+  directionName?: string
+): JobCard {
+  return {
+    ...job,
+    usedFor: job.usedFor || usedForJob(job, directionName),
+    ...jobMatch(survey, answers, job)
+  }
+}
+
+/** 目标岗位地图：先给方向，再把招聘原文挂到方向上，避免正文只有一句“去招聘网站看看”。 */
+function jobMapBlock(
+  survey: Survey,
+  answers: Answers,
+  jobs: JobCard[]
+): ReportBlock | null {
+  const major = text(answers, 'q2')
+  const directions = jobDirections(major)
+  if (!directions.length) return null
+
+  const assigned = new Set<string>()
+  const grouped = directions.map((direction) => {
+    const matched = jobs
+      .filter((job) => {
+        const key =
+          job.directionKey || inferDirectionKey(`${job.title} ${job.requirement}`, directions)
+        return key === direction.key
+      })
+      .slice(0, 2)
+      .map((job) => withJobMatch(survey, answers, job, direction.name))
+    matched.forEach((job) => assigned.add(job.url))
+    return { ...direction, jobs: matched }
+  })
+
+  const relatedJobs = jobs
+    .filter((job) => !assigned.has(job.url))
+    .slice(0, 3)
+    .map((job) => withJobMatch(survey, answers, job))
+
+  const cityLabel = label(survey, answers, 'q8')
+  const city = cityLabel.includes('还没想好') ? '' : cityLabel.replace(/（.*?）/g, '')
+  const self = text(answers, 'q28')
+  const future = text(answers, 'q26')
+  const personal: string[] = []
+  if (self) personal.push(`你自评「${self}」`)
+  if (future) personal.push(`希望五年后「${future}」`)
+
+  const cityNote = city
+    ? `你选的城市是「${city}」，这些方向的岗位密度和薪资会受城市影响。`
+    : '你还没定城市：先用行业密度、生活成本、离家距离三项打分，最晚第 3 个月定一个主城市和一个备选。'
+  const personalNote = personal.length
+    ? ` ${personal.join('，')}。选方向时把这两条当筛选条件：先排除明确不想做的，再看起薪能不能覆盖生活。`
+    : ''
+
+  return {
+    type: 'jobmap',
+    title: '你能去的几个方向',
+    subtitle: '先看方向，再看门槛；经验值区间和招聘原文一起看，具体以原文为准',
+    directions: grouped.map(({ key, name, what, entry, salary, fit, jobs: directionJobs }) => ({
+      key,
+      name,
+      what,
+      entry,
+      salary,
+      fit,
+      jobs: directionJobs
+    })),
+    relatedJobs,
+    note: `${cityNote}${personalNote} 方向不是替你做决定，点开原文核对。`
+  }
+}
+
+/** 22 个月路线图：只排阶段主目标，不排满每一天。 */
+function roadmapBlock(survey: Survey, answers: Answers, scores: DocScores): ReportBlock {
+  const node = deadlineFact(survey, answers)
+  const months = Math.max(1, node.months)
+  const weekly = scores.english.weeklyHours
+  const estimate = weekly > 0 ? weekly : 3
+  const total = Math.round(months * 4.33 * estimate)
+  const hoursLine =
+    weekly > 0
+      ? `到${node.node}还有约 ${months} 个月；按每周约 ${weekly} 小时算，一共约 ${total} 小时`
+      : `到${node.node}还有约 ${months} 个月；先按每周 3 小时估，一共约 ${total} 小时`
+
+  const phases =
+    months >= 18
+      ? [
+          {
+            key: 'direction',
+            label: '先定方向',
+            period: '现在—第 3 个月',
+            goal: '把 3 个可能方向缩到 1 个',
+            output: '3 条岗位要求 + 1 份简历初稿'
+          },
+          {
+            key: 'practice',
+            label: '补第一段经历',
+            period: '第 4—9 个月',
+            goal: '拿到 1 段相关实习或实践',
+            output: '实习证明或项目复盘'
+          },
+          {
+            key: 'skill',
+            label: '补硬技能',
+            period: `第 10—${months - 6} 个月`,
+            goal: '补 1 项岗位需要的技能 + 四级',
+            output: '证书、作品或成绩'
+          },
+          {
+            key: 'sprint',
+            label: '秋招冲刺',
+            period: '最后 6 个月',
+            goal: '投递 + 面试',
+            output: '30 份投递记录 + 10 次面试复盘'
+          }
+        ]
+      : months >= 9
+        ? [
+            {
+              key: 'direction',
+              label: '先定方向',
+              period: '现在—第 3 个月',
+              goal: '把方向缩到 1 个',
+              output: '3 条岗位要求 + 1 份简历初稿'
+            },
+            {
+              key: 'practice',
+              label: '补一段经历',
+              period: '第 4—9 个月',
+              goal: '拿到 1 段相关实习或实践',
+              output: '实习证明或项目复盘'
+            },
+            {
+              key: 'sprint',
+              label: '冲刺',
+              period: `第 10—${months} 个月`,
+              goal: '投递 + 面试',
+              output: '投递记录 + 面试复盘'
+            }
+          ]
+        : [
+            {
+              key: 'direction',
+              label: '先定方向',
+              period: `现在—第 ${Math.max(1, Math.round(months / 3))} 个月`,
+              goal: '把方向缩到 1 个',
+              output: '3 条岗位要求'
+            },
+            {
+              key: 'practice',
+              label: '补一段经历',
+              period: `第 ${Math.max(1, Math.round(months / 3)) + 1}—${Math.max(2, Math.round((months * 2) / 3))} 个月`,
+              goal: '拿到 1 段相关实习或实践',
+              output: '实习证明或项目复盘'
+            },
+            {
+              key: 'sprint',
+              label: '冲刺',
+              period: `最后 ${Math.max(1, Math.round(months / 3))} 个月`,
+              goal: '投递 + 面试',
+              output: '投递记录 + 面试复盘'
+            }
+          ]
+
+  const future = text(answers, 'q26')
+  const moneyNote = future.includes('经济独立')
+    ? ' 你说要经济独立，第一段实习或兼职不用一开始就追求高薪，先追求能覆盖一部分生活费。'
+    : ''
+
+  return {
+    type: 'roadmap',
+    title: `${months} 个月怎么走`,
+    subtitle: hoursLine,
+    phases,
+    note: `每个阶段只推一个主目标；每周日 10 分钟复盘：写下周 3 件事，每件控制在 2 小时内，做完打勾。连续 3 周完成 2 件以上，再谈加量。${moneyNote}`
+  }
+}
+
 function gapLines(survey: Survey, answers: Answers): { label: string; value: string }[] {
   const first = label(survey, answers, 'q6')
   const city = label(survey, answers, 'q8')
@@ -434,6 +883,8 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
     lines.push({ label: '目标城市', value: city || '还没想好' })
     lines.push({ label: '目标岗位', value: role || '还没写清楚' })
     if (!role && major) lines.push({ label: '你的专业', value: major })
+    lines.push({ label: '现在能写进简历的', value: resumeNow(survey, answers) })
+    lines.push({ label: '还缺的', value: resumeMissing(survey, answers) })
     lines.push({ label: '应届薪资区间（经验值）', value: salaryRange(city) })
     const expected = label(survey, answers, 'q27')
     if (expected) lines.push({ label: '你写的期望月薪', value: expected })
@@ -441,6 +892,19 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
       label: '入场线（经验值）',
       value: '本科 + 相关实习 1 段 + 四级 425 以上；好岗位普遍看实习经历'
     })
+    if (city.includes('还没想好')) {
+      lines.push({
+        label: '城市判断',
+        value: '先用行业密度、生活成本、离家距离三项打分，最晚第 3 个月定主城市 + 备选'
+      })
+    }
+    const family = label(survey, answers, 'q15')
+    if (family) {
+      lines.push({
+        label: '经济约束',
+        value: `${family}；异地实习或租房先按每月生活费算一笔账，别等 offer 下来才发现撑不住。`
+      })
+    }
   } else if (first === '考研') {
     lines.push({ label: '目标专业', value: major || '还没填' })
     lines.push({ label: '入场线（经验值）', value: '过国家线 + 目标院校线；英语单科线 45 分左右，好学校更高' })
@@ -504,7 +968,7 @@ function gapBlock(survey: Survey, answers: Answers, jobs: JobCard[] = []): Repor
     subtitle: '门槛是经验值区间，以目标单位最新公告或招聘原文为准',
     lines: gapLines(survey, answers),
     note: '这一屏不预测结果，只把「现在的位置」和「这条路的入场线」摆在一起。',
-    jobs: jobs.slice(0, 3)
+    jobs: jobs.slice(0, 3).map((job) => withJobMatch(survey, answers, job))
   }
 }
 
@@ -662,6 +1126,23 @@ function checklistBlock(survey: Survey, answers: Answers): ReportBlock {
   }
 }
 
+function englishPlan(stuck: string): string {
+  switch (stuck) {
+    case '词汇层':
+      return '这 30 天只做一件事：每天 20 分钟复习前一天记不住的词，新的往后放；周末把一张纸重过一遍，30 天后压到 100 个以内。'
+    case '听力层':
+      return '这 30 天只做一件事：每天 10 分钟精听一句，跟读 3 遍；周末回听本周句子，能复述大意再换下一句。'
+    case '开口层':
+      return '这 30 天只做一件事：每周 2 次，每次 5 分钟，录音说一段自我介绍或岗位回答；回听时只改一个最卡的地方。'
+    case '时间层':
+      return '这 30 天只做一件事：把英语放进固定时段（如早课前 20 分钟），先保证每周 3 次，再谈加量。'
+    case '方法层':
+      return '这 30 天只做一件事：固定一套材料（真题或课程），每天 30 分钟，每周记一次正确率，不看总量只看有没有往上走。'
+    default:
+      return '这 30 天只做一件事：把英语放进固定时段，每天 20—30 分钟，每周记一次数字。'
+  }
+}
+
 function englishSection(survey: Survey, answers: Answers): ReportBlock {
   const scores = computeDocScores(survey, answers)
   const english = scores.english
@@ -689,16 +1170,15 @@ function englishSection(survey: Survey, answers: Answers): ReportBlock {
     )
   } else if (english.preparing) {
     gapParts.push(
-      `你的目标（${target}）暂时看不出硬性英语门槛，${preparingCopy}。英语现在不是「够用就行」的加分项，而是你已经投入时间、需要看到结果的一项。`
+      `你的目标（${target}）暂时看不出明确的英语要求，具体以目标单位最新公告为准；${preparingCopy}。英语现在不是「够用就行」的加分项，而是你已经投入时间、需要看到结果的一项。`
     )
   } else {
     gapParts.push(
       '按你填的方向，暂时看不出英语的硬性门槛；具体要不要、要到什么程度，以目标院校或单位的最新公告为准。别把阅读和表达完全放下。'
     )
   }
-  gapParts.push(`你最卡的是${stuck.short}。`)
 
-  const plan = `这 30 天只做一件事：把${stuck.short}对应的材料固定下来，每天 30 分钟，每周日记一次数字。`
+  const plan = englishPlan(stuck.short)
 
   const skipped = english.skippedDetail
     ? '（你给英语的重要度低于 6 分，后面 5 道细节题按规则跳过了，不是你没答。）'
@@ -731,6 +1211,9 @@ export function buildDocReport(
   const { survey, answers, name, slug, createdAt, claimed } = input
   const facts = docFacts(survey, answers)
   const tier: Tier = facts.priority
+  const scores = computeDocScores(survey, answers)
+  const assets = assetsBlock(survey, answers, scores)
+  const jobMap = jobMapBlock(survey, answers, jobs)
 
   const blocks: ReportBlock[] = [
     {
@@ -745,7 +1228,10 @@ export function buildDocReport(
       total: null
     },
     scorecardBlock(survey, answers),
+    ...(assets ? [assets] : []),
+    ...(jobMap ? [jobMap] : []),
     gapBlock(survey, answers, jobs),
+    roadmapBlock(survey, answers, scores),
     checklistBlock(survey, answers),
     englishSection(survey, answers),
     { type: 'note', title: '你现在卡在哪一层', text: facts.stuckDetail },

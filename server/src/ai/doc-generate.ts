@@ -8,6 +8,7 @@ import {
 } from '../../../shared/src/doc'
 import { defaultReportSkill } from '../../../shared/src/ai'
 import { computeDocScores } from '../../../shared/src/docScore'
+import { inferDirectionKey, jobDirections } from '../../../shared/src/job-map'
 import { config } from '../env'
 import { getReportSkill, now } from '../db'
 import { askDeepSeek, parseJsonObject } from './deepseek'
@@ -265,33 +266,60 @@ async function searchJobs(survey: Survey, answers: Answers): Promise<JobCard[]> 
   const role = explicitRole || (major ? `${major}相关岗位` : '')
   if (!role) return []
 
-  const queries = [
-    `${city} ${role} 招聘 应届 薪资 要求`.trim(),
-    `${role} 应届生 招聘 学历 英语 要求`
-  ]
+  const directions = jobDirections(major)
+  type QuerySpec = { key?: string; query: string }
+  const useDirections = directions.length > 0 && !explicitRole
+  const specs: QuerySpec[] = useDirections
+    ? directions.map((direction) => ({
+        key: direction.key,
+        query: `${city} ${direction.query} 应届 招聘 薪资 要求`.trim()
+      }))
+    : [
+        { query: `${city} ${role} 招聘 应届 薪资 要求`.trim() },
+        { query: `${role} 应届生 招聘 学历 英语 要求` }
+      ]
+  // 方向检索之外再补一条专业总览，给没有归到具体方向的原文留位置。
+  if (useDirections) {
+    specs.push({ query: `${city} ${role} 招聘 应届 薪资 要求`.trim() })
+  }
 
-  const settled = await Promise.allSettled(queries.map((query) => searchWeb(query)))
-  const items = settled.flatMap((result) =>
-    result.status === 'fulfilled' ? result.value : []
-  )
+  const settled = await Promise.allSettled(specs.map((spec) => searchWeb(spec.query)))
+  const byUrl = new Map<string, { item: SearchResult; directionKey?: string }>()
+  settled.forEach((result, index) => {
+    if (result.status !== 'fulfilled') return
+    for (const item of result.value) {
+      const key = item.url.replace(/\/$/, '')
+      const existing = byUrl.get(key)
+      // 同一链接被方向检索和专业总览同时抓到，优先保留带方向的。
+      if (!existing) {
+        byUrl.set(key, { item, directionKey: specs[index].key })
+      } else if (!existing.directionKey && specs[index].key) {
+        byUrl.set(key, { item, directionKey: specs[index].key })
+      }
+    }
+  })
 
-  const seenUrls = new Set<string>()
   const seenTitles = new Set<string>()
-  const ranked: { item: SearchResult; score: number; weak: boolean }[] = []
+  const ranked: {
+    item: SearchResult
+    score: number
+    weak: boolean
+    directionKey?: string
+  }[] = []
 
-  for (const item of items) {
-    const key = item.url.replace(/\/$/, '')
-    if (seenUrls.has(key)) continue
-    seenUrls.add(key)
+  for (const { item, directionKey } of byUrl.values()) {
     const titleKey = `${item.title.replace(/\s+/g, '')}|${item.site}`
     if (seenTitles.has(titleKey)) continue
     seenTitles.add(titleKey)
     if (isCityLanding(item.title, item.url)) continue
     // 薪资统计/就业分析这类文章先降权，不作为首选；但链接仍保留，岗位信息不够时用来补足来源。
     const article = looksLikeArticle(`${item.title} ${item.snippet}`)
+    const inferred =
+      directionKey || inferDirectionKey(`${item.title} ${item.snippet}`, directions)
     ranked.push({
       item,
-      score: jobScore(item, city) - (article ? 2 : 0),
+      directionKey: inferred,
+      score: jobScore(item, city) + (inferred ? 1 : 0) - (article ? 2 : 0),
       weak: article || !looksLikeJob(item.title, item.snippet)
     })
   }
@@ -302,6 +330,24 @@ async function searchJobs(survey: Survey, answers: Answers): Promise<JobCard[]> 
     .filter((entry) => !entry.weak && !isOldJob(entry.item.publishedAt))
     .sort((a, b) => b.score - a.score)
   const picked = [...usable]
+  if (useDirections) {
+    // 每个方向最多两条，确保岗位地图里每个方向都有原文；剩下的给专业总览。
+    const perDirection: typeof usable = []
+    for (const direction of directions) {
+      perDirection.push(
+        ...usable.filter((entry) => entry.directionKey === direction.key).slice(0, 2)
+      )
+    }
+    picked.length = 0
+    picked.push(...perDirection)
+    const rest = usable.filter(
+      (entry) => !picked.some((pickedItem) => pickedItem.item.url === entry.item.url)
+    )
+    picked.push(...rest.slice(0, 2))
+  } else {
+    picked.length = 0
+    picked.push(...usable.slice(0, 3))
+  }
   if (picked.length < 3) {
     const rest = ranked
       .filter((entry) => !picked.some((pickedItem) => pickedItem.item.url === entry.item.url))
@@ -313,14 +359,16 @@ async function searchJobs(survey: Survey, answers: Answers): Promise<JobCard[]> 
     picked.push(...rest.slice(0, 3 - picked.length))
   }
 
-  return picked.slice(0, 3).map(({ item }) => ({
+  picked.sort((a, b) => b.score - a.score)
+  return picked.slice(0, 10).map(({ item, directionKey }) => ({
     title: item.title,
     company: item.site || '招聘页面',
     city: cityInText(`${item.title} ${item.snippet}`),
     salary: salaryOf(item.snippet) || '薪资以原文为准',
     requirement: clipSentence(item.snippet),
     url: item.url,
-    date: item.publishedAt
+    date: item.publishedAt,
+    directionKey
   }))
 }
 
@@ -509,7 +557,9 @@ export function readDocContent(raw: string | null): StoredDocReport | null {
         salary: cleanStoredSalary(String(job.salary ?? '')),
         requirement: cleanStoredRequirement(String(job.requirement ?? '')),
         url: job.url,
-        date: typeof job.date === 'string' ? job.date : undefined
+        date: typeof job.date === 'string' ? job.date : undefined,
+        directionKey:
+          typeof job.directionKey === 'string' ? job.directionKey : undefined
       })
     }
     jobs.sort((a, b) => parseTime(b.date) - parseTime(a.date))

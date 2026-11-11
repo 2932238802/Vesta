@@ -82,6 +82,14 @@ export interface JobCard {
   requirement: string
   url: string
   date?: string
+  /** 招聘结果对应的岗位方向；旧数据没有，构建报告时按关键词补 */
+  directionKey?: string
+  /** 这条原文用于核对报告里的哪个判断 */
+  usedFor?: string
+  /** 对照填卷人答卷：这条招聘里你已经符合的条件 */
+  meets?: string[]
+  /** 对照填卷人答卷：这条招聘里你还缺、需要补的条件 */
+  missing?: string[]
 }
 
 export interface ScoreItem {
@@ -292,6 +300,42 @@ export type ReportBlock =
       title: string
       subtitle: string
       items: { key: string; name: string; score: number; text: string }[]
+    }
+  | {
+      type: 'assets'
+      title: string
+      subtitle: string
+      items: { key: string; name: string; text: string }[]
+      note: string
+    }
+  | {
+      type: 'jobmap'
+      title: string
+      subtitle: string
+      directions: {
+        key: string
+        name: string
+        what: string
+        entry: string
+        salary: string
+        fit: string
+        jobs: JobCard[]
+      }[]
+      relatedJobs: JobCard[]
+      note: string
+    }
+  | {
+      type: 'roadmap'
+      title: string
+      subtitle: string
+      phases: {
+        key: string
+        label: string
+        period: string
+        goal: string
+        output: string
+      }[]
+      note: string
     }
   | {
       type: 'gaps'
