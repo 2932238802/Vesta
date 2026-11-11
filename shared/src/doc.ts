@@ -735,6 +735,16 @@ function jobMatch(
     )
   }
 
+  const posted = job.date ? new Date(job.date).getTime() : Number.NaN
+  if (
+    Number.isFinite(posted) &&
+    Date.now() - posted > 18 * 30 * 24 * 3600 * 1000
+  ) {
+    missing.unshift(
+      `时效：这是 ${new Date(posted).getFullYear()} 年的公告，只用来看要求结构，不要当现在的投递入口`
+    )
+  }
+
   return { meets: meets.slice(0, 3), missing: missing.slice(0, 3) }
 }
 
