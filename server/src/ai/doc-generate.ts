@@ -59,6 +59,7 @@ const DOC_SKILL = `# 大学四年规划报告
 - 年级必须和系统给的关键节点一致：大一学生的秋招/夏令营在两年以后，不能说成「还有五六个月」或者「马上大三」。
 - 不编造分数线、薪资、政策；需要事实时写「以官方最新公告为准」。
 - 分数、档位、剩余月份、投入小时数都由系统给出，报告页会单独展示；正文里引用即可，不要重新计算，也不要写出与系统数字冲突的数字。
+- 专业分数偏低时，不要用「天坑」「野鸡」「垃圾专业」这类词评价专业，也不要替专业下「读了没用」的结论；只写对口岗位密度、岗位要求和可替代方向。
 - 不要复述题目，不要写「你很棒」这类空话。
 - conclusion 一句话，sections 必须正好 5 条，每条 title 用上面固定标题。`
 
@@ -126,6 +127,9 @@ function findTextIssues(content: DocAiContent): string[] {
     }
     if (/没有硬性门槛|保持阅读和表达就够了|英语不是(重点|主线)/.test(text)) {
       issues.push(`出现英语弱化判断：${text.slice(0, 40)}`)
+    }
+    if (/(天坑|野鸡|垃圾专业|最差专业)/.test(text)) {
+      issues.push(`出现贬低专业的说法：${text.slice(0, 40)}`)
     }
   }
   return issues
@@ -305,7 +309,8 @@ ${JSON.stringify(content, null, 2)}
       issue.startsWith('出现未替换') ||
       issue.startsWith('存在空段落') ||
       issue.startsWith('出现禁用词') ||
-      issue.startsWith('出现英语弱化判断')
+      issue.startsWith('出现英语弱化判断') ||
+      issue.startsWith('出现贬低专业')
   )
   if (blocking.length > 0) {
     throw new Error(`AI 报告审校未通过：${blocking[0]}`)

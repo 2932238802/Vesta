@@ -83,6 +83,121 @@ const ENVIRONMENT = [8, 6, 4, 3]
 
 const WEEKLY_HOURS = [1.5, 5, 10.5, 17.5]
 
+/**
+ * 就业面较窄、对口岗位相对少的专业关键词。
+ * 按 Q2 的自由文本匹配；命中后「学校与专业」这一项封顶 5 分。
+ * 这是一张可维护的经验表，不是对某个学生的评价。
+ */
+const WEAK_MAJOR_KEYWORDS = [
+  // 生化环材
+  '生物工程',
+  '生物科学',
+  '生物技术',
+  '生态学',
+  '化学工程',
+  '应用化学',
+  '化学',
+  '化学生物学',
+  '环境工程',
+  '环境科学',
+  '资源环境',
+  '环境生态',
+  '材料科学与工程',
+  '材料化学',
+  '材料物理',
+  '高分子材料',
+  '无机非金属材料',
+  '金属材料',
+  '复合材料',
+  // 土木建筑
+  '土木工程',
+  '给排水科学与工程',
+  '建筑环境与能源应用',
+  '道路桥梁',
+  '城市地下空间',
+  '建筑学',
+  '城乡规划',
+  '风景园林',
+  // 就业面窄的文科/管理
+  '旅游管理',
+  '酒店管理',
+  '会展经济与管理',
+  '文化产业管理',
+  '公共事业管理',
+  '社会工作',
+  '哲学',
+  '历史学',
+  '人类学',
+  '宗教学',
+  '图书馆学',
+  '档案学'
+]
+
+/**
+ * 就业面相对宽、岗位供给更稳定的专业关键词。
+ * 非一线/新一线城市时，这些专业不会被 6 分封顶。
+ * 除理工科外也保留医学、法学、会计、师范等就业路径较清楚的方向，
+ * 避免把「不是理工科」直接等同于「不好就业」。
+ */
+const STRONG_MAJOR_KEYWORDS = [
+  '计算机',
+  '软件工程',
+  '人工智能',
+  '数据科学',
+  '大数据',
+  '信息安全',
+  '网络空间安全',
+  '物联网',
+  '电子科学',
+  '电子信息',
+  '通信工程',
+  '微电子',
+  '集成电路',
+  '自动化',
+  '电气工程',
+  '机械设计',
+  '机械电子',
+  '车辆工程',
+  '能源与动力',
+  '数学与应用数学',
+  '信息与计算科学',
+  '统计学',
+  '应用统计',
+  '临床医学',
+  '口腔医学',
+  '麻醉学',
+  '医学影像',
+  '法学',
+  '会计',
+  '财务管理',
+  '审计学',
+  '师范',
+  '小学教育',
+  '学前教育'
+]
+
+type MajorTier = 'weak' | 'strong' | 'normal'
+
+function majorTier(survey: Survey, answers: Answers): MajorTier {
+  const major = textAnswer(answers, 'q2').replace(/\s+/g, '')
+  if (!major) return 'normal'
+  // 带「师范 / 教育」的专业即使学科本身就业面窄，也还有教师这条明确路径，
+  // 不按窄口径专业封 5 分，避免把化学师范、生物师范误伤。
+  const teaching = major.includes('师范') || major.includes('教育')
+  if (!teaching && WEAK_MAJOR_KEYWORDS.some((word) => major.includes(word))) return 'weak'
+  if (STRONG_MAJOR_KEYWORDS.some((word) => major.includes(word))) return 'strong'
+  return 'normal'
+}
+
+function isTopCity(survey: Survey, answers: Answers): boolean {
+  const cityLabel = singleLabel(survey, answers, 'q8')
+  return (
+    cityLabel.includes('北上广深') ||
+    cityLabel.startsWith('新一线') ||
+    cityLabel.startsWith('一线')
+  )
+}
+
 /** 个人四维里的一项：分数 + 依据。 */
 function methodScore(survey: Survey, answers: Answers): number {
   let score = pick(optionIndex(survey, answers, 'q14'), METHOD, 5)
@@ -111,6 +226,9 @@ function cityScore(survey: Survey, answers: Answers): number {
   const target = textAnswer(answers, 'q5a')
   if (target.length >= 6) score += 2
   else if (target.length > 0) score += 1
+  // 城市这一项封顶：不是北上广深或新一线，最高 6 分。
+  // 岗位写得再清楚，也只说明方向清楚，不等于城市机会密度够。
+  if (!isTopCity(survey, answers)) score = Math.min(score, 6)
   return clamp(score)
 }
 
@@ -119,6 +237,14 @@ function schoolScore(survey: Survey, answers: Answers): number {
   const majorJob = optionIndex(survey, answers, 'q5')
   if (majorJob === 0) score += 0.5
   else if (majorJob === 1) score -= 0.5
+
+  // 专业单项封顶：
+  // 1) 就业面窄的专业，不管学校多好，最高 5 分；
+  // 2) 非一线/新一线城市，专业又不属于就业面较宽的方向，最高 6 分。
+  const tier = majorTier(survey, answers)
+  if (tier === 'weak') score = Math.min(score, 5)
+  else if (!isTopCity(survey, answers) && tier !== 'strong') score = Math.min(score, 6)
+
   return clamp(score)
 }
 
@@ -128,7 +254,8 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
       key: 'school',
       label: '学校与专业',
       score: schoolScore(survey, answers),
-      note: '学校层级 + 专业是否对口，改不了，是起点',
+      note:
+        '学校层级 + 专业是否对口；就业面窄的专业封顶 5 分，非一线/新一线城市且专业不属于就业面较宽的方向时封顶 6 分',
       benchmark: '常规入场线 6.0—8.0',
       source: 'Q1 学校 + Q5 是否对口'
     },
@@ -136,7 +263,7 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
       key: 'city',
       label: '城市与行业',
       score: cityScore(survey, answers),
-      note: '目标城市的机会密度 + 行业岗位写得清不清楚',
+      note: '目标城市的机会密度 + 行业岗位写得清不清楚；非一线/新一线城市按 6 分封顶',
       benchmark: '常规入场线 6.0—8.0',
       source: 'Q8 城市 + Q5a 岗位'
     },
