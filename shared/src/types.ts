@@ -342,7 +342,7 @@ export type ReportBlock =
       subtitle: string
       background: ScoreItem[]
       personal: ScoreItem[]
-      potential: { level: '低' | '中' | '高'; text: string }
+      potential: { level: '低' | '中' | '高'; label: string; text: string }
     }
   | {
       type: 'gap'
@@ -351,6 +351,13 @@ export type ReportBlock =
       lines: { label: string; value: string }[]
       note: string
       jobs: JobCard[]
+    }
+  | {
+      type: 'checklist'
+      title: string
+      subtitle: string
+      items: { title: string; detail: string; search: string }[]
+      note: string
     }
   | {
       type: 'section'

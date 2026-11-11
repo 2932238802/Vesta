@@ -507,6 +507,160 @@ function gapBlock(survey: Survey, answers: Answers, jobs: JobCard[] = []): Repor
   }
 }
 
+/** 把「门槛是经验值」落到三个能自己查的官方来源上，报告只指路，不替公告下结论。 */
+function checklistBlock(survey: Survey, answers: Answers): ReportBlock {
+  const first = label(survey, answers, 'q6')
+  const preparing = labels(survey, answers, 'q7')
+  const city = label(survey, answers, 'q8').replace(/（.*?）/g, '')
+  const role = text(answers, 'q5a') || text(answers, 'q2')
+  const major = text(answers, 'q2')
+  const place = city || '目标城市'
+  const job = role || major || '目标岗位'
+
+  let path = first
+  if ((!path || path === '还没确定') && preparing.some((item) => item.includes('专升本'))) {
+    path = '专升本'
+  }
+
+  const items: { title: string; detail: string; search: string }[] = []
+
+  if (path === '考研') {
+    items.push(
+      {
+        title: '目标院校研究生院官网',
+        detail: '招生简章、专业目录、近三年复试线和英语单科线',
+        search: `${major || '本专业'} 考研 目标院校 招生简章`
+      },
+      {
+        title: '中国研究生招生信息网（研招网）',
+        detail: '专业目录、考试科目、报名和确认时间',
+        search: '研招网 硕士专业目录'
+      },
+      {
+        title: '目标院校学院官网',
+        detail: '复试细则、面试是否含英文环节、是否接受跨专业',
+        search: `${major || '本专业'} 考研 复试细则`
+      }
+    )
+  } else if (path === '保研') {
+    items.push(
+      {
+        title: '目标院校研究生院官网',
+        detail: '推免办法、夏令营通知、英语和科研要求',
+        search: '目标院校 推免 夏令营 通知'
+      },
+      {
+        title: '本科学院教务或学工办',
+        detail: '保研细则、排名怎么算、竞赛科研加多少分',
+        search: '本校 保研细则 排名 加分'
+      },
+      {
+        title: '目标院校学院官网',
+        detail: '夏令营入营条件、面试形式、是否需要英文自我介绍',
+        search: '目标院校 学院 夏令营 入营条件'
+      }
+    )
+  } else if (path === '考公' || path === '考编') {
+    items.push(
+      {
+        title: '本省人事考试网 / 人社局官网',
+        detail: '岗位表、专业目录、报名时间、笔试科目',
+        search: `${path === '考公' ? '省考' : '事业单位'} 公告 岗位表 专业目录`
+      },
+      {
+        title: '目标单位官网',
+        detail: '招聘公告、专业限制、英语或资格证要求',
+        search: `${major || '本专业'} ${path === '考编' ? '教师招聘' : '公务员'} 专业要求`
+      },
+      {
+        title: '国家公务员局（仅国考）',
+        detail: '国考公告、职位表、报名和考试时间',
+        search: '国家公务员局 国考 职位表'
+      }
+    )
+  } else if (path === '出国') {
+    items.push(
+      {
+        title: '目标院校官网 Admissions 页面',
+        detail: '语言成绩、GPA、申请材料、截止日期',
+        search: '目标院校 官网 admission requirements'
+      },
+      {
+        title: '语言考试官网',
+        detail: '雅思或托福的分数要求、考试时间和送分方式',
+        search: '雅思 托福 官方 分数要求'
+      },
+      {
+        title: '学校国际处 / 留学基金委',
+        detail: '交换项目、公派项目、学分认定和资助条件',
+        search: '学校国际处 交换项目 留学基金委'
+      }
+    )
+  } else if (path.includes('升本')) {
+    items.push(
+      {
+        title: '本省教育考试院官网',
+        detail: '专升本考试科目、英语分值、报名和考试时间',
+        search: '本省 教育考试院 专升本 考试科目'
+      },
+      {
+        title: '目标本科院校招生网',
+        detail: '招生简章、专业对照表、近三年录取分数线',
+        search: '目标本科院校 专升本 招生简章 分数线'
+      },
+      {
+        title: '专科学校教务处',
+        detail: '报名资格、挂科和处分限制、推荐流程',
+        search: '专科学校 专升本 报名资格'
+      }
+    )
+  } else if (path === '就业') {
+    items.push(
+      {
+        title: '目标岗位的招聘原文',
+        detail: '学历、专业、英语、实习和证书要求',
+        search: `${place} ${job} 招聘 应届 要求`
+      },
+      {
+        title: '学校就业信息网 / 校招公告',
+        detail: '来校招聘的单位、往届去向、宣讲会时间',
+        search: '学校就业信息网 校园招聘 宣讲会'
+      },
+      {
+        title: '目标行业资格证官网',
+        detail: '入行需不需要资格证、报名条件和考试时间',
+        search: `${job} 资格证 报考条件`
+      }
+    )
+  } else {
+    items.push(
+      {
+        title: '本省教育考试院官网',
+        detail: '升学、考编、专升本等考试的科目、报名时间和英语要求',
+        search: '本省 教育考试院 考试公告'
+      },
+      {
+        title: '目标单位或院校官网',
+        detail: '招生简章、招聘公告里的专业和英语要求',
+        search: `${place} ${job} 官网 招生 招聘`
+      },
+      {
+        title: '学校就业信息网 / 教务处',
+        detail: '校招、实习、升学项目的官方通知',
+        search: '学校就业信息网 教务处 通知'
+      }
+    )
+  }
+
+  return {
+    type: 'checklist',
+    title: '你可以自己核对的三件事',
+    subtitle: '报告里的门槛是经验值，真正的答案在官方原文里',
+    items,
+    note: '这三件事都能自己查。查完如果和报告不一致，以公告原文为准——报告只是帮你把该查的列出来，不替你做结论。'
+  }
+}
+
 function englishSection(survey: Survey, answers: Answers): ReportBlock {
   const scores = computeDocScores(survey, answers)
   const english = scores.english
@@ -580,7 +734,7 @@ export function buildDocReport(
   const blocks: ReportBlock[] = [
     {
       type: 'hero',
-      eyebrow: '学姐帮你看看现在在哪儿',
+      eyebrow: '我帮你看看现在在哪儿',
       title: survey.title,
       summary: facts.oneLine,
       tier,
@@ -591,6 +745,7 @@ export function buildDocReport(
     },
     scorecardBlock(survey, answers),
     gapBlock(survey, answers, jobs),
+    checklistBlock(survey, answers),
     englishSection(survey, answers),
     { type: 'note', title: '你现在卡在哪一层', text: facts.stuckDetail },
     { type: 'note', title: '什么时候要命', text: facts.deadline },

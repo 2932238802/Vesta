@@ -8,9 +8,9 @@ export type PotentialLevel = '低' | '中' | '高'
 export interface DocScores {
   /** 五因素：改不动的起点，但照常显示分数 */
   background: ScoredItem[]
-  /** 个人四维：能改的部分，潜力值只算这四项 */
+  /** 个人四维：能改的部分，可提升空间只算这四项 */
   personal: ScoredItem[]
-  potential: { level: PotentialLevel; text: string }
+  potential: { level: PotentialLevel; label: string; text: string }
   english: {
     /** 综合判断：这条路上英语是否需要被当成真实差距 */
     need: boolean
@@ -196,7 +196,7 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
     }
   ]
 
-  // 潜力值只用能改的四项：实习、技能、方法、执行。
+  // 可提升空间只用能改的四项：实习、技能、方法、执行。
   // 实习和技能在「起点」那一组里，所以分数表要把两组并起来，不能只查 personal。
   const allItems = [...background, ...personal]
   const byKey = new Map(allItems.map((item) => [item.key, item.score]))
@@ -206,6 +206,8 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
     (gap('practice') * 0.4 + gap('skill') * 0.25 + gap('method') * 0.2 + gap('execution') * 0.15) * 100
   const potentialScore = Math.round(raw)
   const level: PotentialLevel = potentialScore >= 70 ? '高' : potentialScore >= 40 ? '中' : '低'
+  // 对外不说「潜力低」，改成「可提升空间大」：分数照实，但不评价这个人。
+  const spaceLabel = level === '低' ? '大' : level === '中' ? '中' : '小'
   const lowLabels = ['practice', 'skill', 'method', 'execution']
     .map((key) => allItems.find((item) => item.key === key))
     .filter((item): item is ScoredItem => Boolean(item) && (item?.score ?? 10) < 6)
@@ -213,8 +215,8 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
     .map((item) => item.label)
   const potentialText =
     lowLabels.length > 0
-      ? `你的潜力在${level}档，卡住你的是${lowLabels.slice(0, 2).join('、')}，不是天赋。`
-      : `你的潜力在${level}档，这四项里没有明显短板，接下来是把已有的往前推。`
+      ? `这四项里，${lowLabels.slice(0, 2).join('、')}现在最拖后腿，但都能改。`
+      : '这四项里没有明显短板，接下来是把已经有的往前推。'
 
   // 英语判断必须和「报告分析 Skill」的触发条件一致，不能只看路径：
   // 1) 目标路径本身对英语有要求：升学、考编、出国、专升本；
@@ -252,7 +254,7 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
   return {
     background,
     personal,
-    potential: { level, text: potentialText },
+    potential: { level, label: spaceLabel, text: potentialText },
     english: {
       need,
       pathNeeds,

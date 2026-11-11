@@ -211,7 +211,7 @@ ${answerText(survey, answers)}
 
 【系统算好的分数】（报告页会原样展示，正文引用即可，不要改数）
 ${scoreText}
-潜力：${scores.potential.level}（${scores.potential.text}）
+可提升空间：${scores.potential.label}（${scores.potential.text}）
 【英语位置】${english.stage || '还没填'}；${englishPosition}
 每周英语投入：约 ${weekly} 小时（这是「一周」的总时长，不是每天）
 
@@ -275,7 +275,7 @@ ${answerText(survey, answers)}
 
 【系统算好的数字】（不能改）
 ${scoreText}
-潜力：${scores.potential.level}
+可提升空间：${scores.potential.label}
 关键节点：${node.node}，还剩约 ${node.months} 个月
 
 【待审报告】
