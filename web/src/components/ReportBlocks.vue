@@ -202,25 +202,51 @@
         <div class="score-groups">
           <section class="score-group">
             <h3>起点（改不了，但要知道）</h3>
-            <div v-for="item in block.background" :key="item.key" class="score-row">
-              <div class="score-head">
-                <span>{{ item.label }}</span>
-                <b>{{ item.score }}</b>
+            <div class="score-group-body">
+              <div class="score-radar">
+                <RadarChart
+                  :dimensions="radarDimensions(block.background)"
+                  :accent="payload.theme.accent"
+                  :max="10"
+                  compact
+                  :show-data="false"
+                />
               </div>
-              <div class="score-track"><i :style="{ width: `${item.score * 10}%` }" /></div>
-              <p v-if="item.benchmark" class="score-benchmark">入场线：{{ item.benchmark }}</p>
-              <p class="score-note">{{ item.note }}<template v-if="item.source"> · {{ item.source }}</template></p>
+              <div class="score-rows">
+                <div v-for="item in block.background" :key="item.key" class="score-row">
+                  <div class="score-head">
+                    <span>{{ item.label }}</span>
+                    <b>{{ item.score }}</b>
+                  </div>
+                  <div class="score-track"><i :style="{ width: `${item.score * 10}%` }" /></div>
+                  <p v-if="item.benchmark" class="score-benchmark">入场线：{{ item.benchmark }}</p>
+                  <p class="score-note">{{ item.note }}<template v-if="item.source"> · {{ item.source }}</template></p>
+                </div>
+              </div>
             </div>
           </section>
           <section class="score-group">
             <h3>能改的四项</h3>
-            <div v-for="item in block.personal" :key="item.key" class="score-row">
-              <div class="score-head">
-                <span>{{ item.label }}</span>
-                <b>{{ item.score }}</b>
+            <div class="score-group-body">
+              <div class="score-radar">
+                <RadarChart
+                  :dimensions="radarDimensions(block.personal)"
+                  :accent="payload.theme.accent"
+                  :max="10"
+                  compact
+                  :show-data="false"
+                />
               </div>
-              <div class="score-track personal"><i :style="{ width: `${item.score * 10}%` }" /></div>
-              <p class="score-note">{{ item.note }}<template v-if="item.source"> · {{ item.source }}</template></p>
+              <div class="score-rows">
+                <div v-for="item in block.personal" :key="item.key" class="score-row">
+                  <div class="score-head">
+                    <span>{{ item.label }}</span>
+                    <b>{{ item.score }}</b>
+                  </div>
+                  <div class="score-track personal"><i :style="{ width: `${item.score * 10}%` }" /></div>
+                  <p class="score-note">{{ item.note }}<template v-if="item.source"> · {{ item.source }}</template></p>
+                </div>
+              </div>
             </div>
           </section>
         </div>
@@ -262,12 +288,21 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ReportPayload } from '@shared/types'
+import type { DimScore, ReportPayload, ScoreItem } from '@shared/types'
 import RadarChart from './RadarChart.vue'
 import ScoreBar from './ScoreBar.vue'
 import SectionHead from './SectionHead.vue'
 
 const props = defineProps<{ payload: ReportPayload; claimLink?: boolean }>()
+
+function radarDimensions(items: ScoreItem[]): DimScore[] {
+  return items.map((item) => ({
+    key: item.key,
+    name: item.label,
+    weight: 0,
+    score: item.score
+  }))
+}
 
 const dateText = computed(() => {
   const date = new Date(props.payload.createdAt)
@@ -735,6 +770,18 @@ const dateText = computed(() => {
   margin-bottom: 14px;
 }
 
+.score-group-body {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 18px 22px;
+  align-items: start;
+}
+
+.score-radar,
+.score-rows {
+  min-width: 0;
+}
+
 .score-row {
   margin-bottom: 16px;
 }
@@ -1029,6 +1076,11 @@ const dateText = computed(() => {
 @media (max-width: 720px) {
   .gap-list {
     grid-template-columns: 1fr;
+  }
+
+  .score-group-body {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 
   .target-facts {

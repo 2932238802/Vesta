@@ -12,7 +12,12 @@ export interface DocScores {
   personal: ScoredItem[]
   potential: { level: PotentialLevel; text: string }
   english: {
+    /** 综合判断：这条路上英语是否需要被当成真实差距 */
     need: boolean
+    /** 目标路径本身对英语有明确要求（升学、考编、出国、专升本等） */
+    pathNeeds: boolean
+    /** 学生本人已经在准备四级/六级，或明确把英语看得重要 */
+    preparing: boolean
     /** 低分者后 5 道英语题是按规则跳过的 */
     skippedDetail: boolean
     stage: string
@@ -211,13 +216,32 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
       ? `你的潜力在${level}档，卡住你的是${lowLabels.slice(0, 2).join('、')}，不是天赋。`
       : `你的潜力在${level}档，这四项里没有明显短板，接下来是把已有的往前推。`
 
-  // 客观有英语需求：升学/考编，或专业本身对口（Q5 想从事本专业），或正在准备四六级。
-  const need =
-    ['q6_1', 'q6_2', 'q6_5'].includes(String(answers.q6 ?? '')) ||
-    String(answers.q5 ?? '') === 'q5_1' ||
-    optionLabels(survey, answers, 'q7').some(
+  // 英语判断必须和「报告分析 Skill」的触发条件一致，不能只看路径：
+  // 1) 目标路径本身对英语有要求：升学、考编、出国、专升本；
+  // 2) 学生本人已经在准备四级/六级，或明确把英语看得重要。
+  // 用选项文字判断而不是固定 id：后台改过问卷选项后，q6_1 这类 id 会错位。
+  const firstChoice = singleLabel(survey, answers, 'q6')
+  const preparingItems = optionLabels(survey, answers, 'q7')
+  const stage = singleLabel(survey, answers, 'q17')
+  const importance = typeof answers.q24 === 'number' ? answers.q24 : 0
+
+  const pathNeeds =
+    ['保研', '考研', '考编', '出国', '升本', '专升本'].some((item) =>
+      firstChoice.includes(item)
+    ) ||
+    preparingItems.some((item) => item.includes('专升本')) ||
+    singleLabel(survey, answers, 'q5').startsWith('想')
+
+  const preparing =
+    stage.includes('四级没过') ||
+    stage.includes('准备六级') ||
+    stage.includes('更高等级') ||
+    importance >= 6 ||
+    preparingItems.some(
       (item) => item.includes('四六级') || item.includes('四级') || item.includes('六级')
     )
+
+  const need = pathNeeds || preparing
 
   // 低分者只答了 3 道英语题，后面 5 道是按规则跳过的，报告里要说明，不能当成「未作答」。
   const detailQuestion = survey.questions.find((item) => item.id === 'q19')
@@ -231,8 +255,10 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
     potential: { level, text: potentialText },
     english: {
       need,
+      pathNeeds,
+      preparing,
       skippedDetail,
-      stage: singleLabel(survey, answers, 'q17'),
+      stage,
       weeklyHours: pick(optionIndex(survey, answers, 'q20'), WEEKLY_HOURS, 0),
       weakPart: optionLabels(survey, answers, 'q18'),
       speaking: singleLabel(survey, answers, 'q22'),

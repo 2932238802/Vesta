@@ -467,11 +467,17 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
 
   const english = computeDocScores(survey, answers).english
   if (english.stage) {
+    const preparingLine = english.stage.includes('更高等级')
+      ? '你已经在准备更高等级的英语考试，英语要算进计划，不能停在「够用」'
+      : '你正在准备四级/六级，英语要算进计划，不能停在「够用」'
+    const englishLine = english.pathNeeds
+      ? '这条路对英语有明确要求，先把它算进计划'
+      : english.preparing
+        ? preparingLine
+        : '这条路的英语要求，以目标院校或单位的最新公告为准'
     lines.push({
       label: '门槛对照',
-      value: `你现在是「${english.stage}」；${
-        english.need ? '这条路对英语有要求，先把它算进计划' : '这条路对英语没有硬性门槛'
-      }`
+      value: `你现在是「${english.stage}」；${englishLine}`
     })
   }
 
@@ -511,17 +517,29 @@ function englishSection(survey: Survey, answers: Answers): ReportBlock {
     ? `你现在是「${english.stage}」。`
     : '你这部分还没答，先按你勾的英语准备状态看。'
 
+  const target = label(survey, answers, 'q6') || '还在准备的方向'
+  const preparingCopy = english.stage.includes('更高等级')
+    ? '但你自己正在准备更高等级的英语考试'
+    : english.stage.includes('四级') || english.stage.includes('六级')
+      ? '但你自己正在准备四级/六级'
+      : `但你给英语的重要性打了 ${importance} 分`
   const gapParts: string[] = []
-  if (english.need && importance < 6) {
+  if (english.pathNeeds && importance < 6) {
     gapParts.push(
-      `你给英语打了 ${importance} 分，但你的目标（${label(survey, answers, 'q6') || '还在准备的方向'}）对英语有明确门槛：考研要考英语一/二、保研夏令营常是全英文面试、考编也有英语要求。这个分数和你的目标之间有一条对不上的缝——不是英语不重要，是你还没看到它在这条路上具体卡在哪。`
+      `你给英语打了 ${importance} 分，但你的目标（${target}）对英语有明确门槛：考研要考英语一/二、保研夏令营常是全英文面试、考编和专升本也普遍考英语。这个分数和你的目标之间有一条对不上的缝——不是英语不重要，是你还没看到它在这条路上具体卡在哪。`
     )
-  } else if (english.need) {
+  } else if (english.pathNeeds) {
     gapParts.push(
       '这条路对英语有明确门槛，你现在的位置离它还差一截：先补最卡的那一层，不要平均用力。'
     )
+  } else if (english.preparing) {
+    gapParts.push(
+      `你的目标（${target}）暂时看不出硬性英语门槛，${preparingCopy}。英语现在不是「够用就行」的加分项，而是你已经投入时间、需要看到结果的一项。`
+    )
   } else {
-    gapParts.push('你目前的方向对英语没有硬门槛，但别把英语完全放下：阅读和表达是最通用的加分项。')
+    gapParts.push(
+      '按你填的方向，暂时看不出英语的硬性门槛；具体要不要、要到什么程度，以目标院校或单位的最新公告为准。别把阅读和表达完全放下。'
+    )
   }
   gapParts.push(`你最卡的是${stuck.short}。`)
 
@@ -531,12 +549,16 @@ function englishSection(survey: Survey, answers: Answers): ReportBlock {
     ? '（你给英语的重要度低于 6 分，后面 5 道细节题按规则跳过了，不是你没答。）'
     : ''
 
-  // 英语只是报告里的一块，不抢主线：没有英语门槛的方向，只留一句。
+  // 英语不是主线时只留一句，但不做「没有门槛、够用就行」的绝对判断。
   if (!english.need) {
     return {
       type: 'section',
       title: '英语这块',
-      paragraphs: [position + skipped + '这条路对英语没有硬性门槛，保持阅读和表达就够了。']
+      paragraphs: [
+        position +
+          skipped +
+          '按你填的方向，暂时看不出英语的硬性门槛；具体要不要、要到什么程度，以目标院校或单位的最新公告为准。别把阅读和表达完全放下。'
+      ]
     }
   }
 

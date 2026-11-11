@@ -1,5 +1,5 @@
 <template>
-  <div class="radar">
+  <div class="radar" :class="{ compact }">
     <div class="plot" @pointerleave="hover = -1">
       <svg viewBox="0 0 400 340" role="img" :aria-label="ariaLabel">
         <polygon
@@ -32,16 +32,16 @@
 
         <g v-for="(dimension, i) in dimensions" :key="dimension.key">
           <circle
-            :cx="pointAt(i, dimension.score / 100).x"
-            :cy="pointAt(i, dimension.score / 100).y"
+            :cx="pointAt(i, dimension.score / scaleMax).x"
+            :cy="pointAt(i, dimension.score / scaleMax).y"
             r="4.5"
             :fill="accent"
             stroke="var(--surface)"
             stroke-width="2"
           />
           <circle
-            :cx="pointAt(i, dimension.score / 100).x"
-            :cy="pointAt(i, dimension.score / 100).y"
+            :cx="pointAt(i, dimension.score / scaleMax).x"
+            :cy="pointAt(i, dimension.score / scaleMax).y"
             r="14"
             fill="transparent"
             class="hit"
@@ -71,7 +71,7 @@
       </div>
     </div>
 
-    <details class="data">
+    <details v-if="showData !== false" class="data">
       <summary>查看数据</summary>
       <div class="data-grid">
         <div v-for="dimension in dimensions" :key="dimension.key" class="data-row">
@@ -90,6 +90,11 @@ import type { DimScore } from '@shared/types'
 const props = defineProps<{
   dimensions: DimScore[]
   accent: string
+  /** 每根轴的量程上限，默认 100 分制；现状分数表是 0—10 分 */
+  max?: number
+  /** 窄容器里放大标签，避免缩小后看不清 */
+  compact?: boolean
+  showData?: boolean
 }>()
 
 const hover = ref(-1)
@@ -97,6 +102,8 @@ const center = { x: 200, y: 168 }
 const radius = 108
 const labelRadius = 136
 const levels = [0.25, 0.5, 0.75, 1]
+
+const scaleMax = computed(() => (props.max && props.max > 0 ? props.max : 100))
 
 const shortNames: Record<string, string> = {
   b1: '方向',
@@ -107,7 +114,16 @@ const shortNames: Record<string, string> = {
   b6: '执行',
   b7: '信息',
   b8: '家庭',
-  b9: '英语'
+  b9: '英语',
+  school: '学校',
+  city: '城市',
+  family: '家庭',
+  practice: '实践',
+  skill: '技能',
+  method: '方法',
+  info: '信息',
+  execution: '执行',
+  environment: '环境'
 }
 
 function shortName(dimension: DimScore): string {
@@ -146,7 +162,8 @@ function ringPoints(ratio: number): string {
 const shapePoints = computed(() =>
   props.dimensions
     .map((dimension, i) => {
-      const point = pointAt(i, Math.max(0, Math.min(100, dimension.score)) / 100)
+      const ratio = Math.max(0, Math.min(scaleMax.value, dimension.score)) / scaleMax.value
+      const point = pointAt(i, ratio)
       return `${point.x},${point.y}`
     })
     .join(' ')
@@ -159,7 +176,7 @@ const ariaLabel = computed(() =>
 const tooltip = computed(() => {
   if (hover.value < 0) return { x: '0%', y: '0%' }
   const dim = props.dimensions[hover.value]
-  const point = pointAt(hover.value, dim.score / 100)
+  const point = pointAt(hover.value, dim.score / scaleMax.value)
   return {
     x: `${(point.x / 400) * 100}%`,
     y: `${(point.y / 340) * 100}%`
@@ -197,6 +214,10 @@ svg {
   font-size: 11px;
   font-family: var(--sans);
   letter-spacing: 0.02em;
+}
+
+.radar.compact .axis-label {
+  font-size: 14px;
 }
 
 .hit {
