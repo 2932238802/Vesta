@@ -540,7 +540,7 @@ function usedForJob(job: JobCard, directionName?: string): string {
   if (/本科|大专|专科|学历/.test(text)) fields.push('学历')
   if (/专业/.test(text)) fields.push('专业')
   if (/英语|四级|六级|口语|读写/i.test(text)) fields.push('英语')
-  if (/实习|经验|优先/.test(text)) fields.push('实习')
+  if (/实习|工作经验|相关经验/.test(text)) fields.push('实习')
   if (/证书/.test(text)) fields.push('证书')
   if (job.salary && salaryRangeNumbers(job.salary)) fields.push('薪资')
   return fields.length
@@ -597,9 +597,30 @@ function jobMatch(
   const skills = labels(survey, answers, 'q10')
   const english = label(survey, answers, 'q17')
   const expectation = label(survey, answers, 'q27')
+  const postedAt = job.date ? new Date(job.date).getTime() : Number.NaN
+  // 超过约 18 个月的公告只能对照要求结构，不能当作“你现在符合”。
+  const stale =
+    Number.isFinite(postedAt) && Date.now() - postedAt > 18 * 30 * 24 * 3600 * 1000
 
-  // 学历
-  if (/本科及以上|本科以上|本科/.test(req)) {
+  // 学历/院校层次：原文点名 985/211/双一流 时，不能只按“本科”算符合。
+  const eliteRequired = /985|211|双一流|重点院校|知名院校/.test(req)
+  const eliteSchool = /C9|985|211|双一流/.test(school)
+  const masterRequired =
+    /硕士(及以上|以上|学历|生)|研究生(及以上|以上|学历)|要求硕士|硕士起|学历[：:]\s*(硕士|研究生)/.test(
+      req
+    )
+
+  if (eliteRequired) {
+    if (eliteSchool && degree === '本科') {
+      meets.push(`院校：原文点名 985/211/双一流，你的档位是${school}，在范围内`)
+    } else {
+      missing.push(
+        `院校：原文要求 985/211/双一流，你的档位是${school || '还没填'}，这一条对不上；投递前确认公告是否放宽`
+      )
+    }
+  } else if (masterRequired) {
+    missing.push('学历：岗位写的是硕士/研究生，你现在是本科，投递前确认是否接受本科')
+  } else if (/本科及以上|本科以上|本科/.test(req)) {
     if (degree === '本科') meets.push(`学历：岗位要本科，你的档位是${school}（本科）`)
     else if (degree === '专科') {
       missing.push('学历：岗位写的是本科，你目前是专科，投递前先确认是否接受专升本或同等学力')
@@ -608,6 +629,23 @@ function jobMatch(
     }
   } else if (/大专|专科/.test(req)) {
     meets.push(`学历：岗位接受大专${degree === '本科' ? '，你本科更稳' : '，你的档位够线'}`)
+  }
+
+  // 经验年限：应届岗和经验岗要分开，避免把 3-5 年的社招岗当投递入口。
+  const experience = /(经验不限|在校\/应届|应届生|应届|\d+-\d+年|\d+年以上)/.exec(req)?.[1]
+  if (experience) {
+    if (/经验不限|在校|应届/.test(experience)) {
+      meets.push(`经验：岗位写「${experience}」，你可以按应届或实习投`)
+    } else {
+      const years = Number(/(\d+)/.exec(experience)?.[1] ?? 0)
+      if (years >= 3) {
+        missing.push(`经验：岗位要 ${experience}，不是应届岗，优先投「经验不限/应届」的岗位`)
+      } else if (years >= 1) {
+        missing.push(
+          `经验：岗位要 ${experience}，你的实习/兼职只能部分对上，投递前确认是否接受应届`
+        )
+      }
+    }
   }
 
   // 专业：只有原文明确写了“专业”范围时才做对照，避免把“英语读写”当专业要求。
@@ -656,7 +694,9 @@ function jobMatch(
     else missing.push('英语：岗位要四级，问卷里还没填英语现状')
   } else if (/英语读写|英语/.test(req)) {
     if (english.includes('四级没过')) {
-      missing.push('英语：岗位要英语读写，你现在还没有四级成绩可证明')
+      missing.push(
+        '英语：岗位要英语读写，你暂时没有成绩或作品可证明；可以先准备一封英文邮件或一段英文自我介绍'
+      )
     } else if (english) {
       meets.push('英语：岗位要英语读写，你有四六级基础')
     }
@@ -735,13 +775,9 @@ function jobMatch(
     )
   }
 
-  const posted = job.date ? new Date(job.date).getTime() : Number.NaN
-  if (
-    Number.isFinite(posted) &&
-    Date.now() - posted > 18 * 30 * 24 * 3600 * 1000
-  ) {
+  if (stale) {
     missing.unshift(
-      `时效：这是 ${new Date(posted).getFullYear()} 年的公告，只用来看要求结构，不要当现在的投递入口`
+      `时效：这是 ${new Date(postedAt).getFullYear()} 年的公告，只用来看要求结构，不要当现在的投递入口`
     )
   }
 
@@ -754,11 +790,60 @@ function withJobMatch(
   job: JobCard,
   directionName?: string
 ): JobCard {
+  const posted = job.date ? new Date(job.date).getTime() : Number.NaN
+  const stale =
+    Number.isFinite(posted) && Date.now() - posted > 18 * 30 * 24 * 3600 * 1000
   return {
     ...job,
     usedFor: job.usedFor || usedForJob(job, directionName),
-    ...jobMatch(survey, answers, job)
+    ...jobMatch(survey, answers, job),
+    stale: job.stale || stale
   }
+}
+
+/** 把同一方向的多条原文汇总成门槛事实，避免只靠单条招聘下结论。 */
+function directionFacts(jobs: JobCard[]): string[] {
+  if (jobs.length < 2) return []
+  const textOf = (job: JobCard) => `${job.title} ${job.requirement}`
+  const facts: string[] = []
+
+  const level = (job: JobCard): string => {
+    const value = textOf(job)
+    if (/硕士|研究生/.test(value)) return '硕士'
+    if (/本科/.test(value)) return '本科'
+    if (/大专|专科/.test(value)) return '大专'
+    return '学历未写'
+  }
+  const levels = jobs.map(level)
+  const levelCount = new Map<string, number>()
+  for (const item of levels) levelCount.set(item, (levelCount.get(item) ?? 0) + 1)
+  facts.push(
+    `${jobs.length} 条原文里，` +
+      [...levelCount.entries()].map(([name, count]) => `${name} ${count} 条`).join('，')
+  )
+
+  const fresh = jobs.filter((job) =>
+    /经验不限|在校|应届/.test(textOf(job))
+  ).length
+  if (fresh > 0) facts.push(`接受应届/经验不限的 ${fresh} 条`)
+  const senior = jobs.filter((job) => /\d+-\d+年|\d+年以上/.test(textOf(job))).length
+  if (senior > 0) facts.push(`写明年限要求的 ${senior} 条`)
+
+  const skills: [string, RegExp][] = [
+    ['Java', /java/i],
+    ['Spring', /spring/i],
+    ['SQL/数据库', /sql|数据库/i],
+    ['Vue/React', /vue|react/i],
+    ['测试用例/接口测试', /测试用例|功能测试|接口测试/],
+    ['Excel/数据', /excel|数据分析/i],
+    ['英语/四级', /英语|四级|六级/i]
+  ]
+  const hits = skills
+    .filter(([, pattern]) => jobs.some((job) => pattern.test(textOf(job))))
+    .map(([name]) => name)
+  if (hits.length) facts.push(`原文点名：${hits.slice(0, 4).join('、')}`)
+
+  return facts.slice(0, 3)
 }
 
 /** 目标岗位地图：先给方向，再把招聘原文挂到方向上，避免正文只有一句“去招聘网站看看”。 */
@@ -773,16 +858,17 @@ function jobMapBlock(
 
   const assigned = new Set<string>()
   const grouped = directions.map((direction) => {
-    const matched = jobs
-      .filter((job) => {
-        const key =
-          job.directionKey || inferDirectionKey(`${job.title} ${job.requirement}`, directions)
-        return key === direction.key
-      })
+    const matchedAll = jobs.filter((job) => {
+      const key =
+        job.directionKey || inferDirectionKey(`${job.title} ${job.requirement}`, directions)
+      return key === direction.key
+    })
+    const facts = directionFacts(matchedAll)
+    const matched = matchedAll
       .slice(0, 2)
       .map((job) => withJobMatch(survey, answers, job, direction.name))
     matched.forEach((job) => assigned.add(job.url))
-    return { ...direction, jobs: matched }
+    return { ...direction, facts, jobs: matched }
   })
 
   const relatedJobs = jobs
@@ -809,13 +895,14 @@ function jobMapBlock(
     type: 'jobmap',
     title: '你能去的几个方向',
     subtitle: '先看方向，再看门槛；经验值区间和招聘原文一起看，具体以原文为准',
-    directions: grouped.map(({ key, name, what, entry, salary, fit, jobs: directionJobs }) => ({
+    directions: grouped.map(({ key, name, what, entry, salary, fit, facts, jobs: directionJobs }) => ({
       key,
       name,
       what,
       entry,
       salary,
       fit,
+      facts,
       jobs: directionJobs
     })),
     relatedJobs,
@@ -950,9 +1037,21 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
     lines.push({ label: '应届薪资区间（经验值）', value: salaryRange(city) })
     const expected = label(survey, answers, 'q27')
     if (expected) lines.push({ label: '你写的期望月薪', value: expected })
+    const directionKeys = jobDirections(major).map((direction) => direction.key)
+    const techDirections = directionKeys.some((key) =>
+      ['backend', 'frontend', 'test', 'data'].includes(key)
+    )
+    const tradeDirections = directionKeys.some((key) =>
+      ['trade', 'ecommerce', 'banking'].includes(key)
+    )
+    const entryHint = techDirections
+      ? '技术岗更看项目和实习，英语以具体岗位为准'
+      : tradeDirections
+        ? '外贸业务员和银行国际业务岗多数写明四级，跨境电商/单证岗多写英语读写'
+        : '相关实习和岗位要求的技能优先，英语以具体岗位为准'
     lines.push({
       label: '入场线（经验值）',
-      value: '本科 + 相关实习 1 段；英语要求看具体岗位（外贸、银行类多数写四级）'
+      value: `本科 + 相关实习 1 段；${entryHint}`
     })
     if (city.includes('还没想好')) {
       lines.push({

@@ -146,7 +146,16 @@ function cityOf(survey: Survey, answers: Answers): string {
   const value = answers.q8
   if (!question || typeof value !== 'string') return ''
   const label = question.options?.find((option) => option.id === value)?.label ?? ''
-  return label.includes('还没想好') ? '' : label.replace(/（.*?）/, '')
+  if (!label || label.includes('还没想好')) return ''
+  const clean = label.replace(/（.*?）/g, '').trim()
+  // Q8 里有「新一线」「北上广深」「家乡省会」这类档位，不能直接当城市去搜。
+  if (MAJOR_CITIES.includes(clean)) return clean
+  if (/家乡|回家/.test(clean)) {
+    const q4 = answers.q4
+    const home = Array.isArray(q4) ? String(q4[0] ?? '') : ''
+    return cityInText(home)
+  }
+  return ''
 }
 
 const MAJOR_CITIES = [
@@ -188,15 +197,65 @@ function clipSentence(value: string, max = 96): string {
   return `${head.trimEnd()}…`
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+async function searchOne(query: string): Promise<SearchResult[]> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await searchWeb(query, { count: 6 })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      const limited = /429|request limit|频率|限流/i.test(message)
+      if (!limited || attempt === 2) throw error
+      await sleep(1200 * (attempt + 1))
+    }
+  }
+  return []
+}
+
+/** 博查有 QPS 限制，串行跑并留间隔，避免一份报告把配额瞬间打满。 */
+async function runSearches(specs: { query: string }[]): Promise<SearchResult[][]> {
+  const results: SearchResult[][] = []
+  for (let index = 0; index < specs.length; index += 1) {
+    if (index > 0) await sleep(500)
+    try {
+      results.push(await searchOne(specs[index].query))
+    } catch (error) {
+      console.warn('[doc-report] 招聘检索失败', specs[index].query, error)
+      results.push([])
+    }
+  }
+  return results
+}
+
+function formatSalary(min: number, max: number, annual: boolean): string {
+  if (annual) {
+    if (min >= 10000) {
+      const fmt = (value: number) =>
+        (value / 10000).toFixed(value % 10000 === 0 ? 0 : 1).replace(/\.0$/, '')
+      return `年薪${fmt(min)}-${fmt(max)}万`
+    }
+    return `年薪${min}-${max} 元`
+  }
+  if (min % 1000 === 0 && max % 1000 === 0) return `${min / 1000}-${max / 1000}K`
+  return `${min}-${max} 元`
+}
+
 /** 只接受带金额单位的区间；「1-3 年经验」这类年限不算薪资。 */
 function salaryOf(snippet: string): string {
   const text = snippet.replace(/\s+/g, ' ')
-  const withUnit = /(\d+(?:\.\d+)?)\s*([kK千万])\s*[-—~至到]\s*(\d+(?:\.\d+)?)\s*([kK千万元])/.exec(
-    text
-  )
+  const withUnit =
+    /(\d+(?:\.\d+)?)\s*([kK千万])\s*[-—~至到]\s*(\d+(?:\.\d+)?)\s*([kK千万])/.exec(text)
   if (withUnit) {
-    const unit = withUnit[2].toLowerCase() === 'k' ? 'K' : withUnit[2]
-    return `${withUnit[1]}-${withUnit[3]}${unit}`
+    const left = Number(withUnit[1]) * (withUnit[2] === '万' ? 10000 : 1000)
+    const right = Number(withUnit[3]) * (withUnit[4] === '万' ? 10000 : 1000)
+    if (left >= 1000 && right >= 1000 && right <= 500000) {
+      const context = text.slice(
+        Math.max(0, withUnit.index - 8),
+        withUnit.index + withUnit[0].length + 8
+      )
+      return formatSalary(left, right, /年薪|\/\s*年|年包|每年/.test(context))
+    }
   }
 
   const pattern = /(\d+(?:\.\d+)?)\s*[-—~至到]\s*(\d+(?:\.\d+)?)\s*(k|K|千|万|元)?/g
@@ -205,12 +264,20 @@ function salaryOf(snippet: string): string {
     const [raw, leftText, rightText, unit] = match
     const left = Number(leftText)
     const right = Number(rightText)
-    const after = text.slice(match.index + raw.length, match.index + raw.length + 2)
-    if (/年|个月|月/.test(after)) continue
+    const end = match.index + raw.length
+    const after = text.slice(end, end + 2)
+    // 「1-3 年经验」「3-6 个月」是年限，不是薪资。
+    if (/^\s*(年|个月|月)/.test(after)) continue
     if (!unit && (left < 1000 || right < 1000)) continue
-    if (left > 200000 || right > 200000) continue
+    if (left > 500000 || right > 500000) continue
+    const context = text.slice(Math.max(0, match.index - 8), end + 8)
+    const annual = /年薪|\/\s*年|年包|每年/.test(context)
+    if (unit === '元') {
+      return formatSalary(left, right, annual)
+    }
     if (unit) {
-      return `${leftText}-${rightText}${unit.toLowerCase() === 'k' ? 'K' : unit}`
+      const factor = unit === '万' ? 10000 : 1000
+      return formatSalary(left * factor, right * factor, annual)
     }
     return `${leftText}-${rightText} 元`
   }
@@ -219,7 +286,7 @@ function salaryOf(snippet: string): string {
 
 /** 薪资统计、专业介绍、就业前景这类文章页不是具体岗位，不能当招聘卡片。 */
 function looksLikeArticle(text: string): boolean {
-  return /(薪资样本|职位薪资样本|取自\s*\d+\s*份|薪资水平报告|工资待遇报告|就业前景(如何|怎么样)?|专业(介绍|排名)|报考指南|值得报吗)/.test(
+  return /(薪资样本|职位薪资样本|取自\s*\d+\s*份|薪资水平报告|工资待遇报告|就业前景(如何|怎么样)?|就业方向|就业分析|专业(介绍|排名)|报考指南|值得报吗|工资待遇排名)/.test(
     text
   )
 }
@@ -227,6 +294,7 @@ function looksLikeArticle(text: string): boolean {
 function looksLikeJob(title: string, snippet: string): boolean {
   const text = `${title} ${snippet}`
   if (looksLikeArticle(text)) return false
+  if (/^职位信息$|^招聘岗位$|^热门职位$|^最新职位$/.test(title.trim())) return false
   return /招聘|岗位|职位|应届生|校招|实习/.test(text)
 }
 
@@ -235,6 +303,41 @@ function isCityLanding(title: string, url: string): boolean {
   const clean = title.replace(/\s+/g, '')
   if (MAJOR_CITIES.includes(clean)) return true
   return /\/city-[a-z]+\//i.test(url) && !/招聘|岗位|职位|薪资/.test(title)
+}
+
+function jobSiteOf(url: string): string {
+  if (/zhipin\.com/.test(url)) return 'BOSS直聘'
+  if (/zhaopin\.com/.test(url)) return '智联招聘'
+  if (/51job\.com/.test(url)) return '前程无忧'
+  if (/liepin\.com/.test(url)) return '猎聘'
+  if (/yingjiesheng\.com/.test(url)) return '应届生求职网'
+  if (/jrzp\.com/.test(url)) return '今日招聘'
+  return ''
+}
+
+/** 具体岗位详情页；列表页、搜索页、公司职位页不能当单条岗位。 */
+function isJobDetail(url: string): boolean {
+  return /job_detail|\/jobdetail\/|\/jobdetail$|jobs\.zhaopin\.com\/CC|zhaopin\.com\/CC|\/job\/\d|\/jobs\/\d|\/job\/[a-z0-9-]+\.s?html|jrzp\.com\/job|51job\.com\/job|we\.51job\.com\/pc\/job-detail/i.test(
+    url
+  )
+}
+
+function isListingPage(url: string): boolean {
+  if (isJobDetail(url)) return false
+  return /\/zhaopin\/|\/gongsi\/job\/|\/city-[a-z]+\/|\/c\d+-p\d+\/|\/sou\/|\/zp\w*\/|\/web\/geek\/job|jobs\.zhaopin\.com\/.*\/$|liepin\.com\/[a-z]+\/zp|yingjiesheng\.com\/.*joblist|\/joblist\//i.test(
+    url
+  )
+}
+
+/** 招聘门户、人才网、就业网的总入口页，以及公考/考研培训站，不是具体岗位。 */
+function isPortalPage(title: string, url: string): boolean {
+  if (/offcn\.com|huatu\.com|zhaokao\.net/.test(url)) return true
+  if (/\.edu\.cn/.test(url) && !/有限公司|集团|银行|事务所|研究院/.test(title)) return true
+  if (jobSiteOf(url)) return false
+  if (/有限公司|集团|银行|事务所|学校|医院|研究院/.test(title)) return false
+  return /(中国公共招聘网|人才网|招聘网|人社局|就业网|就业信息网|就业指导中心|招聘信息网)/.test(
+    title
+  )
 }
 
 function jobScore(item: SearchResult, targetCity: string): number {
@@ -249,6 +352,8 @@ function jobScore(item: SearchResult, targetCity: string): number {
   }
 
   const text = `${item.title} ${item.snippet}`
+  if (jobSiteOf(item.url)) score += 3
+  if (isJobDetail(item.url)) score += 3
   if (/招聘|岗位|职位|应届生|校招/.test(item.title)) score += 2
   if (/薪资|月薪|年薪|待遇/.test(text)) score += 1
   const foundCity = cityInText(text)
@@ -256,79 +361,240 @@ function jobScore(item: SearchResult, targetCity: string): number {
   return score
 }
 
-/** 用博查抓真实招聘/薪资原文，做成可点开的卡片；失败不影响报告。 */
-async function searchJobs(survey: Survey, answers: Answers): Promise<JobCard[]> {
+/** 标题里常带「...招聘」和站点后缀，卡片上只留岗位名。 */
+function cleanJobTitle(title: string): string {
+  const raw = title.replace(/\s+/g, ' ').trim()
+  const quoted = /[「【]([^」】]+?)(?:招聘|招聘中)[」】]/.exec(raw)?.[1]
+  if (quoted) return quoted.trim().slice(0, 60)
+  // 应届生求职网：岗位名招聘_公司名招聘信息-站点
+  const beforeUnderscore = /^(.+?)招聘_/.exec(raw)?.[1]
+  if (beforeUnderscore) return beforeUnderscore.trim().slice(0, 60)
+  return raw
+    .replace(/[-_](BOSS直聘|智联招聘|猎聘|前程无忧|应届生求职网|58同城).*$/, '')
+    .trim()
+    .slice(0, 60)
+}
+
+/** 应届生求职网的链接里带着岗位标题、薪资和公司名，摘要没写时可以补上。 */
+function urlJobMeta(url: string): { salary?: string; company?: string } {
+  const match = /[?&]property=([^&]+)/.exec(url)
+  if (!match) return {}
+  try {
+    const parsed = JSON.parse(decodeURIComponent(match[1])) as Record<string, unknown>
+    return {
+      salary: typeof parsed.monthSalary === 'string' ? parsed.monthSalary : undefined,
+      company: typeof parsed.companyName === 'string' ? parsed.companyName : undefined
+    }
+  } catch {
+    return {}
+  }
+}
+
+/** 同一岗位可能有 m/q 两个域名，按 jobdetail 编号去重。 */
+function dedupeKey(url: string): string {
+  const detail = /jobdetail\/(\d+)|jobid=(\d+)/.exec(url)
+  if (detail) return `job-${detail[1] || detail[2]}`
+  return url.replace(/\/$/, '')
+}
+
+/** 从站点标题/摘要里找公司名；找不到就用来源站名，不编造。 */
+function companyOf(item: SearchResult, fromUrl = ''): string {
+  // 猎聘的搜索标题是「岗位_2026城市岗位招聘信息」，里面没有公司名。
+  if (/liepin\.com/.test(item.url)) return '猎聘'
+  const title = item.title.replace(/\s+/g, '')
+  const after = /_([^_「」]{2,80}?)招聘(?:信息|[-_]|$)/.exec(title)?.[1]
+  if (after) return after.replace(/^\d{4}年/, '').trim()
+  const inTitle =
+    /(?:招聘|职位)[-_]([^\-_]{2,40}?(?:有限公司|集团|银行|事务所|中心))/.exec(title)?.[1]
+  if (inTitle) return inTitle
+  if (fromUrl) return fromUrl
+  const inSnippet =
+    /([一-龥A-Za-z0-9（）()]{2,30}?(?:股份有限公司|有限公司|集团|银行|事务所|科技公司|信息技术公司))/.exec(
+      item.snippet
+    )?.[1]
+  if (inSnippet) return inSnippet
+  return jobSiteOf(item.url) || item.site || '招聘页面'
+}
+
+function experienceOf(snippet: string): string {
+  return /(经验不限|在校\/应届|应届生|\d+-\d+年|\d+年以上)/.exec(snippet)?.[1] ?? ''
+}
+
+function educationOf(snippet: string): string {
+  return /(学历不限|本科|大专|硕士|博士|中专\/中技)/.exec(snippet)?.[1] ?? ''
+}
+
+/** 摘要里优先留岗位职责/要求；没有就清掉前面的福利堆砌和登录提示。 */
+function requirementOf(item: SearchResult): string {
+  const head = item.snippet.slice(0, 180)
+  let text = item.snippet.replace(/\s+/g, ' ').trim()
+  text = text.replace(/^招聘中\s*/, '')
+  const stop = text.search(/点击登录|首次验证|微信扫码|竞争力分析|求职安全|安全提示/)
+  if (stop > 0) text = text.slice(0, stop)
+  const marker = /(岗位职责|岗位要求|任职要求|任职资格|职位描述|工作内容|岗位描述|职位要求)/.exec(
+    text
+  )
+  if (marker) {
+    text = text.slice(marker.index)
+  } else {
+    // BOSS/智联摘要常先列福利：五险一金、年终奖、团建、双休……
+    text = text.replace(
+      /^(?:\S{2,8}(?:险|金|奖|假|补|团建|旅游|餐|住|双休|体检|零食)\s*)+/,
+      ''
+    )
+  }
+  const prefix = [
+    educationOf(head) ? `学历：${educationOf(head)}` : '',
+    experienceOf(head) ? `经验：${experienceOf(head)}` : ''
+  ]
+    .filter(Boolean)
+    .join('；')
+  const body = clipSentence(text, 120)
+  return clipSentence([prefix, body].filter(Boolean).join('；'), 140)
+}
+
+
+/** 方向检索会带回跑偏的岗位（例如搜「单证」返回财务岗），至少要和方向词沾边。 */
+function directionRelevant(text: string, direction: { query: string; keywords: string[] }): boolean {
+  const lower = text.toLowerCase()
+  if (direction.keywords.some((keyword) => lower.includes(keyword.toLowerCase()))) return true
+  return direction.query
+    .split(/\s+/)
+    .filter(Boolean)
+    .some((token) => lower.includes(token.toLowerCase()))
+}
+
+/** 用博查抓真实招聘原文，做成可点开的卡片；失败不影响报告。 */
+export async function searchJobs(survey: Survey, answers: Answers): Promise<JobCard[]> {
   if (!config.bochaApiKey) return []
   const city = cityOf(survey, answers)
   const explicitRole = String(answers.q5a ?? '').trim()
   const major = String(answers.q2 ?? '').trim()
-  // 学生没写具体岗位时，用专业加「相关岗位」，避免把专业名直接当成岗位去搜。
-  const role = explicitRole || (major ? `${major}相关岗位` : '')
+  // 学生没写具体岗位时，用专业方向去搜；不要把「专业+相关岗位」当岗位名。
+  const role = explicitRole || major
   if (!role) return []
 
   const directions = jobDirections(major)
-  type QuerySpec = { key?: string; query: string }
   const useDirections = directions.length > 0 && !explicitRole
-  const specs: QuerySpec[] = useDirections
-    ? directions.map((direction) => ({
-        key: direction.key,
-        query: `${city} ${direction.query} 应届 招聘 薪资 要求`.trim()
-      }))
-    : [
-        { query: `${city} ${role} 招聘 应届 薪资 要求`.trim() },
-        { query: `${role} 应届生 招聘 学历 英语 要求` }
-      ]
-  // 方向检索之外再补一条专业总览，给没有归到具体方向的原文留位置。
+  const place = city ? `${city} ` : ''
+  const siteQuery = (site: string, keyword: string) =>
+    `site:${site} ${place}${keyword} 应届 招聘`.trim()
+
+  type QuerySpec = { key?: string; query: string }
+  const specs: QuerySpec[] = []
+  // 应届生求职网的岗位是校招/实习原文，字段比综合搜索完整，优先用它。
+  // BOSS/智联/猎聘的网页索引更新慢，只在不够 3 条时补位。
+  const freshQuery = (site: string, keyword: string) =>
+    `site:${site} ${place}${keyword} 2026 应届`.trim()
   if (useDirections) {
-    specs.push({ query: `${city} ${role} 招聘 应届 薪资 要求`.trim() })
+    directions.forEach((direction) => {
+      specs.push({ key: direction.key, query: freshQuery('yingjiesheng.com', direction.query) })
+    })
+  } else {
+    specs.push({ query: freshQuery('yingjiesheng.com', role) })
+    specs.push({ query: siteQuery('liepin.com', role) })
   }
 
-  const settled = await Promise.allSettled(specs.map((spec) => searchWeb(spec.query)))
   const byUrl = new Map<string, { item: SearchResult; directionKey?: string }>()
-  settled.forEach((result, index) => {
-    if (result.status !== 'fulfilled') return
-    for (const item of result.value) {
-      const key = item.url.replace(/\/$/, '')
-      const existing = byUrl.get(key)
-      // 同一链接被方向检索和专业总览同时抓到，优先保留带方向的。
-      if (!existing) {
-        byUrl.set(key, { item, directionKey: specs[index].key })
-      } else if (!existing.directionKey && specs[index].key) {
-        byUrl.set(key, { item, directionKey: specs[index].key })
+  const collect = (results: SearchResult[][], list: QuerySpec[]): void => {
+    results.forEach((items, index) => {
+      for (const item of items) {
+        const key = dedupeKey(item.url)
+        const existing = byUrl.get(key)
+        // 同一链接被方向检索和专业总览同时抓到，优先保留带方向的。
+        if (!existing) {
+          byUrl.set(key, { item, directionKey: list[index]?.key })
+        } else if (!existing.directionKey && list[index]?.key) {
+          byUrl.set(key, { item, directionKey: list[index].key })
+        }
       }
-    }
-  })
+    })
+  }
 
-  const seenTitles = new Set<string>()
-  const ranked: {
+  const buildRanked = (): {
     item: SearchResult
     score: number
     weak: boolean
     directionKey?: string
-  }[] = []
+  }[] => {
+    const seenTitles = new Set<string>()
+    const ranked: {
+      item: SearchResult
+      score: number
+      weak: boolean
+      directionKey?: string
+    }[] = []
+    for (const { item, directionKey } of byUrl.values()) {
+      const titleKey = `${item.title.replace(/\s+/g, '')}|${item.site}`
+      if (seenTitles.has(titleKey)) continue
+      seenTitles.add(titleKey)
+      if (isCityLanding(item.title, item.url)) continue
+      // 门户入口、列表页、搜索页不是某条具体岗位，直接丢掉。
+      if (isPortalPage(item.title, item.url) || isListingPage(item.url)) continue
+      const text = `${item.title} ${item.snippet}`
+      const article =
+        looksLikeArticle(text) || /edu\.jobui\.com\/major|jobui\.com\/salary/.test(item.url)
+      const inferred = directionKey || inferDirectionKey(text, directions)
+      if (useDirections && inferred) {
+        const direction = directions.find((item) => item.key === inferred)
+        if (direction && !directionRelevant(text, direction)) continue
+      }
+      ranked.push({
+        item,
+        directionKey: inferred,
+        score: jobScore(item, city) + (inferred ? 1 : 0) - (article ? 2 : 0),
+        weak: article || !looksLikeJob(item.title, item.snippet)
+      })
+    }
+    return ranked
+  }
 
-  for (const { item, directionKey } of byUrl.values()) {
-    const titleKey = `${item.title.replace(/\s+/g, '')}|${item.site}`
-    if (seenTitles.has(titleKey)) continue
-    seenTitles.add(titleKey)
-    if (isCityLanding(item.title, item.url)) continue
-    // 薪资统计/就业分析这类文章先降权，不作为首选；但链接仍保留，岗位信息不够时用来补足来源。
-    const article = looksLikeArticle(`${item.title} ${item.snippet}`)
-    const inferred =
-      directionKey || inferDirectionKey(`${item.title} ${item.snippet}`, directions)
-    ranked.push({
-      item,
-      directionKey: inferred,
-      score: jobScore(item, city) + (inferred ? 1 : 0) - (article ? 2 : 0),
-      weak: article || !looksLikeJob(item.title, item.snippet)
-    })
+  let results = await runSearches(specs)
+  collect(results, specs)
+  let ranked = buildRanked()
+  let usable = ranked
+    .filter((entry) => !entry.weak && !isOldJob(entry.item.publishedAt))
+    .sort((a, b) => b.score - a.score)
+
+  const missingDirections = useDirections
+    ? directions.filter(
+        (direction) => !usable.some((entry) => entry.directionKey === direction.key)
+      )
+    : []
+
+  // 校招站没搜到足够的新岗位、或某个方向完全没有原文时，再用猎聘/BOSS补位。
+  if (usable.length < 3 || missingDirections.length > 0) {
+    const supplementSpecs: QuerySpec[] = missingDirections.slice(0, 2).map((direction) => ({
+      key: direction.key,
+      query: freshQuery('liepin.com', direction.query)
+    }))
+    if (usable.length < 3) {
+      supplementSpecs.push({ query: siteQuery('liepin.com', role) })
+      supplementSpecs.push({ query: siteQuery('zhipin.com', role) })
+    }
+    results = await runSearches(supplementSpecs)
+    collect(results, supplementSpecs)
+    ranked = buildRanked()
+    usable = ranked
+      .filter((entry) => !entry.weak && !isOldJob(entry.item.publishedAt))
+      .sort((a, b) => b.score - a.score)
+  }
+
+  // 还没有任何可用原文时，才退回普通网页检索；只接受像具体招聘的结果。
+  if (ranked.length === 0) {
+    const fallbackSpecs: QuerySpec[] = [
+      { query: `${place}${role} 2026 校园招聘`.trim() }
+    ]
+    results = await runSearches(fallbackSpecs)
+    collect(results, fallbackSpecs)
+    ranked = buildRanked()
+    usable = ranked
+      .filter((entry) => !entry.weak && !isOldJob(entry.item.publishedAt))
+      .sort((a, b) => b.score - a.score)
   }
 
   // 优先取「像具体招聘且不太旧」的结果；不够 3 条时，再把其余可核对原文的链接补上，
   // 保证分析观点有来源，同时卡片会显示发布日期并标注信息较早。
-  const usable = ranked
-    .filter((entry) => !entry.weak && !isOldJob(entry.item.publishedAt))
-    .sort((a, b) => b.score - a.score)
   const picked = [...usable]
   if (useDirections) {
     // 每个方向最多两条，确保岗位地图里每个方向都有原文；剩下的给专业总览。
@@ -341,7 +607,10 @@ async function searchJobs(survey: Survey, answers: Answers): Promise<JobCard[]> 
     picked.length = 0
     picked.push(...perDirection)
     const rest = usable.filter(
-      (entry) => !picked.some((pickedItem) => pickedItem.item.url === entry.item.url)
+      (entry) =>
+        !picked.some(
+          (pickedItem) => dedupeKey(pickedItem.item.url) === dedupeKey(entry.item.url)
+        )
     )
     picked.push(...rest.slice(0, 2))
   } else {
@@ -350,7 +619,12 @@ async function searchJobs(survey: Survey, answers: Answers): Promise<JobCard[]> 
   }
   if (picked.length < 3) {
     const rest = ranked
-      .filter((entry) => !picked.some((pickedItem) => pickedItem.item.url === entry.item.url))
+      .filter(
+        (entry) =>
+          !picked.some(
+            (pickedItem) => dedupeKey(pickedItem.item.url) === dedupeKey(entry.item.url)
+          )
+      )
       .filter(
         (entry) =>
           !entry.weak || /招聘|岗位|职位/.test(`${entry.item.title} ${entry.item.snippet}`)
@@ -360,16 +634,22 @@ async function searchJobs(survey: Survey, answers: Answers): Promise<JobCard[]> 
   }
 
   picked.sort((a, b) => b.score - a.score)
-  return picked.slice(0, 10).map(({ item, directionKey }) => ({
-    title: item.title,
-    company: item.site || '招聘页面',
-    city: cityInText(`${item.title} ${item.snippet}`),
-    salary: salaryOf(item.snippet) || '薪资以原文为准',
-    requirement: clipSentence(item.snippet),
-    url: item.url,
-    date: item.publishedAt,
-    directionKey
-  }))
+  return picked.slice(0, 10).map(({ item, directionKey }) => {
+    const meta = urlJobMeta(item.url)
+    return {
+      title: cleanJobTitle(item.title),
+      company: companyOf(item, meta.company),
+      city: cityInText(`${item.title} ${item.snippet}`),
+      salary:
+        (meta.salary ? salaryOf(meta.salary) : '') ||
+        salaryOf(item.snippet) ||
+        '薪资以原文为准',
+      requirement: requirementOf(item),
+      url: item.url,
+      date: item.publishedAt,
+      directionKey
+    }
+  })
 }
 
 export async function generateDocContent(input: {

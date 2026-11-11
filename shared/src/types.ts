@@ -90,6 +90,8 @@ export interface JobCard {
   meets?: string[]
   /** 对照填卷人答卷：这条招聘里你还缺、需要补的条件 */
   missing?: string[]
+  /** 发布日期超过约 18 个月：只用于看要求结构，不能当投递入口 */
+  stale?: boolean
 }
 
 export interface ScoreItem {
@@ -319,6 +321,8 @@ export type ReportBlock =
         entry: string
         salary: string
         fit: string
+        /** 从该方向原文里汇总出的门槛事实（学历/经验/技能），样本不足时为空 */
+        facts?: string[]
         jobs: JobCard[]
       }[]
       relatedJobs: JobCard[]

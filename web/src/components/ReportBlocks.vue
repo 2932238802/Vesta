@@ -291,7 +291,7 @@
             <p v-if="job.usedFor" class="job-use">{{ job.usedFor }}</p>
             <div v-if="job.meets?.length || job.missing?.length" class="job-match">
               <p v-if="job.meets?.length" class="job-meet">
-                <span>你符合</span>{{ job.meets.join('；') }}
+                <span>{{ job.stale ? '按原文对照' : '你符合' }}</span>{{ job.meets.join('；') }}
               </p>
               <p v-if="job.missing?.length" class="job-miss">
                 <span>你还缺</span>{{ job.missing.join('；') }}
@@ -329,6 +329,9 @@
                 <dd>{{ direction.fit }}</dd>
               </div>
             </dl>
+            <p v-if="direction.facts?.length" class="direction-mix">
+              <span>原文门槛</span>{{ direction.facts.join('；') }}
+            </p>
             <ul v-if="direction.jobs.length" class="job-list direction-jobs">
               <li v-for="job in direction.jobs" :key="job.url" class="job">
                 <a :href="job.url" target="_blank" rel="noopener noreferrer">
@@ -343,7 +346,7 @@
                 <p v-if="job.usedFor" class="job-use">{{ job.usedFor }}</p>
                 <div v-if="job.meets?.length || job.missing?.length" class="job-match">
                   <p v-if="job.meets?.length" class="job-meet">
-                    <span>你符合</span>{{ job.meets.join('；') }}
+                    <span>{{ job.stale ? '按原文对照' : '你符合' }}</span>{{ job.meets.join('；') }}
                   </p>
                   <p v-if="job.missing?.length" class="job-miss">
                     <span>你还缺</span>{{ job.missing.join('；') }}
@@ -376,7 +379,7 @@
               <p v-if="job.usedFor" class="job-use">{{ job.usedFor }}</p>
               <div v-if="job.meets?.length || job.missing?.length" class="job-match">
                 <p v-if="job.meets?.length" class="job-meet">
-                  <span>你符合</span>{{ job.meets.join('；') }}
+                  <span>{{ job.stale ? '按原文对照' : '你符合' }}</span>{{ job.meets.join('；') }}
                 </p>
                 <p v-if="job.missing?.length" class="job-miss">
                   <span>你还缺</span>{{ job.missing.join('；') }}
@@ -890,6 +893,24 @@ const dateText = computed(() => {
 
 .direction-jobs {
   margin-top: 14px;
+}
+
+.direction-mix {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-2);
+}
+
+.direction-mix span {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
+  background: color-mix(in srgb, var(--ink-3) 10%, transparent);
 }
 
 .direction-empty {

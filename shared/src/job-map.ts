@@ -59,15 +59,61 @@ const INTERNATIONAL_TRADE: JobDirection[] = [
   }
 ]
 
+const COMPUTER: JobDirection[] = [
+  {
+    key: 'backend',
+    name: '后端开发（Java / 服务端）',
+    query: 'Java开发',
+    what: '写接口、业务逻辑、数据库和部署；校招通常从初级开发或开发管培生做起。',
+    entry: '本科；计算机相关专业；一门语言（Java/Python/Go）+ 项目；有实习优先。',
+    salary: '经验值 6–12K，一线和头部公司更高',
+    fit: '要能坐得住、愿意排查问题；项目比证书更能说明问题。',
+    keywords: ['后端', '服务端', 'java', 'spring', '开发工程师', '软件工程师']
+  },
+  {
+    key: 'frontend',
+    name: '前端开发',
+    query: '前端开发',
+    what: '做网页、小程序和管理后台的界面与交互，和后端对接接口。',
+    entry: '本科；HTML/CSS/JavaScript + 一个框架（Vue/React）；有作品或实习优先。',
+    salary: '经验值 6–10K',
+    fit: '要能接受反复改稿和联调；作品集比成绩单直观。',
+    keywords: ['前端', 'web', 'vue', 'react', 'javascript', '小程序']
+  },
+  {
+    key: 'test',
+    name: '软件测试',
+    query: '软件测试',
+    what: '写测试用例、做功能/接口测试，推动问题修复；入门比开发平缓。',
+    entry: '本科；了解测试流程和用例设计；会一点脚本/SQL 更好；细心。',
+    salary: '经验值 5–9K',
+    fit: '对细致和沟通要求高，适合愿意把流程盯到底的人。',
+    keywords: ['测试', 'qa', '质量']
+  },
+  {
+    key: 'data',
+    name: '数据分析 / 数据开发',
+    query: '数据分析',
+    what: '取数、做报表、分析业务问题；数据开发还要写 SQL/ETL。',
+    entry: '本科；SQL + Excel/BI + 统计基础；有项目或实习优先。',
+    salary: '经验值 6–12K，算法岗更高但门槛也更高',
+    fit: '要能把业务问题翻译成数据问题；作品比证书有用。',
+    keywords: ['数据', 'sql', 'bi', '分析', '算法']
+  }
+]
+
 export function jobDirections(major: string): JobDirection[] {
   const clean = major.replace(/\s+/g, '')
   if (!clean) return []
   if (/国际经济与贸易|国际贸易|外贸/.test(clean)) return INTERNATIONAL_TRADE
+  if (/计算机|软件工程|人工智能|数据科学|信息安全|网络工程|物联网/.test(clean)) {
+    return COMPUTER
+  }
   return [
     {
       key: 'related',
       name: `${clean}相关岗位`,
-      query: `${clean} 相关岗位`,
+      query: clean,
       what: '和专业沾边的岗位，具体做什么、要求什么，要看招聘原文。',
       entry: '本科；相关实习、技能或证书优先；具体以招聘原文为准。',
       salary: '经验值区间请点开招聘原文核对',
@@ -82,7 +128,8 @@ export function inferDirectionKey(
   text: string,
   directions: JobDirection[]
 ): string | undefined {
+  const lower = text.toLowerCase()
   return directions.find((direction) =>
-    direction.keywords.some((keyword) => text.includes(keyword))
+    direction.keywords.some((keyword) => lower.includes(keyword.toLowerCase()))
   )?.key
 }
