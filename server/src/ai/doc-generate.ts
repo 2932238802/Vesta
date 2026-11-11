@@ -11,7 +11,7 @@ import { computeDocScores } from '../../../shared/src/docScore'
 import { config } from '../env'
 import { getReportSkill, now } from '../db'
 import { askDeepSeek, parseJsonObject } from './deepseek'
-import { searchWeb } from './bocha'
+import { searchWeb, type SearchResult } from './bocha'
 
 export interface DocAiMeta {
   model: string
@@ -148,16 +148,121 @@ function cityOf(survey: Survey, answers: Answers): string {
   return label.includes('还没想好') ? '' : label.replace(/（.*?）/, '')
 }
 
-function salaryOf(snippet: string): string {
-  const match = snippet.match(/\d+(?:\.\d+)?\s*[-—~至]\s*\d+(?:\.\d+)?\s*[kK千万]?(?:元)?/)
-  return match?.[0]?.trim() ?? ''
+const MAJOR_CITIES = [
+  '北京', '上海', '广州', '深圳', '杭州', '成都', '武汉', '西安', '南京', '苏州',
+  '重庆', '天津', '长沙', '郑州', '青岛', '厦门', '合肥', '宁波', '东莞', '佛山',
+  '无锡', '济南', '福州', '大连', '沈阳', '昆明', '南昌', '贵阳', '南宁', '石家庄',
+  '太原', '长春', '哈尔滨', '兰州', '乌鲁木齐', '呼和浩特', '海口', '银川', '西宁', '拉萨'
+]
+
+const DAY_MS = 24 * 60 * 60 * 1000
+// 招聘信息超过约 18 个月基本失去参考价值。旧数据仍会保留链接，但卡片上会标日期。
+const JOB_MAX_AGE_MS = 18 * 30 * DAY_MS
+
+function parseTime(value?: string): number {
+  if (!value) return 0
+  const time = Date.parse(value)
+  return Number.isFinite(time) ? time : 0
 }
 
-/** 用博查抓 3 条真实招聘信息，做成可点开的卡片；失败不影响报告。 */
+function isOldJob(date?: string): boolean {
+  const time = parseTime(date)
+  return time > 0 && Date.now() - time > JOB_MAX_AGE_MS
+}
+
+function cityInText(value: string): string {
+  return MAJOR_CITIES.find((city) => value.includes(city)) ?? ''
+}
+
+/** 摘要截断时尽量停在句号，避免出现「具有良好品质,无」这种半句话。 */
+function clipSentence(value: string, max = 96): string {
+  const clean = value.replace(/\s+/g, ' ').trim()
+  if (!clean) return ''
+  if (clean.length <= max) return clean
+  const head = clean.slice(0, max)
+  const cut = Math.max(
+    ...['。', '！', '？', '；', '!', '?', ';'].map((mark) => head.lastIndexOf(mark))
+  )
+  if (cut >= max / 2) return head.slice(0, cut + 1)
+  return `${head.trimEnd()}…`
+}
+
+/** 只接受带金额单位的区间；「1-3 年经验」这类年限不算薪资。 */
+function salaryOf(snippet: string): string {
+  const text = snippet.replace(/\s+/g, ' ')
+  const withUnit = /(\d+(?:\.\d+)?)\s*([kK千万])\s*[-—~至到]\s*(\d+(?:\.\d+)?)\s*([kK千万元])/.exec(
+    text
+  )
+  if (withUnit) {
+    const unit = withUnit[2].toLowerCase() === 'k' ? 'K' : withUnit[2]
+    return `${withUnit[1]}-${withUnit[3]}${unit}`
+  }
+
+  const pattern = /(\d+(?:\.\d+)?)\s*[-—~至到]\s*(\d+(?:\.\d+)?)\s*(k|K|千|万|元)?/g
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(text))) {
+    const [raw, leftText, rightText, unit] = match
+    const left = Number(leftText)
+    const right = Number(rightText)
+    const after = text.slice(match.index + raw.length, match.index + raw.length + 2)
+    if (/年|个月|月/.test(after)) continue
+    if (!unit && (left < 1000 || right < 1000)) continue
+    if (left > 200000 || right > 200000) continue
+    if (unit) {
+      return `${leftText}-${rightText}${unit.toLowerCase() === 'k' ? 'K' : unit}`
+    }
+    return `${leftText}-${rightText} 元`
+  }
+  return ''
+}
+
+/** 薪资统计、专业介绍、就业前景这类文章页不是具体岗位，不能当招聘卡片。 */
+function looksLikeArticle(text: string): boolean {
+  return /(薪资样本|职位薪资样本|取自\s*\d+\s*份|薪资水平报告|工资待遇报告|就业前景(如何|怎么样)?|专业(介绍|排名)|报考指南|值得报吗)/.test(
+    text
+  )
+}
+
+function looksLikeJob(title: string, snippet: string): boolean {
+  const text = `${title} ${snippet}`
+  if (looksLikeArticle(text)) return false
+  return /招聘|岗位|职位|应届生|校招|实习/.test(text)
+}
+
+/** 猎聘等站点的「上海」城市落地页只有地名，没有具体岗位；薪资统计页仍保留。 */
+function isCityLanding(title: string, url: string): boolean {
+  const clean = title.replace(/\s+/g, '')
+  if (MAJOR_CITIES.includes(clean)) return true
+  return /\/city-[a-z]+\//i.test(url) && !/招聘|岗位|职位|薪资/.test(title)
+}
+
+function jobScore(item: SearchResult, targetCity: string): number {
+  let score = 0
+  const time = parseTime(item.publishedAt)
+  if (time > 0) {
+    const age = Date.now() - time
+    if (age > JOB_MAX_AGE_MS) score -= 4
+    else if (age <= 90 * DAY_MS) score += 4
+    else if (age <= 365 * DAY_MS) score += 3
+    else score += 1
+  }
+
+  const text = `${item.title} ${item.snippet}`
+  if (/招聘|岗位|职位|应届生|校招/.test(item.title)) score += 2
+  if (/薪资|月薪|年薪|待遇/.test(text)) score += 1
+  const foundCity = cityInText(text)
+  if (targetCity && foundCity && targetCity.includes(foundCity)) score += 2
+  return score
+}
+
+/** 用博查抓真实招聘/薪资原文，做成可点开的卡片；失败不影响报告。 */
 async function searchJobs(survey: Survey, answers: Answers): Promise<JobCard[]> {
   if (!config.bochaApiKey) return []
   const city = cityOf(survey, answers)
-  const role = String(answers.q5a ?? '').trim() || String(answers.q2 ?? '').trim()
+  const explicitRole = String(answers.q5a ?? '').trim()
+  const major = String(answers.q2 ?? '').trim()
+  // 学生没写具体岗位时，用专业加「相关岗位」，避免把专业名直接当成岗位去搜。
+  const role = explicitRole || (major ? `${major}相关岗位` : '')
   if (!role) return []
 
   const queries = [
@@ -165,27 +270,58 @@ async function searchJobs(survey: Survey, answers: Answers): Promise<JobCard[]> 
     `${role} 应届生 招聘 学历 英语 要求`
   ]
 
-  const results = await Promise.allSettled(queries.map((query) => searchWeb(query)))
-  const items = results.flatMap((result) =>
+  const settled = await Promise.allSettled(queries.map((query) => searchWeb(query)))
+  const items = settled.flatMap((result) =>
     result.status === 'fulfilled' ? result.value : []
   )
-  const seen = new Set<string>()
-  const jobs: JobCard[] = []
+
+  const seenUrls = new Set<string>()
+  const seenTitles = new Set<string>()
+  const ranked: { item: SearchResult; score: number; weak: boolean }[] = []
+
   for (const item of items) {
-    if (jobs.length >= 3) break
-    if (seen.has(item.url)) continue
-    seen.add(item.url)
-    jobs.push({
-      title: item.title,
-      company: item.site || '招聘页面',
-      city,
-      salary: salaryOf(item.snippet) || '薪资以原文为准',
-      requirement: item.snippet.slice(0, 90),
-      url: item.url,
-      date: item.publishedAt
+    const key = item.url.replace(/\/$/, '')
+    if (seenUrls.has(key)) continue
+    seenUrls.add(key)
+    const titleKey = `${item.title.replace(/\s+/g, '')}|${item.site}`
+    if (seenTitles.has(titleKey)) continue
+    seenTitles.add(titleKey)
+    if (isCityLanding(item.title, item.url)) continue
+    // 薪资统计/就业分析这类文章先降权，不作为首选；但链接仍保留，岗位信息不够时用来补足来源。
+    const article = looksLikeArticle(`${item.title} ${item.snippet}`)
+    ranked.push({
+      item,
+      score: jobScore(item, city) - (article ? 2 : 0),
+      weak: article || !looksLikeJob(item.title, item.snippet)
     })
   }
-  return jobs
+
+  // 优先取「像具体招聘且不太旧」的结果；不够 3 条时，再把其余可核对原文的链接补上，
+  // 保证分析观点有来源，同时卡片会显示发布日期并标注信息较早。
+  const usable = ranked
+    .filter((entry) => !entry.weak && !isOldJob(entry.item.publishedAt))
+    .sort((a, b) => b.score - a.score)
+  const picked = [...usable]
+  if (picked.length < 3) {
+    const rest = ranked
+      .filter((entry) => !picked.some((pickedItem) => pickedItem.item.url === entry.item.url))
+      .filter(
+        (entry) =>
+          !entry.weak || /招聘|岗位|职位/.test(`${entry.item.title} ${entry.item.snippet}`)
+      )
+      .sort((a, b) => b.score - a.score)
+    picked.push(...rest.slice(0, 3 - picked.length))
+  }
+
+  return picked.slice(0, 3).map(({ item }) => ({
+    title: item.title,
+    company: item.site || '招聘页面',
+    city: cityInText(`${item.title} ${item.snippet}`),
+    salary: salaryOf(item.snippet) || '薪资以原文为准',
+    requirement: clipSentence(item.snippet),
+    url: item.url,
+    date: item.publishedAt
+  }))
 }
 
 export async function generateDocContent(input: {
@@ -331,6 +467,23 @@ export interface StoredDocReport {
   jobs: JobCard[]
 }
 
+/** 旧报告里可能存着「1-3」这种从年限误抓的薪资，读取时清掉。 */
+function cleanStoredSalary(value: string): string {
+  const clean = value.trim()
+  if (!clean) return ''
+  const bare = /^(\d+(?:\.\d+)?)\s*[-—~至]\s*(\d+(?:\.\d+)?)$/.exec(clean)
+  if (bare && (Number(bare[1]) < 1000 || Number(bare[2]) < 1000)) return ''
+  return clean
+}
+
+/** 旧报告里的摘要曾被硬截 90 字，读取时补省略号，避免像一句没写完的话。 */
+function cleanStoredRequirement(value: string): string {
+  const clean = clipSentence(value, 120)
+  if (!clean) return ''
+  if (clean.length >= 80 && !/[。！？；!?;…]$/.test(clean)) return `${clean}…`
+  return clean
+}
+
 export function readDocContent(raw: string | null): StoredDocReport | null {
   if (!raw) return null
   try {
@@ -346,16 +499,20 @@ export function readDocContent(raw: string | null): StoredDocReport | null {
       if (!item || typeof item !== 'object') continue
       const job = item as Record<string, unknown>
       if (typeof job.url !== 'string' || !/^https?:\/\//i.test(job.url)) continue
+      const title = String(job.title ?? '招聘信息').trim() || '招聘信息'
+      // 城市落地页不是具体招聘/薪资资料，留着会误导。
+      if (isCityLanding(title, job.url)) continue
       jobs.push({
-        title: String(job.title ?? '招聘信息'),
-        company: String(job.company ?? ''),
-        city: String(job.city ?? ''),
-        salary: String(job.salary ?? ''),
-        requirement: String(job.requirement ?? ''),
+        title,
+        company: String(job.company ?? '').trim(),
+        city: String(job.city ?? '').trim(),
+        salary: cleanStoredSalary(String(job.salary ?? '')),
+        requirement: cleanStoredRequirement(String(job.requirement ?? '')),
         url: job.url,
         date: typeof job.date === 'string' ? job.date : undefined
       })
     }
+    jobs.sort((a, b) => parseTime(b.date) - parseTime(a.date))
     return { content, jobs }
   } catch {
     return null

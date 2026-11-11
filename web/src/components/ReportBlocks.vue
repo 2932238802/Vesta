@@ -264,11 +264,17 @@
             <dd>{{ line.value }}</dd>
           </div>
         </dl>
+        <p v-if="block.jobs.length" class="job-caption">
+          下面几条招聘/薪资原文用于核对上面的岗位门槛和薪资，点标题看原文；具体以原文为准。
+        </p>
         <ul v-if="block.jobs.length" class="job-list">
           <li v-for="job in block.jobs" :key="job.url" class="job">
             <a :href="job.url" target="_blank" rel="noopener noreferrer">{{ job.title }}</a>
-            <p>{{ job.company }} · {{ job.city }} · {{ job.salary }}</p>
-            <p class="job-req">{{ job.requirement }}</p>
+            <p class="job-meta">
+              {{ jobMeta(job) }}
+              <span v-if="isOldJob(job.date)" class="job-old">（信息较早，以原文为准）</span>
+            </p>
+            <p v-if="job.requirement" class="job-req">{{ job.requirement }}</p>
           </li>
         </ul>
         <p class="closing">{{ block.note }}</p>
@@ -303,12 +309,29 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { DimScore, ReportPayload, ScoreItem } from '@shared/types'
+import type { DimScore, JobCard, ReportPayload, ScoreItem } from '@shared/types'
 import RadarChart from './RadarChart.vue'
 import ScoreBar from './ScoreBar.vue'
 import SectionHead from './SectionHead.vue'
+import { formatDate } from '../format'
 
 const props = defineProps<{ payload: ReportPayload; claimLink?: boolean }>()
+
+function jobMeta(job: JobCard): string {
+  const parts: string[] = []
+  if (job.company) parts.push(`来源：${job.company}`)
+  if (job.city) parts.push(job.city)
+  if (job.salary) parts.push(job.salary)
+  if (job.date) parts.push(`发布：${formatDate(job.date, false)}`)
+  return parts.join(' · ')
+}
+
+function isOldJob(date?: string): boolean {
+  if (!date) return false
+  const time = Date.parse(date)
+  if (!Number.isFinite(time)) return false
+  return Date.now() - time > 18 * 30 * 24 * 60 * 60 * 1000
+}
 
 function radarDimensions(items: ScoreItem[]): DimScore[] {
   return items.map((item) => ({
@@ -896,12 +919,23 @@ const dateText = computed(() => {
   color: var(--ink);
 }
 
+.job-caption {
+  margin-top: 18px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-3);
+}
+
 .job-list {
   margin-top: 20px;
   display: grid;
   gap: 10px;
   list-style: none;
   padding: 0;
+}
+
+.job-caption + .job-list {
+  margin-top: 10px;
 }
 
 .job {
@@ -925,6 +959,10 @@ const dateText = computed(() => {
 
 .job-req {
   color: var(--ink-2) !important;
+}
+
+.job-old {
+  color: var(--amber);
 }
 
 .check-list {

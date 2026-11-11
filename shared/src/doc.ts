@@ -421,7 +421,7 @@ function salaryRange(city: string): string {
 function gapLines(survey: Survey, answers: Answers): { label: string; value: string }[] {
   const first = label(survey, answers, 'q6')
   const city = label(survey, answers, 'q8')
-  const role = text(answers, 'q5a') || text(answers, 'q2')
+  const role = text(answers, 'q5a')
   const major = text(answers, 'q2')
   const node = deadlineFact(survey, answers)
 
@@ -433,6 +433,7 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
   if (first === '就业') {
     lines.push({ label: '目标城市', value: city || '还没想好' })
     lines.push({ label: '目标岗位', value: role || '还没写清楚' })
+    if (!role && major) lines.push({ label: '你的专业', value: major })
     lines.push({ label: '应届薪资区间（经验值）', value: salaryRange(city) })
     const expected = label(survey, answers, 'q27')
     if (expected) lines.push({ label: '你写的期望月薪', value: expected })
