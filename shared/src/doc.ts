@@ -532,9 +532,17 @@ function assetsBlock(
 
 function usedForJob(job: JobCard, directionName?: string): string {
   const target = directionName ? `「${directionName}」` : '目标岗位'
-  const parts = ['学历、英语、实习要求']
-  if (job.salary && job.salary !== '薪资以原文为准') parts.push('薪资')
-  return `用来核对${target}的${parts.join('、')}`
+  const text = `${job.title} ${job.requirement}`
+  const fields: string[] = []
+  if (/本科|大专|专科|学历/.test(text)) fields.push('学历')
+  if (/专业/.test(text)) fields.push('专业')
+  if (/英语|四级|六级|口语|读写/i.test(text)) fields.push('英语')
+  if (/实习|经验|优先/.test(text)) fields.push('实习')
+  if (/证书/.test(text)) fields.push('证书')
+  if (job.salary && salaryRangeNumbers(job.salary)) fields.push('薪资')
+  return fields.length
+    ? `用来核对${target}的${fields.join('、')}`
+    : `用来核对${target}的原文`
 }
 
 /** 学校档位换算成学历层次：专科 / 本科（C9 到民办本科都按本科算）。 */
@@ -620,7 +628,7 @@ function jobMatch(
     ) {
       meets.push(`专业：岗位要国际贸易实务/单证知识，你的${major}课程对口`)
     } else {
-      meets.push(`专业：原文没写专业限制，${major}不会被卡`)
+      meets.push(`专业：原文没写专业限制，${major}可以投`)
     }
   }
 
@@ -634,8 +642,39 @@ function jobMatch(
     else if (english) meets.push('英语：岗位要四级，你已经过了')
     else missing.push('英语：岗位要四级，问卷里还没填英语现状')
   } else if (/英语读写|英语/.test(req)) {
-    if (english.includes('四级没过')) missing.push('英语：岗位要英语读写，你四级还没过')
-    else if (english) meets.push('英语：岗位要英语读写，你有四六级基础')
+    if (english.includes('四级没过')) {
+      missing.push('英语：岗位要英语读写，你现在还没有四级成绩可证明')
+    } else if (english) {
+      meets.push('英语：岗位要英语读写，你有四六级基础')
+    }
+  }
+
+  // 具体技能：只识别原文里点名的工具/流程，不把“会英语”算成技能。
+  const skillNeeds: string[] = []
+  if (/Excel|数据|表格/i.test(req)) skillNeeds.push('Excel/数据')
+  if (/单证流程|单证知识|报关流程/.test(req)) skillNeeds.push('单证流程')
+  if (/店铺|上架|选品|广告投放/.test(req)) skillNeeds.push('店铺运营')
+  if (skillNeeds.length) {
+    const noSkill = skills.some(
+      (item) => item.includes('还没培养出') || item.includes('说不清')
+    )
+    if (noSkill) {
+      missing.push(`技能：岗位要${skillNeeds.join('、')}，你现在还没有可展示的技能`)
+    } else {
+      const hasSkill = skills.some((item) =>
+        /垂直技能|编程|剪辑|设计|数据分析|会计/.test(item)
+      )
+      if (hasSkill) {
+        meets.push(`技能：你已经有一项可展示的技能（${skills.join('、')}）`)
+      } else {
+        missing.push(`技能：岗位要${skillNeeds.join('、')}，你现有的技能项里没有直接对应`)
+      }
+    }
+  }
+
+  // 笔试/面试流程：和学历、技能分开说，避免“只差四级”的错觉。
+  if (/笔试|结构化面试/.test(req)) {
+    missing.push('流程：岗位有校招笔试/面试，你目前还没有准备记录')
   }
 
   // 实习/经验
@@ -651,7 +690,7 @@ function jobMatch(
     if (skills.some((item) => item.includes('证书'))) {
       meets.push('证书：你已经有证书项，可以在简历里单独列一行')
     } else if (/单证员|报关员/.test(req)) {
-      missing.push('证书：岗位优先单证员/报关员证书，你现在还没有；可以安排在大二/大三考')
+      missing.push('证书：岗位优先单证员/报关员证书，你现在还没有；在读期间可以安排考')
     } else {
       missing.push('证书：岗位提到相关证书优先，你的证书项还是空的')
     }
@@ -683,7 +722,7 @@ function jobMatch(
     )
   }
 
-  return { meets: meets.slice(0, 2), missing: missing.slice(0, 2) }
+  return { meets: meets.slice(0, 3), missing: missing.slice(0, 3) }
 }
 
 function withJobMatch(
@@ -770,8 +809,8 @@ function roadmapBlock(survey: Survey, answers: Answers, scores: DocScores): Repo
   const total = Math.round(months * 4.33 * estimate)
   const hoursLine =
     weekly > 0
-      ? `到${node.node}还有约 ${months} 个月；按每周约 ${weekly} 小时算，一共约 ${total} 小时`
-      : `到${node.node}还有约 ${months} 个月；先按每周 3 小时估，一共约 ${total} 小时`
+      ? `到${node.node}还有约 ${months} 个月；按每周约 ${weekly} 小时的英语投入算，到秋招约 ${total} 小时（只算英语）`
+      : `到${node.node}还有约 ${months} 个月；先按每周 3 小时的英语投入估，约 ${total} 小时（只算英语）`
 
   const phases =
     months >= 18
@@ -780,7 +819,7 @@ function roadmapBlock(survey: Survey, answers: Answers, scores: DocScores): Repo
             key: 'direction',
             label: '先定方向',
             period: '现在—第 3 个月',
-            goal: '把 3 个可能方向缩到 1 个',
+            goal: '把列出的方向缩到 1 个',
             output: '3 条岗位要求 + 1 份简历初稿'
           },
           {
@@ -890,7 +929,7 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
     if (expected) lines.push({ label: '你写的期望月薪', value: expected })
     lines.push({
       label: '入场线（经验值）',
-      value: '本科 + 相关实习 1 段 + 四级 425 以上；好岗位普遍看实习经历'
+      value: '本科 + 相关实习 1 段；英语要求看具体岗位（外贸、银行类多数写四级）'
     })
     if (city.includes('还没想好')) {
       lines.push({
@@ -925,8 +964,8 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
   if (hours > 0) {
     const total = Math.round(node.months * 4.33 * hours)
     lines.push({
-      label: '按现在的投入',
-      value: `每周约 ${hours} 小时，到 ${node.node} 一共只有约 ${total} 小时`
+      label: '按你现在的英语投入',
+      value: `每周约 ${hours} 小时，到 ${node.node} 约 ${total} 小时（只算英语）`
     })
   }
 
@@ -976,10 +1015,11 @@ function gapBlock(survey: Survey, answers: Answers, jobs: JobCard[] = []): Repor
 function checklistBlock(survey: Survey, answers: Answers): ReportBlock {
   const first = label(survey, answers, 'q6')
   const preparing = labels(survey, answers, 'q7')
-  const city = label(survey, answers, 'q8').replace(/（.*?）/g, '')
+  const cityLabel = label(survey, answers, 'q8').replace(/（.*?）/g, '')
+  const city = cityLabel.includes('还没想好') ? '' : cityLabel
   const role = text(answers, 'q5a') || text(answers, 'q2')
   const major = text(answers, 'q2')
-  const place = city || '目标城市'
+  const place = city ? `${city} ` : ''
   const job = role || major || '目标岗位'
 
   let path = first
@@ -1084,7 +1124,7 @@ function checklistBlock(survey: Survey, answers: Answers): ReportBlock {
       {
         title: '目标岗位的招聘原文',
         detail: '学历、专业、英语、实习和证书要求',
-        search: `${place} ${job} 招聘 应届 要求`
+        search: `${place}${job} 招聘 应届 要求`
       },
       {
         title: '学校就业信息网 / 校招公告',
@@ -1107,7 +1147,7 @@ function checklistBlock(survey: Survey, answers: Answers): ReportBlock {
       {
         title: '目标单位或院校官网',
         detail: '招生简章、招聘公告里的专业和英语要求',
-        search: `${place} ${job} 官网 招生 招聘`
+        search: `${place}${job} 官网 招生 招聘`
       },
       {
         title: '学校就业信息网 / 教务处',
@@ -1154,6 +1194,11 @@ function englishSection(survey: Survey, answers: Answers): ReportBlock {
     : '你这部分还没答，先按你勾的英语准备状态看。'
 
   const target = label(survey, answers, 'q6') || '还在准备的方向'
+  const jobEnglish =
+    target === '就业' &&
+    jobDirections(text(answers, 'q2')).some((direction) => direction.key !== 'related')
+      ? '你上面列出的就业方向里，外贸、跨境电商和银行类岗位通常要求英语读写，部分写四级；'
+      : ''
   const preparingCopy = english.stage.includes('更高等级')
     ? '但你自己正在准备更高等级的英语考试'
     : english.stage.includes('四级') || english.stage.includes('六级')
@@ -1170,11 +1215,11 @@ function englishSection(survey: Survey, answers: Answers): ReportBlock {
     )
   } else if (english.preparing) {
     gapParts.push(
-      `你的目标（${target}）暂时看不出明确的英语要求，具体以目标单位最新公告为准；${preparingCopy}。英语现在不是「够用就行」的加分项，而是你已经投入时间、需要看到结果的一项。`
+      `${jobEnglish}具体以目标单位最新公告为准；${preparingCopy}。英语现在不是「够用就行」的加分项，而是你已经投入时间、需要看到结果的一项。`
     )
   } else {
     gapParts.push(
-      '按你填的方向，暂时看不出英语的硬性门槛；具体要不要、要到什么程度，以目标院校或单位的最新公告为准。别把阅读和表达完全放下。'
+      `${jobEnglish}具体要不要、要到什么程度，以目标院校或单位的最新公告为准。别把阅读和表达完全放下。`
     )
   }
 
@@ -1192,7 +1237,9 @@ function englishSection(survey: Survey, answers: Answers): ReportBlock {
       paragraphs: [
         position +
           skipped +
-          '按你填的方向，暂时看不出英语的硬性门槛；具体要不要、要到什么程度，以目标院校或单位的最新公告为准。别把阅读和表达完全放下。'
+          (jobEnglish
+            ? `${jobEnglish}具体以目标单位最新公告为准。`
+            : '按你填的方向，暂时看不出英语的硬性门槛；具体要不要、要到什么程度，以目标院校或单位的最新公告为准。别把阅读和表达完全放下。')
       ]
     }
   }
@@ -1230,7 +1277,8 @@ export function buildDocReport(
     scorecardBlock(survey, answers),
     ...(assets ? [assets] : []),
     ...(jobMap ? [jobMap] : []),
-    gapBlock(survey, answers, jobs),
+    // 已有方向地图时，gap 不再重复挂同一批招聘卡片。
+    gapBlock(survey, answers, jobMap ? [] : jobs),
     roadmapBlock(survey, answers, scores),
     checklistBlock(survey, answers),
     englishSection(survey, answers),

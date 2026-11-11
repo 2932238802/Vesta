@@ -342,8 +342,8 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
     .map((item) => item.label)
   const potentialText =
     lowLabels.length > 0
-      ? `这四项里，${lowLabels.slice(0, 2).join('、')}现在最拖后腿，但都能改。`
-      : '这四项里没有明显短板，接下来是把已经有的往前推。'
+      ? `按实习实践、个人技能、方法与习惯、执行力这四项看，${lowLabels.slice(0, 2).join('、')}现在最拖后腿，但都能改。`
+      : '按实习实践、个人技能、方法与习惯、执行力这四项看，没有明显短板，接下来是把已经有的往前推。'
 
   // 英语判断必须和「报告分析 Skill」的触发条件一致，不能只看路径：
   // 1) 目标路径本身对英语有要求：升学、考编、出国、专升本；

@@ -215,7 +215,7 @@
         <SectionHead :index="index" :title="block.title" :subtitle="block.subtitle" />
         <div class="score-groups">
           <section class="score-group">
-            <h3>起点（改不了，但要知道）</h3>
+            <h3>背景与积累（现在的位置）</h3>
             <div class="score-group-body">
               <div class="score-radar">
                 <RadarChart
@@ -240,7 +240,7 @@
             </div>
           </section>
           <section class="score-group">
-            <h3>能改的四项</h3>
+            <h3>个人四维（方法和习惯）</h3>
             <div class="score-group-body">
               <div class="score-radar">
                 <RadarChart
