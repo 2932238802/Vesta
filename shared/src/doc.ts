@@ -533,6 +533,9 @@ function assetsBlock(
 function usedForJob(job: JobCard, directionName?: string): string {
   const target = directionName ? `「${directionName}」` : '目标岗位'
   const text = `${job.title} ${job.requirement}`
+  if (/薪资待遇|薪资报告|工资待遇|平均工资|薪酬水平|就业分析/.test(text)) {
+    return `用来核对${target}的薪资水平（薪资统计页，不是具体岗位）`
+  }
   const fields: string[] = []
   if (/本科|大专|专科|学历/.test(text)) fields.push('学历')
   if (/专业/.test(text)) fields.push('专业')
@@ -576,6 +579,16 @@ function jobMatch(
   const req = `${job.title} ${job.requirement}`.replace(/\s+/g, '')
   const meets: string[] = []
   const missing: string[] = []
+
+  // 薪资统计/就业分析页不是具体岗位，不能按“投递门槛”对照。
+  if (/薪资待遇|薪资报告|工资待遇|平均工资|薪酬水平|就业分析/.test(req)) {
+    return {
+      meets: [
+        `薪资参考：${job.salary || '这条是薪资统计/分析页，不是某家公司的岗位'}`
+      ],
+      missing: ['这不是具体岗位，不能当投递入口；岗位门槛看同方向的招聘原文']
+    }
+  }
 
   const school = label(survey, answers, 'q1')
   const degree = jobDegree(school)
