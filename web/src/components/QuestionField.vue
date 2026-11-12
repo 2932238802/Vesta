@@ -1,18 +1,11 @@
 <template>
   <div class="question">
-    <div class="q-head">
-      <span class="q-index">{{ displayIndex }}</span>
-      <div class="q-copy">
-        <h3 class="q-title">
-          {{ question.title }}
-          <span v-if="question.type === 'multi'" class="tag multi">多选</span>
-          <span v-if="question.type === 'multi' && question.maxSelect" class="tag">
-            最多 {{ question.maxSelect }} 项
-          </span>
-          <span v-if="!question.required" class="optional">选填</span>
-        </h3>
-        <p v-if="question.hint" class="q-hint">{{ question.hint }}</p>
-      </div>
+    <div v-if="hasTags" class="q-head">
+      <span v-if="question.type === 'multi'" class="tag multi">多选</span>
+      <span v-if="question.type === 'multi' && question.maxSelect" class="tag">
+        最多 {{ question.maxSelect }} 项
+      </span>
+      <span v-if="!question.required" class="optional">选填</span>
     </div>
 
     <div v-if="isRating" class="rating">
@@ -20,13 +13,22 @@
         <span><b>1</b>{{ question.anchors.low }}</span>
         <span class="right"><b>5</b>{{ question.anchors.high }}</span>
       </div>
-      <div class="scale" role="radiogroup" :aria-label="question.title">
+      <div
+        class="scale"
+        :class="{ 'has-error': invalid }"
+        role="radiogroup"
+        :aria-label="question.title"
+        @keydown="onRadioKeydown($event, 'rating')"
+      >
         <button
           v-for="(option, i) in question.options"
           :key="option.id"
           type="button"
+          role="radio"
           :class="{ active: modelValue === option.id }"
-          :aria-pressed="modelValue === option.id"
+          :aria-checked="modelValue === option.id"
+          :tabindex="tabIndexFor('rating', i, modelValue === option.id, modelValue !== null && modelValue !== undefined && modelValue !== '')"
+          :disabled="disabled"
           @click="update(option.id)"
         >
           {{ i + 1 }}
@@ -37,20 +39,36 @@
     <div
       v-else-if="question.type === 'single' || question.type === 'choiceText'"
       class="options"
+      :class="{ 'has-error': invalid }"
       role="radiogroup"
+      :aria-label="question.title"
+      @keydown="onRadioKeydown($event, 'single')"
     >
       <button
-        v-for="option in question.options"
+        v-for="(option, i) in question.options"
         :key="option.id"
         type="button"
+        role="radio"
         class="option"
         :class="{ active: isSelected(option.id) }"
-        :aria-pressed="isSelected(option.id)"
+        :aria-checked="isSelected(option.id)"
+        :tabindex="tabIndexFor('single', i, isSelected(option.id), isSelected(option.id) || question.options.some((item) => isSelected(item.id)))"
         :disabled="disabled"
         @click="selectOption(option.id)"
       >
-        <span class="dot" />
-        <span>{{ option.label }}</span>
+        <span class="indicator" aria-hidden="true">
+          <svg viewBox="0 0 16 16" width="12" height="12">
+            <path
+              d="M3 8.5l3.2 3.2L13 4.8"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+        <span class="option-label">{{ option.label }}</span>
       </button>
     </div>
 
@@ -65,10 +83,21 @@
         :disabled="disabled"
         @click="toggle(option.id)"
       >
-        <span class="box" />
-        <span>{{ option.label }}</span>
+        <span class="indicator" aria-hidden="true">
+          <svg viewBox="0 0 16 16" width="12" height="12">
+            <path
+              d="M3 8.5l3.2 3.2L13 4.8"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+        <span class="option-label">{{ option.label }}</span>
       </button>
-      <p v-if="limitHit" class="limit-hint">
+      <p v-if="limitHit" class="limit-hint" aria-live="polite">
         最多选 {{ question.maxSelect }} 项，先取消一项
       </p>
     </div>
@@ -94,13 +123,21 @@
         :class="{ missing: invalid && matrixValue[row.id] === undefined }"
       >
         <span class="matrix-label">{{ row.label }}</span>
-        <div class="matrix-scale" role="radiogroup" :aria-label="row.label">
+        <div
+          class="matrix-scale"
+          role="radiogroup"
+          :aria-label="row.label"
+          @keydown="onRadioKeydown($event, `matrix:${row.id}`)"
+        >
           <button
             v-for="n in scale"
             :key="n"
             type="button"
+            role="radio"
             :class="{ active: matrixValue[row.id] === n }"
-            :aria-pressed="matrixValue[row.id] === n"
+            :aria-checked="matrixValue[row.id] === n"
+            :tabindex="tabIndexFor(`matrix:${row.id}`, n - 1, matrixValue[row.id] === n, matrixValue[row.id] !== undefined)"
+            :disabled="disabled"
             @click="setMatrix(row.id, n)"
           >
             {{ n }}
@@ -196,12 +233,12 @@
       </label>
     </div>
 
-    <p v-if="invalid" class="invalid">{{ invalidMessage }}</p>
+    <p v-if="invalid" class="invalid" role="alert">{{ invalidMessage }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { AnswerValue, Question } from '@shared/types'
 
 const props = defineProps<{
@@ -221,8 +258,48 @@ const isRating = computed(
   () => props.question.type === 'single' && props.question.display === 'rating'
 )
 
-const displayIndex = computed(() =>
-  typeof props.index === 'number' ? String(props.index).padStart(2, '0') : ''
+const hasTags = computed(
+  () => props.question.type === 'multi' || !props.question.required
+)
+
+const roving = ref<Record<string, number>>({})
+
+function tabIndexFor(key: string, index: number, selected: boolean, hasSelection: boolean): number {
+  if (selected) return 0
+  const stored = roving.value[key]
+  if (stored !== undefined) return stored === index ? 0 : -1
+  return hasSelection ? -1 : index === 0 ? 0 : -1
+}
+
+// 方向键只移动焦点，Space/Enter 交给按钮原生点击选中；键盘不自动跳题。
+function onRadioKeydown(event: KeyboardEvent, key: string) {
+  if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+    return
+  }
+  const container = event.currentTarget as HTMLElement
+  const items = Array.from(
+    container.querySelectorAll<HTMLElement>('[role="radio"]:not([disabled])')
+  )
+  if (!items.length) return
+  const currentIndex = Math.max(0, items.indexOf(document.activeElement as HTMLElement))
+  let nextIndex = currentIndex
+  if (event.key === 'Home') nextIndex = 0
+  else if (event.key === 'End') nextIndex = items.length - 1
+  else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    nextIndex = (currentIndex - 1 + items.length) % items.length
+  } else {
+    nextIndex = (currentIndex + 1) % items.length
+  }
+  event.preventDefault()
+  roving.value[key] = nextIndex
+  items[nextIndex]?.focus()
+}
+
+watch(
+  () => [props.question.id, props.question.title],
+  () => {
+    roving.value = {}
+  }
 )
 
 const textValues = computed<string[]>(() =>
@@ -344,52 +421,32 @@ function toggle(id: string) {
 
 <style scoped>
 .question {
-  padding: 26px 0 30px;
-  border-top: 1px solid var(--line);
+  padding: 0 0 16px;
 }
 
 .q-head {
   display: flex;
-  gap: 14px;
-  align-items: baseline;
-}
-
-.q-index {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  letter-spacing: 0.06em;
-  min-width: 20px;
-  padding-top: 4px;
-}
-
-.q-title {
-  font-size: 17px;
-  font-weight: 500;
-  line-height: 1.55;
-  letter-spacing: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .optional {
-  margin-left: 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
-  color: var(--ink-3);
-  letter-spacing: 0.08em;
+  color: var(--ink-2);
 }
 
 .tag {
   display: inline-block;
-  margin-left: 8px;
-  padding: 1px 7px;
+  padding: 1px 8px;
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.7;
-  letter-spacing: 0.04em;
-  vertical-align: 2px;
   white-space: nowrap;
 }
 
@@ -398,26 +455,18 @@ function toggle(id: string) {
   background: var(--accent);
 }
 
-.q-hint {
-  margin-top: 6px;
-  font-size: 12.5px;
-  color: var(--ink-3);
-  line-height: 1.6;
-}
-
 .rating {
-  margin-top: 20px;
-  padding-left: 34px;
+  margin-top: 16px;
 }
 
 .anchors {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  font-size: 11.5px;
-  color: var(--ink-3);
-  line-height: 1.55;
-  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.5;
+  margin-bottom: 10px;
 }
 
 .anchors span {
@@ -432,9 +481,8 @@ function toggle(id: string) {
 }
 
 .anchors b {
-  font-family: var(--mono);
   font-weight: 500;
-  color: var(--ink-2);
+  color: var(--ink);
 }
 
 .scale {
@@ -446,16 +494,17 @@ function toggle(id: string) {
 .scale button {
   height: 48px;
   border-radius: 11px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink-2);
-  font-family: var(--mono);
-  font-size: 14px;
-  transition: all 0.15s ease;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.scale button:hover {
-  border-color: var(--ink-3);
+.scale button:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--tint);
 }
 
 .scale button.active {
@@ -464,9 +513,15 @@ function toggle(id: string) {
   color: #fff;
 }
 
+.scale button:focus-visible,
+.matrix-scale button:focus-visible,
+.option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .options {
-  margin-top: 16px;
-  padding-left: 34px;
+  margin-top: 14px;
   display: grid;
   gap: 8px;
 }
@@ -476,62 +531,79 @@ function toggle(id: string) {
   align-items: center;
   gap: 12px;
   width: 100%;
+  min-height: 48px;
   text-align: left;
-  padding: 14px 16px;
+  padding: 12px 16px;
   border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--surface);
-  color: var(--ink-2);
-  font-size: 14.5px;
-  line-height: 1.5;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.option:hover {
+.option:hover:not(:disabled) {
   border-color: var(--line-strong);
+  background: var(--tint);
 }
 
 .option.active {
   border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
   background: var(--accent-soft);
   color: var(--ink);
 }
 
-.dot,
-.box {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 15px;
+.option.active:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.options.has-error .option:not(.active),
+.scale.has-error button:not(.active) {
+  border-color: var(--danger);
+}
+
+.option-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.indicator {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
   border: 1px solid var(--line-strong);
   border-radius: 50%;
   background: var(--surface);
-  transition: all 0.15s ease;
+  color: transparent;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.box {
-  border-radius: 4px;
+/* 单选是圆形，多选沿用方框语义（多选按钮带 aria-pressed） */
+.option[aria-pressed] .indicator {
+  border-radius: 5px;
 }
 
-.option.active .dot {
-  border: 4px solid var(--accent);
-  background: #fff;
-}
-
-.option.active .box {
-  background: var(--accent);
+.option.active .indicator {
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 3px var(--accent-soft);
+  background: var(--accent);
+  color: #fff;
 }
 
 .limit-hint {
   margin-top: 2px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--danger);
 }
 
 .matrix {
-  margin-top: 18px;
-  padding-left: 34px;
+  margin-top: 16px;
   display: grid;
   gap: 8px;
 }
@@ -544,9 +616,8 @@ function toggle(id: string) {
 }
 
 .matrix-head {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-3);
+  font-size: 12px;
+  color: var(--ink-2);
   padding-bottom: 2px;
 }
 
@@ -554,6 +625,10 @@ function toggle(id: string) {
   font-size: 14px;
   line-height: 1.5;
   color: var(--ink-2);
+}
+
+.matrix-row.missing {
+  box-shadow: inset 2px 0 0 var(--danger);
 }
 
 .matrix-row.missing .matrix-label {
@@ -578,9 +653,9 @@ function toggle(id: string) {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .matrix-anchor-scale span:last-child {
@@ -588,18 +663,19 @@ function toggle(id: string) {
 }
 
 .matrix-scale button {
-  height: 38px;
+  height: 44px;
   border-radius: 9px;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink-2);
-  font-family: var(--mono);
-  font-size: 12.5px;
-  transition: all 0.15s ease;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.matrix-scale button:hover {
-  border-color: var(--ink-3);
+.matrix-scale button:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--tint);
 }
 
 .matrix-scale button.active {
@@ -609,21 +685,28 @@ function toggle(id: string) {
 }
 
 .text-inputs {
-  margin-top: 16px;
-  padding-left: 34px;
+  margin-top: 14px;
   display: grid;
   gap: 10px;
 }
 
 .split-field {
   display: grid;
-  gap: 4px;
+  gap: 5px;
+}
+
+.input,
+.textarea {
+  scroll-margin-bottom: 90px;
+}
+
+.question .textarea {
+  min-height: 120px;
 }
 
 .split-field span {
-  font-size: 11.5px;
-  color: var(--ink-3);
-  letter-spacing: 0.04em;
+  font-size: 13px;
+  color: var(--ink-2);
 }
 
 .field-missing > span {
@@ -637,16 +720,14 @@ function toggle(id: string) {
 }
 
 .note-field {
-  margin-top: 16px;
-  padding-left: 34px;
+  margin-top: 14px;
   display: grid;
   gap: 10px;
 }
 
 .number-input {
-  margin-top: 16px;
-  padding-left: 34px;
-  max-width: 220px;
+  margin-top: 14px;
+  max-width: 260px;
 }
 
 .slider-row {
@@ -658,44 +739,35 @@ function toggle(id: string) {
 
 .slider {
   flex: 1;
+  height: 44px;
   accent-color: var(--accent);
 }
 
 .slider-value {
   min-width: 28px;
   text-align: center;
-  font-family: var(--mono);
-  font-size: 15px;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
 
-.option:disabled {
-  opacity: 0.5;
+.option:disabled,
+.scale button:disabled,
+.matrix-scale button:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .invalid {
-  margin: 10px 0 0 34px;
-  font-size: 12px;
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--danger);
 }
 
 @media (max-width: 560px) {
   .question {
-    padding: 22px 0 26px;
-  }
-
-  .q-title {
-    font-size: 16px;
-  }
-
-  .rating,
-  .options,
-  .text-inputs,
-  .note-field,
-  .number-input,
-  .matrix {
-    padding-left: 0;
+    padding-bottom: 12px;
   }
 
   .matrix-row {
@@ -708,23 +780,15 @@ function toggle(id: string) {
   }
 
   .matrix-label {
-    font-size: 13.5px;
-  }
-
-  .invalid {
-    margin-left: 0;
+    font-size: 14px;
   }
 
   .anchors {
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .anchors span {
     max-width: 48%;
-  }
-
-  .scale button {
-    height: 46px;
   }
 }
 </style>

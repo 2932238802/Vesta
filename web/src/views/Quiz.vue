@@ -1,13 +1,30 @@
 <template>
-  <div class="quiz" @focusin="onFocusIn">
-    <header class="top">
-      <button v-if="step > 0" class="back-mini" type="button" @click="back">← 上一题</button>
-      <span v-else class="save-hint">进度自动保存在本机</span>
-    </header>
-
-    <div class="progress">
-      <span :style="{ width: `${progressPct}%` }" />
+  <div
+    ref="rootEl"
+    class="quiz"
+    :class="{ 'kb-focus': kbFocus, 'kb-raised': kbRaised, 'kb-hide-foot': kbHideFoot }"
+    :style="{ '--kb-offset': `${kbOffset}px` }"
+    @focusin="onFocusIn"
+    @focusout="onFocusOut"
+  >
+    <div
+      class="progress-wrap"
+      role="progressbar"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      :aria-valuenow="progressPct"
+      :aria-valuetext="progressAriaText"
+    >
+      <div class="progress-meta">
+        <span class="progress-group">{{ groupTitle }}</span>
+        <span class="progress-pct">{{ progressPct }}%</span>
+      </div>
+      <div class="progress-track" aria-hidden="true">
+        <span class="progress-done" :style="{ width: `${progressPct}%` }" />
+      </div>
     </div>
+
+    <p id="quiz-status" class="sr-only" aria-live="polite">{{ statusText }}</p>
 
     <main v-if="loading" class="state">
       <p class="quiet">正在打开</p>
@@ -15,23 +32,31 @@
 
     <main v-else-if="error && !survey" class="state">
       <p class="eyebrow">无法打开</p>
-      <h1 class="serif">{{ error }}</h1>
+      <h1>{{ error }}</h1>
       <RouterLink class="btn ghost" to="/">回到首页</RouterLink>
     </main>
 
     <template v-else-if="survey && current && resolved">
       <main v-if="restored" class="restore">
-        <p>已恢复上次的填写进度，从这一题继续。</p>
-        <div class="restore-actions">
-          <button class="btn quiet small" type="button" @click="restored = false">继续填写</button>
-          <button class="btn ghost small" type="button" @click="restart">重新填写</button>
-        </div>
+        <template v-if="!confirmRestart">
+          <p>已恢复上次的填写进度，从这一题继续。</p>
+          <div class="restore-actions">
+            <button class="btn quiet small" type="button" @click="restored = false">继续填写</button>
+            <button class="btn ghost small" type="button" @click="confirmRestart = true">重新填写</button>
+          </div>
+        </template>
+        <template v-else>
+          <p>会清空本机保存的答案，确定吗？</p>
+          <div class="restore-actions">
+            <button class="btn ghost small" type="button" @click="confirmRestart = false">取消</button>
+            <button class="btn danger small" type="button" @click="restart">清空答案</button>
+          </div>
+        </template>
       </main>
 
       <main class="sheet">
         <div :key="current.id" class="group fade-in">
-          <p class="eyebrow">{{ groupTitle }}</p>
-          <h1 class="serif">{{ resolved.title }}</h1>
+          <h1 ref="titleEl" tabindex="-1">{{ resolved.title }}</h1>
           <p v-if="resolved.hint" class="sub">{{ resolved.hint }}</p>
 
           <div class="questions" :id="`q-${current.id}`">
@@ -39,7 +64,6 @@
             <QuestionField
               v-model="answers[current.id]"
               :question="currentQuestion"
-              :index="step + 1"
               :invalid="invalid.includes(current.id)"
               :disabled="resolved.disabled"
               @touch="touch"
@@ -54,7 +78,7 @@
           <span v-else class="save-hint">草稿自动保存在本机</span>
           <div class="spacer" />
           <button class="btn next" type="button" :disabled="submitting" @click="next">
-            {{ submitting ? '正在生成报告' : isLast ? '提交并生成报告' : '下一题' }}
+            {{ submitting ? '正在提交' : isLast ? '提交并生成报告' : '下一题' }}
           </button>
         </div>
         <p v-if="showMissingHint" class="missing-hint">这一题还没完成</p>
@@ -62,11 +86,11 @@
       </footer>
     </template>
 
-    <div v-if="submitting" class="veil">
+    <div v-if="submitting" class="veil" aria-busy="true">
       <div class="veil-inner">
         <span class="pulse" />
-        <p>正在把你的回答整理成报告</p>
-        <p class="quiet">大约需要几秒，请不要关闭页面</p>
+        <p>正在提交你的答案</p>
+        <p class="quiet">提交后会跳到报告页，报告生成需要一会儿</p>
       </div>
     </div>
   </div>
@@ -96,10 +120,23 @@ const error = ref('')
 const submitting = ref(false)
 const restored = ref(false)
 const showMissingHint = ref(false)
+const confirmRestart = ref(false)
+const rootEl = ref<HTMLElement | null>(null)
+const titleEl = ref<HTMLElement | null>(null)
+const statusText = ref('')
+const keyboardMode = ref(false)
+const kbFocus = ref(false)
+const kbRaised = ref(false)
+const kbHideFoot = ref(false)
+const kbOffset = ref(0)
 
 const draftKey = `vesta:draft:${token}`
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 let autoTimer: ReturnType<typeof setTimeout> | undefined
+let focusOutTimer: ReturnType<typeof setTimeout> | undefined
+let kbDebounce: ReturnType<typeof setTimeout> | undefined
+let lastViewportHeight = 0
+let suppressAnnounce = false
 let autoAdvancedStep = -1
 let activeId: string | null = null
 let activeSince = 0
@@ -135,6 +172,106 @@ const groupTitle = computed(() => {
   const group = survey.value.groups.find((item) => item.id === current.value?.groupId)
   return group?.title ?? ''
 })
+const progressAriaText = computed(() =>
+  groupTitle.value ? `${groupTitle.value}，完成 ${progressPct.value}%` : `完成 ${progressPct.value}%`
+)
+
+function announce(message: string) {
+  statusText.value = ''
+  void nextTick(() => {
+    statusText.value = message
+  })
+}
+
+function clearAuto() {
+  if (autoTimer) clearTimeout(autoTimer)
+  autoTimer = undefined
+}
+
+async function focusQuestion() {
+  await nextTick()
+  const container = document.getElementById(`q-${current.value?.id ?? ''}`)
+  container?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  const control = container?.querySelector<HTMLElement>(
+    'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled])'
+  )
+  control?.focus({ preventScroll: true })
+}
+
+function coarsePointer() {
+  return window.matchMedia('(pointer: coarse)').matches
+}
+
+function resetKeyboard() {
+  kbFocus.value = false
+  kbRaised.value = false
+  kbHideFoot.value = false
+  kbOffset.value = 0
+}
+
+function onFocusIn(event: FocusEvent) {
+  const target = event.target as HTMLElement | null
+  if (!target || !target.matches('input, textarea, select')) return
+  if (focusOutTimer) clearTimeout(focusOutTimer)
+  if (!coarsePointer()) return
+  kbFocus.value = true
+  window.setTimeout(() => {
+    if (!target.isConnected) return
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, 120)
+}
+
+function onFocusOut(event: FocusEvent) {
+  const target = event.target as HTMLElement | null
+  if (!target || !target.matches('input, textarea, select')) return
+  if (!coarsePointer()) return
+  if (focusOutTimer) clearTimeout(focusOutTimer)
+  focusOutTimer = setTimeout(resetKeyboard, 150)
+}
+
+function applyViewport() {
+  const vv = window.visualViewport
+  if (!vv || !coarsePointer()) return
+  const height = vv.height
+  if (Math.abs(height - lastViewportHeight) < 8) return
+  lastViewportHeight = height
+  const kb = Math.max(0, window.innerHeight - height - (vv.offsetTop || 0))
+  if (kb > 120) {
+    kbOffset.value = kb
+    kbRaised.value = true
+    kbHideFoot.value = kb > window.innerHeight * 0.45
+    void nextTick(() =>
+      requestAnimationFrame(() => {
+        const active = document.activeElement as HTMLElement | null
+        active?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
+    )
+  } else {
+    kbRaised.value = false
+    kbHideFoot.value = false
+    kbOffset.value = 0
+  }
+}
+
+function scheduleViewportCheck() {
+  if (kbDebounce) clearTimeout(kbDebounce)
+  kbDebounce = setTimeout(applyViewport, 100)
+}
+
+function onKeydown(event: KeyboardEvent) {
+  if (
+    event.key === 'Tab' ||
+    event.key === 'Enter' ||
+    event.key === ' ' ||
+    event.key.startsWith('Arrow')
+  ) {
+    keyboardMode.value = true
+  }
+}
+
+function onPointerdown() {
+  keyboardMode.value = false
+}
 
 function touch(id: string) {
   const now = Date.now()
@@ -142,14 +279,6 @@ function touch(id: string) {
   activeId = id
   activeSince = now
   scheduleSave()
-}
-
-function onFocusIn(event: FocusEvent) {
-  const target = event.target as HTMLElement | null
-  if (!target || !target.matches('input, textarea, select')) return
-  window.setTimeout(() => {
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, 280)
 }
 
 function flushTiming() {
@@ -201,8 +330,8 @@ function restoreDraft() {
 }
 
 function restart() {
-  if (!window.confirm('重新填写会清空本机保存的答案，确定吗？')) return
   if (saveTimer) clearTimeout(saveTimer)
+  clearAuto()
   activeId = null
   activeSince = 0
   autoAdvancedStep = -1
@@ -213,6 +342,7 @@ function restart() {
   error.value = ''
   showMissingHint.value = false
   restored.value = false
+  confirmRestart.value = false
   try {
     localStorage.removeItem(draftKey)
   } catch {
@@ -229,6 +359,7 @@ function canAdvance(): boolean {
 
 function advance() {
   if (!survey.value || submitting.value) return
+  clearAuto()
   error.value = ''
   flushTiming()
   if (isLast.value) {
@@ -244,9 +375,11 @@ function advance() {
 function next() {
   if (submitting.value) return
   if (!canAdvance()) {
+    clearAuto()
     if (current.value) {
       invalid.value = [current.value.id]
       showMissingHint.value = true
+      void focusQuestion()
     }
     return
   }
@@ -257,6 +390,7 @@ function next() {
 
 function back() {
   if (submitting.value) return
+  clearAuto()
   flushTiming()
   invalid.value = []
   error.value = ''
@@ -277,6 +411,7 @@ async function submit() {
   if (!survey.value) return
   submitting.value = true
   error.value = ''
+  announce('正在提交答案')
   try {
     const result = await api.submit(token, answers.value, timing.value)
     submitted = true
@@ -300,11 +435,13 @@ async function submit() {
         ? err.details.missing.filter((id): id is string => typeof id === 'string')
         : []
       if (missingIds.length) {
+        suppressAnnounce = true
         jumpToQuestion(missingIds[0])
         invalid.value = missingIds
         showMissingHint.value = true
         error.value = `还有 ${missingIds.length} 道必答题没完成`
         submitting.value = false
+        void focusQuestion()
         return
       }
     }
@@ -314,16 +451,18 @@ async function submit() {
 }
 
 // 单选题选中后自动进入下一题；多选题、填空题、数字题用「下一步」确认。
+// 键盘选中后停留，方便比较选项；只有指针/触摸点选才启动 250ms 自动前进。
 watch(
   answers,
   () => {
     if (restoring) return
+    if (keyboardMode.value) return
     if (!current.value || current.value.type !== 'single') return
     if (resolved.value?.disabled) return
     if (isEmptyValue(answers.value[current.value.id])) return
     if (autoAdvancedStep === step.value) return
     autoAdvancedStep = step.value
-    if (autoTimer) clearTimeout(autoTimer)
+    clearAuto()
     autoTimer = setTimeout(() => {
       if (autoAdvancedStep !== step.value) return
       advance()
@@ -332,7 +471,46 @@ watch(
   { deep: true }
 )
 
+watch(step, async () => {
+  if (restoring) return
+  await nextTick()
+  if (suppressAnnounce) {
+    suppressAnnounce = false
+    return
+  }
+  if (keyboardMode.value) {
+    titleEl.value?.focus({ preventScroll: true })
+  } else {
+    announce(`下一题：${groupTitle.value}`)
+  }
+})
+
+function onVisibility() {
+  if (document.visibilityState === 'hidden') onLeave()
+}
+
+function bindGlobal() {
+  window.addEventListener('beforeunload', onLeave)
+  window.addEventListener('pagehide', onLeave)
+  document.addEventListener('visibilitychange', onVisibility)
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('pointerdown', onPointerdown)
+  window.visualViewport?.addEventListener('resize', scheduleViewportCheck)
+  window.visualViewport?.addEventListener('scroll', scheduleViewportCheck)
+}
+
+function unbindGlobal() {
+  window.removeEventListener('beforeunload', onLeave)
+  window.removeEventListener('pagehide', onLeave)
+  document.removeEventListener('visibilitychange', onVisibility)
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('pointerdown', onPointerdown)
+  window.visualViewport?.removeEventListener('resize', scheduleViewportCheck)
+  window.visualViewport?.removeEventListener('scroll', scheduleViewportCheck)
+}
+
 onMounted(async () => {
+  bindGlobal()
   try {
     const payload = await api.getInvite(token)
     invite.value = payload
@@ -385,57 +563,101 @@ function onLeave() {
 
 onBeforeUnmount(() => {
   if (saveTimer) clearTimeout(saveTimer)
-  if (autoTimer) clearTimeout(autoTimer)
+  clearAuto()
+  if (focusOutTimer) clearTimeout(focusOutTimer)
+  if (kbDebounce) clearTimeout(kbDebounce)
+  unbindGlobal()
   onLeave()
-  window.removeEventListener('beforeunload', onLeave)
 })
-
-window.addEventListener('beforeunload', onLeave)
 </script>
 
 <style scoped>
 .quiz {
   min-height: 100vh;
+  min-height: 100svh;
   max-width: 640px;
   margin: 0 auto;
-  padding: 20px 24px 160px;
+  padding: 20px 24px calc(120px + env(safe-area-inset-bottom));
+  background: var(--paper);
 }
 
-.top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 16px;
-}
-
-.back-mini {
-  border: 0;
-  background: none;
-  padding: 4px 0;
-  font-size: 13px;
-  color: var(--ink-2);
-  cursor: pointer;
-}
-
-.progress {
+.progress-wrap {
   position: sticky;
   top: 0;
   z-index: 5;
-  height: 3px;
-  background: var(--line);
-  border-radius: 2px;
+  margin: 0 -24px;
+  padding: 8px 24px 10px;
+  background: var(--paper);
 }
 
-.progress span {
-  display: block;
-  height: 100%;
+@media (min-width: 720px) and (pointer: fine) {
+  .progress-wrap,
+  .foot {
+    background: rgba(239, 241, 236, 0.94);
+    backdrop-filter: blur(10px);
+  }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .progress-wrap,
+  .foot {
+    background: var(--paper);
+  }
+}
+
+.progress-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.progress-group {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.progress-pct {
+  font-size: 12px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+
+.progress-track {
+  position: relative;
+  height: 2px;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--line-strong) 0 2px,
+    transparent 2px 5px
+  );
+}
+
+.progress-done {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 2px;
   background: var(--accent);
-  transition: width 0.35s ease;
+  transition: width 0.24s ease-out;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .sheet {
-  padding-top: 40px;
+  padding-top: 24px;
 }
 
 .restore {
@@ -447,8 +669,8 @@ window.addEventListener('beforeunload', onLeave)
 }
 
 .restore p {
-  font-size: 12.5px;
-  line-height: 1.7;
+  font-size: 13px;
+  line-height: 1.6;
   color: var(--ink-2);
 }
 
@@ -458,27 +680,28 @@ window.addEventListener('beforeunload', onLeave)
   margin-top: 12px;
 }
 
-.group .eyebrow {
-  margin-bottom: 14px;
+h1 {
+  font-family: var(--sans);
+  font-size: clamp(24px, 5.4vw, 28px);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0;
 }
 
-h1 {
-  font-size: clamp(24px, 6vw, 32px);
-  font-weight: 500;
-  line-height: 1.4;
-  letter-spacing: 0.01em;
+h1:focus {
+  outline: none;
 }
 
 .sub {
-  margin-top: 12px;
+  margin-top: 10px;
   font-size: 13px;
-  line-height: 1.8;
-  color: var(--ink-3);
+  line-height: 1.6;
+  color: var(--ink-2);
   max-width: 32em;
 }
 
 .questions {
-  margin-top: 30px;
+  margin-top: 24px;
 }
 
 .disabled-note {
@@ -488,7 +711,7 @@ h1 {
   background: var(--surface);
   border: 1px dashed var(--line);
   font-size: 13px;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .foot {
@@ -497,10 +720,32 @@ h1 {
   right: 0;
   bottom: 0;
   z-index: 10;
-  background: color-mix(in srgb, var(--paper) 92%, transparent);
-  backdrop-filter: blur(10px);
+  background: var(--paper);
   border-top: 1px solid var(--line);
-  padding: 14px 24px calc(14px + env(safe-area-inset-bottom));
+  padding: 12px 24px calc(12px + env(safe-area-inset-bottom));
+}
+
+.kb-focus {
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+.kb-focus .foot {
+  position: static;
+  margin-top: 16px;
+}
+
+.kb-raised {
+  padding-bottom: calc(120px + var(--kb-offset, 0px) + env(safe-area-inset-bottom));
+}
+
+.kb-raised .foot {
+  position: fixed;
+  margin-top: 0;
+  bottom: var(--kb-offset, 0px);
+}
+
+.kb-hide-foot .foot {
+  visibility: hidden;
 }
 
 .foot-inner {
@@ -525,14 +770,14 @@ h1 {
 }
 
 .save-hint {
-  font-size: 11.5px;
-  color: var(--ink-3);
+  font-size: 12px;
+  color: var(--ink-2);
 }
 
 .missing-hint {
   max-width: 640px;
   margin: 10px auto 0;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--danger);
   text-align: center;
 }
@@ -540,7 +785,7 @@ h1 {
 .error {
   max-width: 640px;
   margin: 10px auto 0;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--danger);
   text-align: center;
 }
@@ -553,6 +798,8 @@ h1 {
 .veil {
   position: fixed;
   inset: 0;
+  height: 100vh;
+  height: 100dvh;
   z-index: 50;
   background: var(--paper);
   display: flex;
@@ -572,8 +819,8 @@ h1 {
 }
 
 .veil-inner p.quiet {
-  font-size: 12px;
-  color: var(--ink-3);
+  font-size: 13px;
+  color: var(--ink-2);
   margin-top: 8px;
 }
 
@@ -588,23 +835,41 @@ h1 {
 
 @keyframes pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(47, 108, 158, 0.25);
+    box-shadow: 0 0 0 0 rgba(47, 92, 72, 0.25);
   }
   70% {
-    box-shadow: 0 0 0 18px rgba(47, 108, 158, 0);
+    box-shadow: 0 0 0 18px rgba(47, 92, 72, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(47, 108, 158, 0);
+    box-shadow: 0 0 0 0 rgba(47, 92, 72, 0);
+  }
+}
+
+.group.fade-in {
+  animation: quiz-fade 0.12s ease;
+}
+
+@keyframes quiz-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
 @media (max-width: 560px) {
   .quiz {
-    padding: 16px 18px 150px;
+    padding: 16px 18px calc(120px + env(safe-area-inset-bottom));
+  }
+
+  .progress-wrap {
+    margin: 0 -18px;
+    padding: 8px 18px 10px;
   }
 
   .sheet {
-    padding-top: 30px;
+    padding-top: 20px;
   }
 
   .foot {

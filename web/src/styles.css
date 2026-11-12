@@ -18,6 +18,56 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+/* 问卷页独立令牌：只被 .invite / .quiz 子树引用，后台不受影响 */
+:root {
+  --q-paper: #eff1ec;
+  --q-surface: #fbfcf9;
+  --q-ink: #1b231e;
+  --q-ink-2: #4d5951;
+  --q-accent: #2f5c48;
+  --q-danger: #9e3d2f;
+  --q-line: #dde3db;
+  --q-line-strong: #cbd4cb;
+  --q-accent-soft: #e6ede7;
+  --q-tint: #f4f7f2;
+  color-scheme: light;
+}
+
+.invite,
+.quiz {
+  --paper: var(--q-paper);
+  --surface: var(--q-surface);
+  --ink: var(--q-ink);
+  --ink-2: var(--q-ink-2);
+  --ink-3: var(--q-ink-2);
+  --accent: var(--q-accent);
+  --accent-soft: var(--q-accent-soft);
+  --danger: var(--q-danger);
+  --line: var(--q-line);
+  --line-strong: var(--q-line-strong);
+  --tint: var(--q-tint);
+}
+
+body:has(.invite),
+body:has(.quiz) {
+  background: var(--q-paper);
+}
+
+.invite .eyebrow,
+.quiz .eyebrow {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 13px;
+  color: var(--q-ink-2);
+}
+
+.invite .input,
+.invite .textarea,
+.quiz .input,
+.quiz .textarea {
+  font-size: 16px;
+}
+
 *,
 *::before,
 *::after {

@@ -4,6 +4,16 @@
 
 ## 本轮（2026-11-12）
 
+### 问卷页面 UI 优化（邀请页 / 问卷页）
+
+- 依据：`docs/archive/问卷页面UI优化-开发设计方案-2026-11-12.md` v1.1，按第 10 节全部默认值（P1=A 只显示分组名 + 百分比 + 细条；P2=A 末题点选仍自动提交；P3=A 自动前进 250ms；P4=A 单题单屏；P5=A 不改结果页；P6=A playwright 不写入仓库；P7=A 真机未验证要如实记录）实施。
+- 视觉：新增问卷作用域令牌 `--q-*`（冷灰绿纸 `#EFF1EC`、松墨 `#1B231E`、深绿 `#2F5C48`），只在 `.invite` / `.quiz` 子树和这两个页面存在时的 `body` 背景生效；`/admin` 继续用原变量。邀请页、问卷页标题改用无衬线，衬线只留在结果页正文；取消 uppercase eyebrow、等宽题号与返回箭头。
+- 进度：只显示分组名、百分比和 2px 细条，不显示题数或完成数量；`role="progressbar"` + `aria-valuetext`，符合设计文档第 67 行「不显示已答 X / N」。
+- 交互：单选改为 `radiogroup` + `radio` + roving tabindex，方向键只移焦点、Space/Enter 选中、键盘不自动跳题；指针点选仍 250ms 自动前进，键盘选中后停留。错误就地红框 + 题下 `role="alert"` + 滚动并聚焦首个控件；`window.confirm` 改为题内二次确认。
+- 微信与键盘：`100svh` / `100dvh` 回退；聚焦输入时底栏先「让位」进文档流，`visualViewport` 检测到键盘后抬升到 `--kb-offset`，键盘占屏超过 45% 时隐藏底栏；`pagehide` / `visibilitychange` 兜底保存草稿。粗指针设备不用 `backdrop-filter`。
+- 一处实现偏差（记录以免回退）：原页面在 `Quiz.vue` 的 `h1` 和 `QuestionField.vue` 的 `.q-title` 各渲染一次题干，同屏出现两遍同一句话（历史截图可证）。本轮把题干收敛到 `Quiz.vue` 的 `h1` 一处，`QuestionField` 只保留多选/选填标签，`hint` 也只由 `Quiz.vue` 渲染；题目文案本身未改。
+- 范围：只改 `web/src/views/Invite.vue`、`web/src/views/Quiz.vue`、`web/src/components/QuestionField.vue`、`web/src/styles.css`；未改 `shared/src/survey.ts`、接口、提交 payload、计分、埋点事件名，未改 `ReportView.vue`。
+
 ### 报告模块重做：去硬编码、全量 AI 分析、数字与时间可追溯
 
 - 起因：原报告的板块、结论和岗位方向有大量代码写死的兜底内容，同一个 Skill 下不同答卷会看到相似段落；时间距离出现过“还有 547 天”；检索失败时缺少可重试的真实原因。

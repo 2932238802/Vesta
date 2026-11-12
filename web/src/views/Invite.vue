@@ -6,13 +6,13 @@
 
     <main v-else-if="error" class="state">
       <p class="eyebrow">无法打开</p>
-      <h1 class="serif">{{ error }}</h1>
+      <h1>{{ error }}</h1>
       <p class="muted">如果反复出现，把这条链接截图发给发链接的人</p>
     </main>
 
     <main v-else-if="invite" class="content fade-in">
       <p class="eyebrow">{{ invite.survey.title }}</p>
-      <h1 class="serif">
+      <h1>
         {{ greeting }}<br />
         你离想去的地方，<br class="wide-break" />还差哪几步
       </h1>
@@ -22,6 +22,7 @@
       </button>
 
       <p v-if="draftFilled > 0" class="draft">
+        <span class="draft-dot" aria-hidden="true" />
         上次填到第 {{ draftStep + 1 }} 组，已填 {{ draftFilled }} 题
       </p>
       <p class="privacy">答案用于生成这份报告</p>
@@ -103,9 +104,10 @@ function start() {
 <style scoped>
 .invite {
   min-height: 100vh;
+  min-height: 100svh;
   max-width: 620px;
   margin: 0 auto;
-  padding: 26px 24px 36px;
+  padding: 32px 24px 36px;
   display: flex;
   flex-direction: column;
 }
@@ -131,41 +133,57 @@ function start() {
 }
 
 h1 {
-  font-size: clamp(30px, 6.6vw, 42px);
-  font-weight: 500;
-  line-height: 1.5;
-  letter-spacing: 0.01em;
+  font-family: var(--sans);
+  font-size: clamp(32px, 6.4vw, 40px);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0;
 }
 
 .start {
   display: flex;
   width: min(340px, 100%);
-  height: 58px;
+  height: 56px;
   margin: 34px auto 0;
-  border-radius: 16px;
+  border-radius: 12px;
   font-size: 16px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  box-shadow: 0 10px 24px rgba(47, 93, 70, 0.18);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  letter-spacing: 0.02em;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.start:active:not(:disabled) {
+  transform: translateY(0.5px);
+  filter: brightness(0.96);
 }
 
 .draft {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   margin-top: 12px;
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--ink-2);
+}
+
+.draft-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-2);
 }
 
 .privacy {
   margin-top: 8px;
-  font-size: 11px;
-  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
 }
 
 .start:hover:not(:disabled) {
-  transform: translateY(-1px);
   filter: brightness(0.97);
-  box-shadow: 0 12px 28px rgba(47, 93, 70, 0.22);
 }
 
 .foot {
@@ -173,9 +191,9 @@ h1 {
   display: flex;
   justify-content: center;
   gap: 16px;
-  font-size: 10.5px;
-  color: var(--ink-3);
-  letter-spacing: 0.03em;
+  font-size: 12px;
+  color: var(--ink-2);
+  letter-spacing: 0.02em;
 }
 
 @media (max-width: 480px) {
