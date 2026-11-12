@@ -335,6 +335,7 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
   const potentialScore = Math.round(raw)
   const level: PotentialLevel = potentialScore >= 70 ? '高' : potentialScore >= 40 ? '中' : '低'
   // 对外不说「潜力低」，改成「可提升空间大」：分数照实，但不评价这个人。
+  // level（高/中/低）只作内部计分和 AI 事实输入；UI 只显示 label，绝不暴露 level。
   const spaceLabel = level === '低' ? '大' : level === '中' ? '中' : '小'
   const lowLabels = ['practice', 'skill', 'method', 'execution']
     .map((key) => allItems.find((item) => item.key === key))

@@ -9,7 +9,9 @@ import type {
 import {
   buildDocReport,
   cityInText,
+  cohortYear,
   deadlineFact,
+  friendlySearchError,
   MAJOR_CITIES,
   normalizeDocAiContent,
   resolveTargetCity,
@@ -120,14 +122,24 @@ function clipSentence(value: string, max = 96): string {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+const LIMITED_ERROR = /429|request limit|rate limit|频率|限流|too many/i
+/** 瞬时网络错误：重试一次通常就好，不该直接触发整轮补搜。 */
+const TRANSIENT_ERROR =
+  /fetch failed|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up|network|aborted|timeout|timed out/i
+
 async function searchOne(query: string, freshness = 'oneYear'): Promise<SearchResult[]> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       return await searchWeb(query, { count: 6, freshness })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      const limited = /429|request limit|频率|限流/i.test(message)
-      if (!limited || attempt === 2) throw error
+      const limited = LIMITED_ERROR.test(message)
+      const transient = TRANSIENT_ERROR.test(message)
+      // 无权限、参数错误这类确定性失败，重试也没用，直接抛出。
+      if (!limited && !transient) throw error
+      // 瞬时网络错误只补一次；429 / 限流保持原来的最多三次退避。
+      if (transient && !limited && attempt >= 1) throw error
+      if (attempt === 2) throw error
       await sleep(1200 * (attempt + 1))
     }
   }
@@ -157,8 +169,9 @@ async function runSearches(specs: QuerySpec[]): Promise<SearchRun> {
       items.forEach((item) => uniqueUrls.add(item.url.replace(/\/$/, '')))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      const friendly = friendlySearchError(message)
       console.warn('[doc-report] 招聘检索失败', query, message)
-      errors.push(`${query}：${message}`)
+      errors.push(`${query}：${friendly}`)
       results.push([])
     }
   }
@@ -351,21 +364,18 @@ interface QuerySpec {
   fallback?: boolean
 }
 
-function queryYear(): number {
-  return new Date().getFullYear()
-}
-
 function buildSearchSpecs(input: {
   city: string
   role: string
   directions: JobDirection[]
   useDirections: boolean
+  cohort: number
 }): QuerySpec[] {
   const place = input.city ? `${input.city} ` : ''
-  const year = queryYear()
+  // 用学生自己的毕业届别，不用系统当前年：否则大一新生会被搜成今年的应届。
   const fresh = (keyword: string, key?: string): QuerySpec => ({
     key,
-    query: `${place}${keyword} ${year} 应届 招聘`.trim(),
+    query: `${place}${keyword} ${input.cohort} 届 招聘`.trim(),
     freshness: 'oneYear'
   })
   const specs: QuerySpec[] = []
@@ -413,6 +423,7 @@ export async function searchJobs(
   }
 
   const city = resolveTargetCity(survey, answers).city
+  const cohort = cohortYear(survey, answers)
   const explicitRole = String(answers.q5a ?? '').trim()
   const major = String(answers.q2 ?? '').trim()
   // 学生没写具体岗位时，用专业方向去搜；不要把「专业+相关岗位」当岗位名。
@@ -434,7 +445,7 @@ export async function searchJobs(
 
   const directions = jobDirections(major)
   const useDirections = directions.length > 0 && !explicitRole
-  const primarySpecs = buildSearchSpecs({ city, role, directions, useDirections })
+  const primarySpecs = buildSearchSpecs({ city, role, directions, useDirections, cohort })
 
   const byUrl = new Map<string, { item: SearchResult; directionKey?: string; fallback: boolean }>()
   const allErrors: string[] = []
@@ -530,12 +541,12 @@ export async function searchJobs(
   if (usable.length < 3 || missingDirections.length > 0) {
     const supplementSpecs: QuerySpec[] = missingDirections.slice(0, 2).map((direction) => ({
       key: direction.key,
-      query: `${city ? `${city} ` : ''}${direction.query} 应届 招聘`.trim(),
+      query: `${city ? `${city} ` : ''}${direction.query} ${cohort} 届 招聘`.trim(),
       freshness: 'oneYear'
     }))
     if (usable.length < 3) {
       supplementSpecs.push({
-        query: `${city ? `${city} ` : ''}${role} 应届 招聘`.trim(),
+        query: `${city ? `${city} ` : ''}${role} ${cohort} 届 招聘`.trim(),
         freshness: 'oneYear'
       })
     }
@@ -564,7 +575,7 @@ export async function searchJobs(
   // 还没有任何可用原文时，才退回普通网页检索；只接受像具体招聘的结果。
   if (ranked.length === 0) {
     const fallbackSpec: QuerySpec = {
-      query: `${city ? `${city} ` : ''}${role} ${queryYear()} 校园招聘`.trim(),
+      query: `${city ? `${city} ` : ''}${role} ${cohort} 届 校园招聘`.trim(),
       freshness: 'oneYear',
       fallback: true
     }
@@ -651,7 +662,8 @@ export async function searchJobs(
       error,
       resultCount: allUrls.size,
       searchedAt,
-      sources
+      sources,
+      cohortYear: cohort
     }
   }
 }
@@ -1337,6 +1349,8 @@ function outputContract(): string {
 - jobmap 某个方向有 stale 为 true 的招聘原文参与时，entry 必须以「仅看要求结构，不能当投递入口」开头，不能当成现在的投递门槛。
 - jobmap 的 facts 出现「原文对专业的写法不一致」时，fit 要写明这句、以具体岗位为准，不能只写「原文没写专业限制」。
 - scorecard 每个 item 的 text 如提到分数，必须等于该 item 在 moduleSpecs 里的 score；scorecard 的 summary 如提到分数，必须是本模块某一项的 score。不要写别的 item 的分数，也不要用 10 分制总分冒充单项分。
+- 用分数对照经验值区间时，分数落在区间端点（例如 8 分对 6.0—8.0）写「达到上限」或「达到下限」，不要写「在……之上」「在……以下」；只有分数严格超出区间才写「高于」「低于」。
+- assets 模块的标题写「你现在能借到的力」：这些是家庭、学校或已有经历给的支撑，不要叫「资源」「能力盘点」。
 - 所有数字只能原样使用 moduleSpecs、jobSpecs、问卷回答或检索记录里的值，不能自己计算、换算或估算。
 - jobSpecs 里 fallback 为 true 的原文是主检索不足时的补位结果，只能参考要求结构，不能用来统计「几条原文」或门槛数量；stale 为 true 的过期原文同理，不能当成当前投递门槛。
 - 原文没有写薪资时不要写「薪资以原文为准」之类的话，也不要补一个薪资数字；没有就略过薪资。
@@ -1570,7 +1584,8 @@ function normalizeSearchMeta(raw: unknown): ReportSearchMeta | undefined {
     error: typeof record.error === 'string' ? record.error : '',
     resultCount: Number(record.resultCount) || 0,
     searchedAt: typeof record.searchedAt === 'string' ? record.searchedAt : '',
-    sources
+    sources,
+    cohortYear: Number(record.cohortYear) || undefined
   }
 }
 

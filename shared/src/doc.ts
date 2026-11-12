@@ -243,6 +243,19 @@ function monthsUntil(monthOfYear: number): number {
 const GRADE_NUMBER: Record<string, number> = { 大一: 1, 大二: 2, 大三: 3, 大四: 4 }
 
 /**
+ * 学生所在届别（毕业年份）：按 Q3 年级和当前学年推算四年制毕业年份。
+ * 检索词用这个年份拼「YYYY 届」，不要用系统当前年——否则大一大二会被搜成今年应届。
+ */
+export function cohortYear(survey: Survey, answers: Answers): number {
+  const grade = GRADE_NUMBER[label(survey, answers, 'q3')] ?? 2
+  const now = new Date()
+  // 学年 9 月开学：9 月及以后算新学年，1—8 月仍属上一学年。
+  const academicStartYear = now.getMonth() + 1 >= 9 ? now.getFullYear() : now.getFullYear() - 1
+  const enrollYear = academicStartYear - (grade - 1)
+  return enrollYear + 4
+}
+
+/**
  * 到「第 stageGrade 学年某月」还有几个月。
  * 以前只会算“下一个 9 月”，导致大一学生也被算成半年后就要秋招/夏令营。
  */
@@ -444,29 +457,60 @@ function assetsBlock(survey: Survey, answers: Answers): ReportBlock | null {
 
   return {
     type: 'assets',
-    title: '你现在能用的东西',
+    title: '你现在能借到的力',
     subtitle: '只列答卷里已经有的，不凑数',
     items: items.slice(0, 4),
     note: ''
   }
 }
 
-function usedForJob(job: JobCard, directionName?: string): string {
-  const target = directionName ? `「${directionName}」` : '目标岗位'
+/** 这条原文真正写到的可核对字段；卡片和来源列表共用，措辞才能统一。 */
+function jobCheckFields(job: JobCard, includeCity = false): string[] {
   const text = `${job.title} ${job.requirement}`
-  if (/薪资待遇|薪资报告|工资待遇|平均工资|薪酬水平|就业分析/.test(text)) {
-    return `用来核对${target}的薪资水平（薪资统计页，不是具体岗位）`
-  }
   const fields: string[] = []
   if (/本科|大专|专科|学历/.test(text)) fields.push('学历')
   if (/专业/.test(text)) fields.push('专业')
   if (/英语|四级|六级|口语|读写/i.test(text)) fields.push('英语')
-  if (/实习|工作经验|相关经验/.test(text)) fields.push('实习')
+  if (/实习|工作经验|相关经验/.test(text)) fields.push('经验')
   if (/证书/.test(text)) fields.push('证书')
   if (job.salary && salaryRangeNumbers(job.salary)) fields.push('薪资')
+  if (includeCity && job.city) fields.push('城市')
+  return fields
+}
+
+function usedForJob(job: JobCard, directionName?: string): string {
+  const target = directionName ? `「${directionName}」` : '目标岗位'
+  const text = `${job.title} ${job.requirement}`
+  if (/薪资待遇|薪资报告|工资待遇|平均工资|薪酬水平|就业分析/.test(text)) {
+    return `用于核对：${target}薪资水平（薪资统计页，不是具体岗位）`
+  }
+  const fields = jobCheckFields(job)
   return fields.length
-    ? `用来核对${target}的${fields.join('、')}`
-    : `用来核对${target}的原文`
+    ? `用于核对：${target}${fields.join(' / ')}`
+    : `用于核对：${target}原文`
+}
+
+/**
+ * 把底层检索错误转成用户能行动的中文。
+ * 只翻译已知的网络 / 限流 / 鉴权错误，未知错误原样返回，不吞掉真实原因。
+ */
+export function friendlySearchError(message: string): string {
+  const text = message.trim()
+  if (!text) return ''
+  if (
+    /fetch failed|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up|network|aborted|timeout|timed out/i.test(
+      text
+    )
+  ) {
+    return '网络请求失败，可以重新检索'
+  }
+  if (/429|request limit|rate limit|频率|限流|too many/i.test(text)) {
+    return '检索服务繁忙（触发限流），稍后可重试'
+  }
+  if (/401|403|unauthorized|forbidden|invalid.*(?:key|token)|api.?key|无权限|鉴权/i.test(text)) {
+    return '检索服务鉴权失败，请检查 BOCHA_API_KEY / BOCHA_BASE_URL'
+  }
+  return text
 }
 
 /** 学校档位换算成学历层次：专科 / 本科（C9 到民办本科都按本科算）。 */
@@ -1289,27 +1333,25 @@ function sourcesBlock(input: {
         date: job.date
       }))
   const queries = search?.queries ?? []
-  const error = search?.error ?? ''
+  const error = friendlySearchError(search?.error ?? '')
   if (!sources.length && !queries.length && !error) return null
   const jobByUrl = new Map((input.jobs ?? []).map((job) => [job.url.replace(/\/$/, ''), job]))
   const usedForOf = (source: { url: string; date?: string }): string => {
     const job = jobByUrl.get(source.url.replace(/\/$/, ''))
-    const fields: string[] = []
-    if (job?.requirement && /本科|大专|专科|学历|专业|经验|实习|证书|英语|四级|六级/.test(job.requirement)) {
-      fields.push('门槛')
-    }
-    if (job?.salary) fields.push('薪资')
-    if (job?.city) fields.push('城市')
+    const fields = job ? jobCheckFields(job, true) : []
     const base = fields.length
-      ? `用于核对${fields.join('、')}`
-      : '用于核对报告里的岗位原文'
+      ? `用于核对：${fields.join(' / ')}`
+      : '用于核对：报告里的岗位原文'
     return source.date ? `${base} · 发布于 ${source.date.slice(0, 10)}` : base
   }
+  const cohortNote = search?.cohortYear ? `检索词按 ${search.cohortYear} 届拼写` : ''
 
   return {
     type: 'sources',
     title: '检索记录与原文',
-    subtitle: '服务器实际发送的检索词和返回的原文链接，点开可核对',
+    subtitle: ['服务器实际发送的检索词和返回的原文链接，点开可核对', cohortNote]
+      .filter(Boolean)
+      .join('；'),
     items: sources.slice(0, 12).map((source) => ({
       title: source.title,
       url: source.url,

@@ -18,7 +18,7 @@
       <template v-if="block.type === 'hero'">
         <p class="eyebrow">{{ block.title }} · {{ block.eyebrow }}</p>
         <h1 class="hero-title">{{ block.summary }}</h1>
-        <div class="hero-foot">
+        <div v-if="block.tierLabel || block.total !== null" class="hero-foot">
           <span v-if="block.tierLabel" class="tier-chip">
             <b>{{ block.tier }}</b>
             {{ block.tierLabel }}
@@ -27,7 +27,7 @@
             {{ block.total }}<em>/ 100</em>
           </span>
         </div>
-        <p class="hero-line">{{ block.tierLine }}</p>
+        <p v-if="block.tierLine" class="hero-line">{{ block.tierLine }}</p>
         <a v-if="claimLink" class="hero-claim" href="#claim">
           读完后，如果愿意，可以到末尾留一个方便的时间
         </a>
@@ -321,7 +321,7 @@
           <p v-for="(text, i) in block.paragraphs" :key="i">{{ text }}</p>
         </div>
         <p v-if="block.jobs.length" class="job-caption">
-          下面几条招聘原文用于核对上面的岗位门槛{{ hasSalary(block.jobs) ? '和薪资' : '' }}，点标题看原文；具体以原文为准。
+          下面几条招聘原文用于核对：学历 / 经验{{ hasSalary(block.jobs) ? ' / 薪资' : '' }}，点标题看原文；具体以原文为准。
         </p>
         <ul v-if="block.jobs.length" class="job-list">
           <li v-for="job in block.jobs" :key="job.url" class="job">
@@ -404,7 +404,7 @@
         </div>
         <template v-if="block.relatedJobs.length">
           <p class="job-caption">
-            下面几条是专业相关招聘原文，用来核对上面的方向；不直接对应某一个方向。
+            下面几条是专业相关招聘原文，用于核对上面的方向；不直接对应某一个方向。
           </p>
           <ul class="job-list">
             <li v-for="job in block.relatedJobs" :key="job.url" class="job">
