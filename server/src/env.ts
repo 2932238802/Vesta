@@ -62,10 +62,11 @@ export const config = {
   trustProxy: read('TRUST_PROXY') === 'true',
   // 登录有效期，单位秒；默认 30 天，登录状态会保留在浏览器里
   sessionTtl: Number(read('SESSION_TTL') ?? 60 * 60 * 24 * 30),
-  deepseekApiKey: read('DEEPSEEK_API_KEY'),
-  deepseekBaseUrl: read('DEEPSEEK_BASE_URL') ?? 'https://api.deepseek.com',
-  deepseekModel: read('DEEPSEEK_MODEL') ?? 'deepseek-chat',
+  deepseekApiKey: read('AI_API_KEY') ?? read('DEEPSEEK_API_KEY'),
+  // 不在代码里写死服务商地址；必须由 .env 注入。
+  deepseekBaseUrl: read('AI_BASE_URL') ?? read('DEEPSEEK_BASE_URL') ?? '',
+  deepseekModel: read('AI_MODEL') ?? read('DEEPSEEK_MODEL') ?? 'deepseek-chat',
   bochaApiKey: read('BOCHA_API_KEY'),
-  bochaBaseUrl: read('BOCHA_BASE_URL') ?? 'https://api.bochaai.com/v1',
+  bochaBaseUrl: read('BOCHA_BASE_URL') ?? '',
   aiTimeoutMs: Number(read('AI_TIMEOUT_MS') ?? 240_000)
 }

@@ -5,6 +5,7 @@ import type {
   ReportOverrides,
   ReportPayload,
   ReportResponse,
+  ReportSearchMeta,
   ScoreResult
 } from '../../../shared/src/types'
 import { computeScores } from '../../../shared/src/scoring'
@@ -23,7 +24,9 @@ import {
 import {
   ensureReportGeneration,
   isAiConfigured,
+  isRetryableError,
   readStoredContent,
+  regenerateReport,
   startReportGeneration
 } from '../ai/generate'
 import { readDocContent } from '../ai/doc-generate'
@@ -70,6 +73,7 @@ interface SubmissionRow {
   slots: string | null
   ai_status: string
   ai_report: string | null
+  ai_meta: string
   ai_error: string
   ai_attempts: number
   ai_started_at: string | null
@@ -261,6 +265,7 @@ publicRouter.get(
       if (req.query.poll !== '1') recordEvent(submission.invite_id, 'report_view')
       const storedDoc = readDocContent(submission.ai_report)
       if (submission.ai_status === 'ready' && storedDoc) {
+        const aiMeta = parseJson<{ search?: ReportSearchMeta }>(submission.ai_meta, {})
         const response: ReportResponse = {
           status: 'ready',
           report: buildDocReportWithAi({
@@ -271,9 +276,23 @@ publicRouter.get(
             createdAt: submission.created_at,
             claimed: Boolean(submission.claimed_at),
             content: storedDoc.content,
-            jobs: storedDoc.jobs
+            jobs: storedDoc.jobs,
+            search: storedDoc.search ?? aiMeta.search
           }),
           name
+        }
+        res.json(response)
+        return
+      }
+
+      if (submission.ai_status === 'failed') {
+        const error = submission.ai_error || 'AI 报告生成失败'
+        const response: ReportResponse = {
+          status: 'failed',
+          report: null,
+          name,
+          error,
+          retryable: isRetryableError(error)
         }
         res.json(response)
         return
@@ -290,7 +309,8 @@ publicRouter.get(
       const response: ReportResponse = {
         status: started || submission.ai_status === 'running' ? 'running' : 'pending',
         report: null,
-        name
+        name,
+        ...(submission.ai_error ? { notice: submission.ai_error } : {})
       }
       res.json(response)
       return
@@ -433,6 +453,38 @@ publicRouter.get(
       name
     }
     res.json(response)
+  }
+)
+
+publicRouter.post(
+  '/report/:slug/retry',
+  rateLimit('report-retry', 5, 60_000),
+  (req, res) => {
+    noStore(res)
+    const submission = findSubmissionBySlug(req.params.slug)
+    if (!submission) {
+      res.status(404).json({ error: '报告不存在' })
+      return
+    }
+    if (!isAiConfigured()) {
+      res.status(503).json({ error: 'AI 分析还没有配置，暂时无法重试' })
+      return
+    }
+    if (submission.ai_status === 'ready') {
+      res.status(409).json({ error: '报告已经生成，不需要重试' })
+      return
+    }
+    const survey = getSurvey(submission.survey_id) ?? getActiveSurvey()
+    if (survey.reportMode !== 'doc') {
+      res.status(409).json({ error: '这份报告不需要 AI 全文重试' })
+      return
+    }
+    if (!regenerateReport(submission.id)) {
+      res.status(404).json({ error: '报告不存在' })
+      return
+    }
+    recordEvent(submission.invite_id, 'ai_report_retry_manual')
+    res.json({ ok: true, status: 'pending' })
   }
 )
 

@@ -21,7 +21,12 @@ export async function searchWeb(
   query: string,
   options: SearchOptions = {}
 ): Promise<SearchResult[]> {
-  if (!config.bochaApiKey) return []
+  if (!config.bochaApiKey) {
+    throw new Error('未配置 BOCHA_API_KEY，无法检索')
+  }
+  if (!config.bochaBaseUrl) {
+    throw new Error('未配置 BOCHA_BASE_URL，无法检索')
+  }
 
   const response = await fetch(`${config.bochaBaseUrl.replace(/\/$/, '')}/web-search`, {
     method: 'POST',
@@ -68,7 +73,7 @@ export async function searchWeb(
   for (const item of items) {
     if (!item || typeof item !== 'object') continue
     const record = item as Record<string, unknown>
-    // 应届生求职网等站点的链接会把岗位标题/薪资放在 query 里，可能超过 600 字；
+    // 部分站点的链接会把标题/薪资放在 query 里，可能超过 600 字；
     // 截断会同时弄坏链接和字段，所以放宽到 2000。
     const url = clip(record.url, 2000)
     if (!/^https?:\/\//i.test(url)) continue

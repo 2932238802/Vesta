@@ -319,7 +319,8 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
       key: 'environment',
       label: '环境氛围',
       score: pick(optionIndex(survey, answers, 'q12'), ENVIRONMENT, 4),
-      note: '身边的人在做什么，对你是带动还是消耗'
+      note: '身边的人在做什么，对你是带动还是消耗',
+      source: 'Q12 环境氛围'
     }
   ]
 

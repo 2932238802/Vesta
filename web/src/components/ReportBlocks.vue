@@ -118,7 +118,8 @@
             <span class="asset-index">{{ String(i + 1).padStart(2, '0') }}</span>
             <div class="asset-body">
               <h3>{{ item.name }}</h3>
-              <p>{{ item.text }}</p>
+              <p v-if="item.text">{{ item.text }}</p>
+              <p v-if="item.source" class="asset-source">来源：{{ item.source }}</p>
             </div>
           </article>
         </div>
@@ -188,7 +189,31 @@
 
       <template v-else-if="block.type === 'sources'">
         <SectionHead :index="index" :title="block.title" :subtitle="block.subtitle" />
-        <ul class="source-list">
+
+        <div v-if="block.queries?.length" class="source-queries">
+          <p class="source-label">本次实际检索词</p>
+          <ul>
+            <li v-for="query in block.queries" :key="query">{{ query }}</li>
+          </ul>
+        </div>
+
+        <div v-if="block.error" class="source-error" role="status">
+          <p class="source-label">检索状态</p>
+          <p class="source-error-text">{{ block.error }}</p>
+          <p v-if="block.configured === false" class="source-error-hint">
+            这是服务端配置问题，不是报告内容判断。配置修复后可以重新生成。
+          </p>
+          <button
+            v-if="block.retryable"
+            class="source-retry"
+            type="button"
+            @click="emit('retry')"
+          >
+            重新检索并生成
+          </button>
+        </div>
+
+        <ul v-if="block.items.length" class="source-list">
           <li v-for="(item, i) in block.items" :key="item.url" class="source">
             <span class="source-index">{{ String(i + 1).padStart(2, '0') }}</span>
             <div class="source-body">
@@ -196,12 +221,19 @@
                 {{ item.title }}
               </a>
               <p v-if="item.usedFor" class="source-use">{{ item.usedFor }}</p>
-              <p class="source-site">
-                {{ item.site || item.url }}
-              </p>
+              <p v-if="item.site" class="source-site">{{ item.site }}</p>
             </div>
           </li>
         </ul>
+        <p v-else-if="!block.error && !block.queries?.length" class="source-empty">
+          本次没有调用外部检索，报告只依据问卷回答和系统计算。
+        </p>
+        <p v-else-if="!block.error" class="source-empty">
+          检索已执行，但没有返回可用的原文链接。
+        </p>
+        <p v-if="block.searchedAt" class="source-time">
+          检索时间：{{ block.searchedAt.replace('T', ' ').slice(0, 16) }}
+        </p>
       </template>
 
       <template v-else-if="block.type === 'note'">
@@ -286,7 +318,7 @@
             <a :href="job.url" target="_blank" rel="noopener noreferrer">{{ job.title }}</a>
             <p class="job-meta">
               {{ jobMeta(job) }}
-              <span v-if="isOldJob(job.date)" class="job-old">（信息较早，以原文为准）</span>
+              <span v-if="job.stale" class="job-old">（信息较早，以原文为准）</span>
             </p>
             <p v-if="job.usedFor" class="job-use">{{ job.usedFor }}</p>
             <div v-if="job.meets?.length || job.missing?.length" class="job-match">
@@ -313,18 +345,18 @@
           >
             <header class="direction-head">
               <h3>{{ direction.name }}</h3>
-              <span class="direction-salary">{{ direction.salary }}</span>
+              <span v-if="direction.salary" class="direction-salary">{{ direction.salary }}</span>
             </header>
-            <dl class="direction-facts">
-              <div>
+            <dl v-if="direction.what || direction.entry || direction.fit" class="direction-facts">
+              <div v-if="direction.what">
                 <dt>做什么</dt>
                 <dd>{{ direction.what }}</dd>
               </div>
-              <div>
+              <div v-if="direction.entry">
                 <dt>入场线</dt>
                 <dd>{{ direction.entry }}</dd>
               </div>
-              <div>
+              <div v-if="direction.fit">
                 <dt>和你</dt>
                 <dd>{{ direction.fit }}</dd>
               </div>
@@ -339,7 +371,7 @@
                 </a>
                 <p class="job-meta">
                   {{ jobMeta(job) }}
-                  <span v-if="isOldJob(job.date)" class="job-old">
+                  <span v-if="job.stale" class="job-old">
                     （信息较早，以原文为准）
                   </span>
                 </p>
@@ -372,7 +404,7 @@
               <a :href="job.url" target="_blank" rel="noopener noreferrer">{{ job.title }}</a>
               <p class="job-meta">
                 {{ jobMeta(job) }}
-                <span v-if="isOldJob(job.date)" class="job-old">
+                <span v-if="job.stale" class="job-old">
                   （信息较早，以原文为准）
                 </span>
               </p>
@@ -399,7 +431,7 @@
             <span class="roadmap-dot" aria-hidden="true" />
             <div class="roadmap-body">
               <header class="roadmap-head">
-                <h3>{{ phase.label }}</h3>
+                <h3 v-if="phase.label">{{ phase.label }}</h3>
                 <span class="roadmap-period">{{ phase.period }}</span>
               </header>
               <p class="roadmap-goal">主目标：{{ phase.goal }}</p>
@@ -413,7 +445,7 @@
       <template v-else-if="block.type === 'checklist'">
         <SectionHead :index="index" :title="block.title" :subtitle="block.subtitle" />
         <ul class="check-list">
-          <li v-for="item in block.items" :key="item.title" class="check-item">
+          <li v-for="item in block.items" :key="item.key" class="check-item">
             <span class="check-box" aria-hidden="true"></span>
             <div class="check-body">
               <p class="check-title">{{ item.title }}</p>
@@ -446,6 +478,7 @@ import SectionHead from './SectionHead.vue'
 import { formatDate } from '../format'
 
 const props = defineProps<{ payload: ReportPayload; claimLink?: boolean }>()
+const emit = defineEmits<{ retry: [] }>()
 
 function jobMeta(job: JobCard): string {
   const parts: string[] = []
@@ -454,13 +487,6 @@ function jobMeta(job: JobCard): string {
   if (job.salary) parts.push(job.salary)
   if (job.date) parts.push(`发布：${formatDate(job.date, false)}`)
   return parts.join(' · ')
-}
-
-function isOldJob(date?: string): boolean {
-  if (!date) return false
-  const time = Date.parse(date)
-  if (!Number.isFinite(time)) return false
-  return Date.now() - time > 18 * 30 * 24 * 60 * 60 * 1000
 }
 
 function hasDirectionJobs(directions: { jobs: JobCard[] }[]): boolean {
@@ -1661,6 +1687,581 @@ const dateText = computed(() => {
 
   .gap:hover {
     transform: none;
+  }
+}
+
+/* ---------- 阅读版式：同一套字号、间距和颜色 token ---------- */
+
+.report {
+  --report-gap: 64px;
+  --report-text: 15.5px;
+  --report-lead: 17px;
+  --report-label: 12px;
+  color: var(--ink);
+}
+
+.report-head {
+  padding-bottom: 26px;
+  border-bottom: 0;
+}
+
+.brand {
+  font-size: 12.5px;
+  letter-spacing: 0.24em;
+}
+
+.meta {
+  font-size: 12.5px;
+  letter-spacing: 0.03em;
+}
+
+.block {
+  padding: var(--report-gap) 0;
+  border-bottom: 0;
+}
+
+.block:last-child {
+  padding-bottom: 8px;
+}
+
+.block-hero {
+  padding-top: 40px;
+}
+
+.eyebrow {
+  font-size: var(--report-label);
+  letter-spacing: 0.14em;
+}
+
+.hero-title {
+  margin-top: 24px;
+  max-width: 22em;
+  font-size: clamp(30px, 4.6vw, 44px);
+  line-height: 1.42;
+}
+
+.hero-line {
+  margin-top: 22px;
+  max-width: 32em;
+  font-size: 15.5px;
+  line-height: 1.95;
+}
+
+.hero-claim {
+  min-height: 44px;
+  padding: 10px 16px;
+  font-size: 14px;
+}
+
+.target-note,
+.strength-text,
+.asset-body p,
+.direction-facts dd,
+.gap-step dd,
+.roadmap-goal,
+.check-detail,
+.potential p,
+.job-req,
+.lead {
+  font-size: var(--report-text);
+  line-height: 1.88;
+}
+
+.target-facts > div {
+  padding: 18px 18px 17px;
+  border: 0;
+  background: color-mix(in srgb, var(--accent) 3.5%, var(--surface));
+}
+
+.target-facts dt {
+  font-size: var(--report-label);
+}
+
+.target-facts dd {
+  margin-top: 8px;
+  font-size: 15.5px;
+}
+
+.target-goal {
+  font-size: 14.5px;
+  line-height: 1.85;
+}
+
+.target-list {
+  border: 0;
+  background: color-mix(in srgb, var(--accent) 2.8%, var(--surface));
+}
+
+.target-list h3 {
+  font-size: 15px;
+}
+
+.target-salary {
+  border: 0;
+  border-left: 3px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.target-salary p:last-child {
+  font-size: var(--report-text);
+}
+
+.strength,
+.asset,
+.direction,
+.roadmap-body,
+.potential,
+.note {
+  border: 0;
+  background: color-mix(in srgb, var(--accent) 3.2%, var(--surface));
+}
+
+.strength {
+  padding: 22px 24px;
+}
+
+.asset {
+  padding: 22px 24px;
+}
+
+.asset-body h3,
+.direction-head h3,
+.roadmap-head h3 {
+  font-size: 16.5px;
+  line-height: 1.45;
+}
+
+.asset-body p {
+  margin-top: 9px;
+}
+
+.asset-source {
+  margin-top: 8px !important;
+  font-size: 12.5px !important;
+  color: var(--ink-3) !important;
+}
+
+.direction {
+  padding: 26px 24px;
+}
+
+.direction-facts {
+  margin-top: 20px;
+  gap: 14px;
+}
+
+.direction-facts dt {
+  font-size: 12.5px;
+}
+
+.direction-salary {
+  font-size: 13px;
+  padding: 5px 10px;
+}
+
+.direction-mix {
+  font-size: 13.5px;
+}
+
+.gap-list {
+  gap: 20px;
+}
+
+.gap {
+  border: 0;
+  padding: 26px 24px;
+  background: color-mix(in srgb, var(--accent) 3.2%, var(--surface));
+  box-shadow: none;
+}
+
+.gap:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.gap-heading h3 {
+  font-size: 16px;
+}
+
+.gap-step dt {
+  font-size: var(--report-label);
+}
+
+.roadmap-body {
+  padding: 18px 20px;
+}
+
+.roadmap-head h3 {
+  font-size: 16px;
+}
+
+.roadmap-period {
+  font-size: 12.5px;
+}
+
+.roadmap-output {
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.check-item {
+  padding: 18px 20px;
+  border: 0;
+  background: color-mix(in srgb, var(--accent) 2.8%, var(--surface));
+}
+
+.check-title {
+  font-size: 15.5px;
+}
+
+.check-search {
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+.score-group h3 {
+  font-size: 13px;
+}
+
+.score-head {
+  font-size: 15px;
+}
+
+.score-note {
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+
+.score-benchmark {
+  font-size: 12.5px;
+}
+
+.potential {
+  padding: 20px 22px;
+}
+
+.potential-level {
+  font-size: 13px;
+}
+
+.gap-lines {
+  gap: 16px;
+}
+
+.gap-lines dt {
+  font-size: 13.5px;
+}
+
+.gap-lines dd {
+  font-size: 15px;
+}
+
+.job-caption {
+  font-size: 13.5px;
+}
+
+.job {
+  padding: 18px 20px;
+  border: 0;
+  background: color-mix(in srgb, var(--ink) 3%, var(--surface));
+}
+
+.job a {
+  display: inline-flex;
+  align-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 15.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.job p {
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+
+.job-match p {
+  font-size: 13.5px;
+}
+
+.job-match span {
+  font-size: 12px;
+}
+
+.closing {
+  font-size: 14.5px;
+}
+
+.prose {
+  gap: 20px;
+}
+
+.prose p {
+  font-size: var(--report-text);
+  line-height: 2;
+}
+
+.prose p.first {
+  font-size: var(--report-lead);
+  line-height: 1.9;
+}
+
+.note {
+  padding: 26px 28px;
+}
+
+.note-text {
+  font-size: var(--report-text);
+}
+
+.source-list {
+  gap: 4px;
+}
+
+.source {
+  padding: 14px 12px;
+  gap: 14px;
+}
+
+.source-title {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 15.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.source-use {
+  font-size: 13.5px;
+}
+
+.source-site {
+  font-size: 13px;
+}
+
+.source-queries {
+  margin-top: 22px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ink) 3%, var(--surface));
+}
+
+.source-label {
+  font-size: var(--report-label);
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
+.source-queries ul {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.source-queries li {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.source-error {
+  margin-top: 22px;
+  padding: 20px 22px;
+  border-radius: 14px;
+  background: color-mix(in srgb, #b1843c 7%, var(--surface));
+}
+
+.source-error-text {
+  margin-top: 8px;
+  font-size: 14.5px;
+  line-height: 1.8;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.source-error-hint {
+  margin-top: 8px;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--ink-3);
+}
+
+.source-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 16px;
+  padding: 0 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.source-retry:hover {
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+
+.source-empty {
+  margin-top: 18px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--ink-3);
+}
+
+.source-time {
+  margin-top: 18px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+@media (max-width: 720px) {
+  .report {
+    --report-gap: 48px;
+    --report-text: 15px;
+    --report-lead: 16.5px;
+  }
+
+  .report-head {
+    padding-bottom: 20px;
+  }
+
+  .hero-title {
+    margin-top: 18px;
+    font-size: 27px;
+    line-height: 1.5;
+  }
+
+  .hero-line {
+    font-size: 15px;
+  }
+
+  .block {
+    padding: 48px 0;
+  }
+
+  .block-hero {
+    padding-top: 26px;
+  }
+
+  .target-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .score-group-body {
+    grid-template-columns: 1fr;
+  }
+
+  .score-radar {
+    max-width: 280px;
+    margin: 0 auto;
+  }
+
+  .gap-list {
+    grid-template-columns: 1fr;
+  }
+
+  .strength,
+  .asset,
+  .direction,
+  .gap,
+  .note {
+    padding: 20px 18px;
+  }
+
+  .roadmap-body,
+  .check-item {
+    padding: 16px 16px;
+  }
+
+  .source {
+    padding: 12px 4px;
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .job {
+    padding: 16px 16px;
+  }
+
+  .job a,
+  .source-title {
+    font-size: 15px;
+  }
+
+  .source-queries,
+  .source-error {
+    padding: 16px 16px;
+  }
+
+  .source-queries li {
+    font-size: 14px;
+  }
+
+  .job p,
+  .job-match p,
+  .source-use,
+  .source-site,
+  .asset-source,
+  .score-note,
+  .roadmap-output,
+  .direction-mix,
+  .closing {
+    font-size: 14px;
+  }
+
+  .check-detail,
+  .roadmap-goal,
+  .direction-facts dd,
+  .gap-step dd,
+  .asset-body p,
+  .strength-text,
+  .target-note,
+  .potential p,
+  .prose p,
+  .source-error-text {
+    font-size: 15px;
+    line-height: 1.9;
+  }
+
+  .source-error-hint {
+    font-size: 14px;
+  }
+
+  .check-search {
+    font-size: 13.5px;
+  }
+
+  .direction-facts > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .gap-lines div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
+@media print {
+  .block {
+    padding: 34px 0;
+  }
+
+  .source-queries,
+  .source-error,
+  .source-retry {
+    display: none;
   }
 }
 </style>

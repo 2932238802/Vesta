@@ -307,7 +307,7 @@ export type ReportBlock =
       type: 'assets'
       title: string
       subtitle: string
-      items: { key: string; name: string; text: string }[]
+      items: { key: string; name: string; text: string; source?: string }[]
       note: string
     }
   | {
@@ -378,6 +378,15 @@ export type ReportBlock =
       title: string
       subtitle: string
       items: { title: string; url: string; site: string; usedFor: string }[]
+      /** 服务端实际发给检索服务的查询词 */
+      queries?: string[]
+      /** 检索失败/未配置时的真实原因 */
+      error?: string
+      /** 是否允许用户重试 */
+      retryable?: boolean
+      /** 检索时间与配置状态，便于核对 */
+      searchedAt?: string
+      configured?: boolean
     }
   | {
       type: 'note'
@@ -404,7 +413,7 @@ export type ReportBlock =
       type: 'checklist'
       title: string
       subtitle: string
-      items: { title: string; detail: string; search: string }[]
+      items: { key: string; title: string; detail: string; search: string }[]
       note: string
     }
   | {
@@ -440,12 +449,31 @@ export interface ReportPayload {
 
 export type AiReportStatus = 'pending' | 'running' | 'ready' | 'failed'
 
+export interface ReportSearchSource {
+  title: string
+  url: string
+  site: string
+  date?: string
+}
+
+export interface ReportSearchMeta {
+  configured: boolean
+  attempted: boolean
+  queries: string[]
+  error: string
+  resultCount: number
+  searchedAt: string
+  sources: ReportSearchSource[]
+}
+
 export interface ReportResponse {
   status: AiReportStatus
   report: ReportPayload | null
   name?: string
   error?: string
   notice?: string
+  /** 失败是否可以由用户点击重试（例如检索服务未配置或临时失败） */
+  retryable?: boolean
 }
 
 export interface ReportOverrides {

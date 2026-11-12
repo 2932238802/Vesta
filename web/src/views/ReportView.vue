@@ -11,8 +11,16 @@
         >
           {{ exporting ? '正在生成' : '保存图片' }}
         </button>
+        <button
+          v-if="payload"
+          class="btn quiet"
+          type="button"
+          :disabled="exportingPdf"
+          @click="savePdf"
+        >
+          {{ exportingPdf ? '正在生成 PDF' : '保存为 PDF' }}
+        </button>
         <button class="btn quiet" type="button" @click="copyLink">复制链接</button>
-        <button v-if="payload" class="btn quiet" type="button" @click="print">打印 / 保存</button>
       </div>
     </header>
 
@@ -24,6 +32,25 @@
       <p class="eyebrow">无法打开</p>
       <h1 class="serif">{{ error }}</h1>
       <RouterLink class="btn ghost" to="/">回到首页</RouterLink>
+    </main>
+
+    <main v-else-if="!payload && reportStatus === 'failed'" class="state analysis">
+      <p class="eyebrow">这次没有生成成功</p>
+      <h1 class="serif">报告暂时打不开</h1>
+      <p class="analysis-copy">{{ reportError || 'AI 报告生成失败，具体原因还没有返回。' }}</p>
+      <p v-if="!retryable" class="quiet small">
+        这是服务端配置或规则问题。把这段提示发给发链接的人，可以更快处理。
+      </p>
+      <button
+        v-if="retryable"
+        class="btn retry-btn"
+        type="button"
+        :disabled="retrying"
+        @click="retryReport"
+      >
+        {{ retrying ? '正在重新生成' : '重新生成报告' }}
+      </button>
+      <p v-if="retrying" class="quiet small">已经重新提交，页面会自动更新。</p>
     </main>
 
     <main v-else-if="!payload" class="state analysis">
@@ -43,7 +70,7 @@
     <main v-else class="wrap fade-in">
       <p v-if="reportNotice" class="notice report-notice">{{ reportNotice }}</p>
       <div ref="sheetEl" class="sheet">
-        <ReportBlocks :payload="payload" :claim-link="!claimed" />
+        <ReportBlocks :payload="payload" :claim-link="!claimed" @retry="retryReport" />
       </div>
 
       <section id="claim" class="claim-section">
@@ -154,6 +181,9 @@ const payload = ref<ReportPayload | null>(null)
 const loading = ref(true)
 const error = ref('')
 const reportNotice = ref('')
+const reportError = ref('')
+const retryable = ref(false)
+const retrying = ref(false)
 const slow = ref(false)
 const pollNote = ref('')
 const reportStatus = ref('')
@@ -168,6 +198,7 @@ const claimError = ref('')
 const toast = ref('')
 const sheetEl = ref<HTMLElement | null>(null)
 const exporting = ref(false)
+const exportingPdf = ref(false)
 const shot = ref('')
 
 let pollTimer: number | undefined
@@ -179,7 +210,7 @@ let pollFailures = 0
 const waitCopy = computed(() => {
   if (elapsed.value < 8) return '先读一遍你的回答，看看你现在在哪儿。'
   if (elapsed.value < 25) return '正在把你的情况和目标放在一起看。'
-  if (elapsed.value < 60) return '正在写结论，和接下来 30 天最该做的事。'
+  if (elapsed.value < 60) return '正在写结论，和接下来最该做的事。'
   return '还在写，内容有点多，再等一小会儿。'
 })
 
@@ -238,7 +269,14 @@ async function load(poll = false, preview = false) {
       stopElapsed()
     }
     error.value = ''
-    if (result.status === 'pending' || result.status === 'running') {
+    if (result.status === 'failed') {
+      reportError.value = result.error || 'AI 报告生成失败'
+      retryable.value = result.retryable !== false
+      reportNotice.value = result.report ? (result.notice ?? result.error ?? '') : ''
+      stopPolling()
+      stopElapsed()
+    } else if (result.status === 'pending' || result.status === 'running') {
+      reportError.value = ''
       startPolling()
     } else if (!payload.value) {
       // 没生成出来也别退回基础版：继续等着，后台会重试。
@@ -319,6 +357,25 @@ async function submitClaim() {
   }
 }
 
+async function retryReport() {
+  if (retrying.value) return
+  retrying.value = true
+  reportError.value = ''
+  pollNote.value = ''
+  try {
+    await api.retryReport(slug)
+    reportStatus.value = 'pending'
+    startElapsed()
+    startPolling()
+  } catch (err) {
+    reportError.value = err instanceof Error ? err.message : '重新提交失败，请稍后再试'
+    retryable.value = true
+    stopPolling()
+  } finally {
+    retrying.value = false
+  }
+}
+
 async function copyLink() {
   try {
     await navigator.clipboard.writeText(location.href)
@@ -334,8 +391,189 @@ async function copyLink() {
   }
 }
 
-function print() {
-  window.print()
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('报告图片读取失败'))
+    image.src = src
+  })
+}
+
+/** 在一行里找最接近白纸的位置，避免 PDF 翻页把文字从中间切开。 */
+function findCutRow(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  target: number,
+  min: number,
+  max: number
+): number {
+  const from = Math.max(min, Math.floor(target - 140))
+  const to = Math.min(max, Math.ceil(target + 140))
+  if (to <= from) return Math.max(min, Math.min(target, max))
+  const rows = to - from
+  const data = ctx.getImageData(0, from, width, rows).data
+  let best = Math.round(target)
+  let bestScore = Number.POSITIVE_INFINITY
+  for (let row = 0; row < rows; row += 1) {
+    let dark = 0
+    for (let x = 0; x < width; x += 3) {
+      const index = (row * width + x) * 4
+      if (data[index + 3] < 20) continue
+      const luminance =
+        0.299 * data[index] + 0.587 * data[index + 1] + 0.114 * data[index + 2]
+      if (luminance < 190) dark += 1
+    }
+    const y = from + row
+    const score = dark * 100000 + Math.abs(y - target)
+    if (score < bestScore) {
+      bestScore = score
+      best = y
+    }
+  }
+  return Math.max(min, Math.min(max, best))
+}
+
+function pageCuts(image: HTMLImageElement, slicePx: number): number[] {
+  const height = image.naturalHeight
+  const canvas = document.createElement('canvas')
+  canvas.width = image.naturalWidth
+  canvas.height = height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) {
+    const cuts = [0]
+    for (let y = slicePx; y < height; y += slicePx) cuts.push(y)
+    cuts.push(height)
+    return cuts
+  }
+  ctx.drawImage(image, 0, 0)
+  const cuts = [0]
+  let start = 0
+  while (height - start > slicePx * 1.02) {
+    const target = start + slicePx
+    const cut = findCutRow(
+      ctx,
+      image.naturalWidth,
+      target,
+      start + Math.floor(slicePx * 0.65),
+      Math.min(height, target + Math.floor(slicePx * 0.18))
+    )
+    cuts.push(cut)
+    start = cut
+  }
+  cuts.push(height)
+  return cuts
+}
+
+async function savePdf() {
+  if (!sheetEl.value || exportingPdf.value) return
+  exportingPdf.value = true
+  try {
+    if (document.fonts) await document.fonts.ready
+    const paper = payload.value?.theme.paper ?? '#f7f4ed'
+    const { jsPDF } = await import('jspdf')
+    const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait', compress: true })
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const margin = 36
+    const contentWidth = pageWidth - margin * 2
+    const contentHeight = pageHeight - margin * 2
+    const paint = () => {
+      doc.setFillColor(paper)
+      doc.rect(0, 0, pageWidth, pageHeight, 'F')
+    }
+    paint()
+    let y = margin
+
+    const nodes = Array.from(
+      sheetEl.value.querySelectorAll<HTMLElement>('.report > .report-head, .report > .block')
+    )
+    for (const node of nodes) {
+      const rect = node.getBoundingClientRect()
+      if (!rect.width || !rect.height) continue
+      // 目标约 300dpi；同时限制单张画布的边长和像素量，避免手机上生成长图时爆内存。
+      let pixelRatio = Math.min(6, Math.max(3, 2200 / rect.width))
+      const maxSide = 24000
+      const maxPixels = 24_000_000
+      pixelRatio = Math.min(pixelRatio, maxSide / rect.width, maxSide / rect.height)
+      const pixels = rect.width * rect.height * pixelRatio * pixelRatio
+      if (pixels > maxPixels) pixelRatio *= Math.sqrt(maxPixels / pixels)
+      const dataUrl = await toPng(node, {
+        pixelRatio,
+        backgroundColor: paper,
+        cacheBust: true,
+        style: { margin: '0', borderRadius: '0', boxShadow: 'none' }
+      })
+      const image = await loadImage(dataUrl)
+      let widthPt = contentWidth
+      let heightPt = (widthPt * image.naturalHeight) / image.naturalWidth
+
+      if (heightPt <= contentHeight * 1.12) {
+        if (heightPt > contentHeight) {
+          const fit = contentHeight / heightPt
+          widthPt *= fit
+          heightPt = contentHeight
+        }
+        if (y + heightPt > pageHeight - margin) {
+          doc.addPage()
+          paint()
+          y = margin
+        }
+        const x = margin + (contentWidth - widthPt) / 2
+        doc.addImage(dataUrl, 'PNG', x, y, widthPt, heightPt, undefined, 'FAST')
+        y += heightPt
+        continue
+      }
+
+      // 高过一页的区块：按图片里的空白行切片，避免把一行字从中间截断。
+      const scale = heightPt / image.naturalHeight
+      const cuts = pageCuts(image, Math.floor(contentHeight / scale))
+      if (y > margin + 1) {
+        doc.addPage()
+        paint()
+        y = margin
+      }
+      for (let index = 0; index < cuts.length - 1; index += 1) {
+        if (index > 0) {
+          doc.addPage()
+          paint()
+          y = margin
+        }
+        const start = cuts[index]
+        doc.addImage(
+          dataUrl,
+          'PNG',
+          margin,
+          y - start * scale,
+          contentWidth,
+          heightPt,
+          undefined,
+          'FAST'
+        )
+      }
+      const last = cuts[cuts.length - 2]
+      y = margin + (image.naturalHeight - last) * scale
+    }
+
+    const pages = doc.getNumberOfPages()
+    if (pages > 1) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor('#8a857c')
+      for (let index = 1; index <= pages; index += 1) {
+        doc.setPage(index)
+        doc.text(`Vesta · ${index} / ${pages}`, pageWidth / 2, pageHeight - 15, {
+          align: 'center'
+        })
+      }
+    }
+    doc.save(`vesta-report-${slug}.pdf`)
+  } catch (error) {
+    console.error('[report-pdf] 生成失败', error)
+    flash('生成 PDF 失败，可以改用“保存图片”')
+  } finally {
+    exportingPdf.value = false
+  }
 }
 
 async function saveImage() {
@@ -351,7 +589,7 @@ async function saveImage() {
     })
     shot.value = dataUrl
   } catch {
-    flash('生成图片失败，可以改用“打印 / 保存”')
+    flash('生成图片失败，可以改用“保存为 PDF”')
   } finally {
     exporting.value = false
   }
@@ -708,12 +946,246 @@ function flash(message: string) {
 @media print {
   .bar,
   .claim-section,
-  .report-foot {
+  .report-foot,
+  .toast,
+  .shot-mask {
     display: none;
   }
 
   .report-page {
     background: #fff;
+  }
+
+  .wrap {
+    padding: 0;
+    max-width: none;
+  }
+
+  .sheet {
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+}
+
+/* ---------- 报告页阅读宽度与移动端操作区 ---------- */
+
+.report-page {
+  overflow-x: hidden;
+}
+
+.bar {
+  max-width: 900px;
+  padding: 24px 32px 8px;
+}
+
+.actions {
+  gap: 8px;
+}
+
+.actions .btn,
+.actions .btn.quiet {
+  min-height: 44px;
+  height: 44px;
+  padding: 0 14px;
+  font-size: 14px;
+  border-radius: 10px;
+}
+
+.wrap {
+  max-width: 880px;
+  padding: 0 32px 80px;
+}
+
+.sheet {
+  border: 0;
+  border-radius: 22px;
+  padding: 56px 60px 40px;
+  box-shadow: 0 34px 90px -76px rgba(27, 26, 23, 0.45);
+}
+
+.report-notice {
+  margin-bottom: 24px;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.claim-section {
+  margin-top: 40px;
+}
+
+.claim-card {
+  border: 0;
+  border-radius: 22px;
+  padding: 40px 44px;
+  box-shadow: 0 30px 80px -72px rgba(27, 26, 23, 0.38);
+}
+
+.claim-card h2 {
+  font-size: 25px;
+}
+
+.desc {
+  font-size: 15px;
+  line-height: 1.9;
+}
+
+.free {
+  font-size: 13.5px;
+}
+
+.claim-form {
+  gap: 18px;
+}
+
+.claim-form .input {
+  min-height: 48px;
+}
+
+.claim-form .field span {
+  font-size: 13px;
+}
+
+.agree {
+  min-height: 44px;
+  align-items: center;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.agree input {
+  width: 18px;
+  height: 18px;
+  margin-top: 0;
+}
+
+.claim-error {
+  font-size: 14px;
+}
+
+.claimed p {
+  font-size: 14.5px;
+}
+
+.privacy {
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.report-foot {
+  padding-top: 52px;
+  font-size: 12.5px;
+}
+
+.state {
+  padding-top: 130px;
+  padding-bottom: 90px;
+}
+
+.analysis-copy {
+  font-size: 15px;
+  line-height: 1.9;
+}
+
+.retry-btn {
+  min-height: 48px;
+  margin-top: 28px;
+  padding: 0 24px;
+  font-size: 15px;
+}
+
+.state .quiet.small {
+  margin-top: 18px;
+  font-size: 13.5px;
+  line-height: 1.8;
+}
+
+@media (max-width: 720px) {
+  .bar {
+    max-width: none;
+    padding: 14px 14px 6px;
+  }
+
+  .actions {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .actions .btn,
+  .actions .btn.quiet {
+    min-height: 44px;
+    height: 44px;
+    padding: 0 11px;
+    font-size: 13.5px;
+  }
+
+  .wrap {
+    max-width: none;
+    padding: 0 10px 52px;
+  }
+
+  .sheet {
+    border-radius: 16px;
+    padding: 30px 20px 12px;
+  }
+
+  .claim-section {
+    margin-top: 26px;
+  }
+
+  .claim-card {
+    border-radius: 16px;
+    padding: 26px 20px;
+  }
+
+  .claim-card h2 {
+    font-size: 22px;
+  }
+
+  .desc,
+  .claim-form .field span,
+  .agree {
+    font-size: 14px;
+  }
+
+  .free,
+  .claimed p,
+  .claimed .claimed-meta,
+  .privacy {
+    font-size: 13px;
+  }
+
+  .report-foot {
+    padding-top: 38px;
+  }
+
+  .state {
+    padding: 90px 20px 70px;
+  }
+
+  .analysis {
+    padding-top: 90px;
+  }
+
+  .retry-btn {
+    width: 100%;
+  }
+}
+
+@media print {
+  .bar,
+  .claim-section,
+  .report-foot,
+  .toast,
+  .shot-mask {
+    display: none;
+  }
+
+  .report-page {
+    background: #fff;
+    overflow: visible;
   }
 
   .wrap {

@@ -15,7 +15,12 @@ export async function askDeepSeek(
   messages: Message[],
   options: AskDeepSeekOptions = {}
 ): Promise<string> {
-  if (!config.deepseekApiKey) throw new Error('未配置 DEEPSEEK_API_KEY')
+  if (!config.deepseekApiKey) {
+    throw new Error('未配置 AI_API_KEY（或 DEEPSEEK_API_KEY）')
+  }
+  if (!config.deepseekBaseUrl) {
+    throw new Error('未配置 AI_BASE_URL（或 DEEPSEEK_BASE_URL）')
+  }
 
   const response = await fetch(
     `${config.deepseekBaseUrl.replace(/\/$/, '')}/chat/completions`,

@@ -6,6 +6,7 @@ import { config } from './env'
 import { defaultSurvey } from '../../shared/src/survey'
 import { defaultTemplate } from '../../shared/src/template'
 import { defaultReportSkill } from '../../shared/src/ai'
+import { defaultDocReportSkill } from '../../shared/src/doc-skill'
 import type { ReportTemplate, Survey } from '../../shared/src/types'
 
 fs.mkdirSync(config.dataDir, { recursive: true })
@@ -854,6 +855,43 @@ export function getReportSkill(): string {
   return (
     templates.find((template) => template.id === activeId)?.skill.trim() || defaultReportSkill
   )
+}
+
+export interface ReportSkillSource {
+  id: string
+  name: string
+  skill: string
+  hash: string
+}
+
+function skillHash(skill: string): string {
+  return crypto.createHash('sha256').update(skill).digest('hex').slice(0, 16)
+}
+
+/**
+ * doc 模式报告的主 Skill 来源。
+ * 默认设置使用内置的模块化分析规则；自定义模板为空或找不到时明确报错，绝不回退到别的规则。
+ */
+export function getDocReportSkill(): ReportSkillSource {
+  const { templates, activeId } = getReportSkillState()
+  if (activeId === DEFAULT_REPORT_SKILL_ID) {
+    return {
+      id: DEFAULT_REPORT_SKILL_ID,
+      name: '默认设置',
+      skill: defaultDocReportSkill,
+      hash: skillHash(defaultDocReportSkill)
+    }
+  }
+
+  const template = templates.find((item) => item.id === activeId)
+  if (!template) {
+    throw new Error('当前启用的 AI 分析规则不存在，请到 /admin/skill 重新选择或新建模板')
+  }
+  const skill = template.skill.trim()
+  if (!skill) {
+    throw new Error('当前启用的 AI 分析规则为空，请到 /admin/skill 填写规则后再生成报告')
+  }
+  return { id: template.id, name: template.name, skill, hash: skillHash(skill) }
 }
 
 export function createReportSkillTemplate(name: string, skill: string): ReportSkillTemplate {

@@ -3,6 +3,7 @@ import { Router, raw } from 'express'
 import type { Request, Response } from 'express'
 import type { Answers, ReportOverrides, ReportTemplate, Survey } from '../../../shared/src/types'
 import { defaultReportSkill } from '../../../shared/src/ai'
+import { defaultDocReportSkill } from '../../../shared/src/doc-skill'
 import { isResumeMajor } from '../../../shared/src/resume'
 import type { ResumeImageSummary } from '../../../shared/src/resume'
 import { computeScores } from '../../../shared/src/scoring'
@@ -1322,8 +1323,10 @@ adminRouter.put('/template', (req, res) => {
 adminRouter.get('/skill', (req, res) => {
   noStore(res)
   const { templates, activeId } = getReportSkillState()
+  const survey = getActiveSurvey()
   res.json({
-    defaultSkill: defaultReportSkill,
+    defaultSkill: survey.reportMode === 'doc' ? defaultDocReportSkill : defaultReportSkill,
+    reportMode: survey.reportMode ?? 'score',
     templates,
     activeId,
     ai: {

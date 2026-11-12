@@ -65,11 +65,11 @@ const RETRY_DELAYS_MS = [5_000, 15_000, 30_000]
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 
 export function isAiConfigured(): boolean {
-  return Boolean(config.deepseekApiKey)
+  return Boolean(config.deepseekApiKey && config.deepseekBaseUrl)
 }
 
 export function isSearchConfigured(): boolean {
-  return Boolean(config.bochaApiKey)
+  return Boolean(config.bochaApiKey && config.bochaBaseUrl)
 }
 
 function getSubmission(id: string): SubmissionRow | undefined {
@@ -87,8 +87,12 @@ function errorMessage(error: unknown): string {
   return 'AI 生成失败'
 }
 
-function isRetryableError(message: string): boolean {
-  if (message.includes('未配置 DEEPSEEK_API_KEY')) return false
+export function isRetryableError(message: string): boolean {
+  // 审校、数字核对、模块完整性都是模型单次输出的问题，再生成一次有机会修好；
+  // 只有配置缺失/规则为空这类问题重试也没用。
+  if (/未配置|分析规则为空|分析规则不存在|没有可用的正文/.test(message)) {
+    return false
+  }
   return !/DeepSeek 请求失败（(400|401|402|403|404|422)/.test(message)
 }
 
@@ -501,17 +505,20 @@ async function generate(submissionId: string): Promise<void> {
 
     // 文档版问卷：整份报告交给 AI 写，按问卷答案 + 规则事实出结论。
     if (survey.reportMode === 'doc') {
-      const { content, meta, jobs } = await generateDocContent({
+      const { content, meta, jobs, search } = await generateDocContent({
         survey,
         answers,
-        name: invite?.name ?? ''
+        name: invite?.name ?? '',
+        slug: row.slug,
+        createdAt: row.created_at,
+        claimed: Boolean(row.claimed_at)
       })
       db.prepare(
         `UPDATE submissions
          SET ai_status = 'ready', ai_report = ?, ai_meta = ?, ai_error = '', ai_finished_at = ?
          WHERE id = ?`
       ).run(
-        JSON.stringify({ doc: true, content, jobs }),
+        JSON.stringify({ doc: true, content, jobs, search }),
         JSON.stringify(meta),
         now(),
         submissionId

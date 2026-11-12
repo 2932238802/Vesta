@@ -7,11 +7,18 @@ import type {
   QuestionOption,
   ReportBlock,
   ReportPayload,
+  ReportSearchMeta,
   Survey,
   Tier
 } from './types'
 import { computeDocScores, type DocScores } from './docScore'
 import { inferDirectionKey, jobDirections } from './job-map'
+import {
+  addCalendarMonths,
+  describeDistance,
+  isOlderThanMonths,
+  toCalendarDate
+} from './date'
 
 export interface ResolvedQuestion {
   visible: boolean
@@ -156,67 +163,6 @@ function index(survey: Survey, answers: Answers, id: string): number {
   return resolved ? resolved.options.findIndex((item) => item.id === option.id) : -1
 }
 
-function oneLine(survey: Survey, answers: Answers): string {
-  const direction = index(survey, answers, 'q11') // 0 清楚 … 3 完全不知道
-  const execution = index(survey, answers, 'q13') // 0 强 … 3 基本不定目标
-  const info = index(survey, answers, 'q16') // 0 清楚 … 3 完全不了解
-
-  if (direction <= 1 && info >= 2) return '你不是不努力，是不知道该往哪儿使劲。'
-  if (direction >= 2 && execution === 0) return '你不是懒，是没人告诉你该做什么。'
-  if (direction >= 2 && execution >= 2 && info >= 2) {
-    return '你现在的状态，是四年里最常见的开局，但它不改，到大三会动不了。'
-  }
-  if (info >= 2) return '你现在差的不是决心，是先把方向查清楚。'
-  return '你的方向比大多数同龄人都清楚，接下来是把信息差补上、把计划落地。'
-}
-
-function stuckLayer(survey: Survey, answers: Answers): { short: string; full: string } {
-  const words = labels(survey, answers, 'q21')
-  const forgetsWords = words.some(
-    (item) => item.includes('背了忘') || item.includes('基本不背')
-  )
-  const speaking = index(survey, answers, 'q22')
-  const weak = labels(survey, answers, 'q18')
-  const how = labels(survey, answers, 'q19')
-  const hours = index(survey, answers, 'q20') // 0 少于3小时
-  const execution = index(survey, answers, 'q13')
-
-  if (forgetsWords) {
-    return {
-      short: '词汇层',
-      full: '你现在最卡的是词汇。单词记不住，阅读和写作里会反复卡在生词上，考试里词汇量不够，后面几层都撑不起来。'
-    }
-  }
-  if (speaking === 0 && weak.some((item) => item.includes('听力'))) {
-    return {
-      short: '听力层',
-      full: '你现在最卡的是听力。信息一快就丢，而听力是四级里很多人最先崩的部分，也是你开不了口的直接原因。'
-    }
-  }
-  if (speaking === 0 || speaking === 1) {
-    return {
-      short: '开口层',
-      full: '你现在最卡的是开口。单词认识，但一张嘴就组织不起来，面试和口语环节最吃亏，也最影响别人对你的第一判断。'
-    }
-  }
-  if (hours === 0 && execution === 0) {
-    return {
-      short: '时间层',
-      full: '你缺的是时间。你有执行力，但一周能给英语的时间不到 3 小时，一忙起来英语就被放到最后。'
-    }
-  }
-  if (how.includes('几乎没学') || hours === 0) {
-    return {
-      short: '方法层',
-      full: '你现在最卡的是方法。不是不花时间，是没找到对的方法，刷题刷得多但提不上去，或者干脆不知道怎么开始。'
-    }
-  }
-  return {
-    short: '还没找到具体卡点',
-    full: '从你的回答看，你的状态比多数人都稳。下一步不是补短板，而是把目标对英语的具体要求查清楚，别让信息差耽误进度。'
-  }
-}
-
 function monthsUntil(monthOfYear: number): number {
   const now = new Date()
   const current = now.getFullYear() * 12 + now.getMonth()
@@ -247,6 +193,10 @@ export interface DeadlineFact {
   node: string
   windowText: string
   months: number
+  /** 粗粒度日历距离，例如「两年」「一年半」「5 个月」 */
+  distance: string
+  /** 目标日期，YYYY-MM-DD；无法计算时为空 */
+  targetDate: string
   text: string
 }
 
@@ -301,26 +251,22 @@ export function deadlineFact(survey: Survey, answers: Answers): DeadlineFact {
         ? '时间已经很紧，优先把能落地的先落地。'
         : '这一两年是你补信息差最便宜的时候。'
 
+  const now = new Date()
+  const target = addCalendarMonths(now, Math.max(0, months))
+  const targetDate = target
+    ? `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`
+    : ''
+  // 所有对外时间距离都走同一个日历函数；这里只负责把「第几个学年/月」换成目标日期。
+  const distance = target ? describeDistance(now, target) : `${months} 个月`
+
   return {
     node,
     windowText,
     months,
-    text: `你离 ${node}（${windowText}）还有大约 ${months} 个月。${tail}`
+    distance,
+    targetDate,
+    text: `你离 ${node}（${windowText}）还有约 ${distance}。${tail}`
   }
-}
-
-function deadlineText(survey: Survey, answers: Answers): string {
-  return deadlineFact(survey, answers).text
-}
-
-function futureText(survey: Survey, answers: Answers): string {
-  const future = text(answers, 'q26')
-  const city = label(survey, answers, 'q8')
-  const target = text(answers, 'q5a') || label(survey, answers, 'q2')
-  const pieces = [`五年后，你希望自己「${future}」。`, `你想到的城市是「${city}」。`]
-  if (target) pieces.push(`你眼下想往「${target}」这个方向走。`)
-  pieces.push('这条路现在还不清晰没关系，先把今天的每一步走实。')
-  return pieces.join('')
 }
 
 export function docPriority(survey: Survey, answers: Answers): 'A' | 'B' | 'C' {
@@ -382,41 +328,11 @@ export interface DocReportInput {
   claimed: boolean
 }
 
-export interface DocFacts {
-  priority: 'A' | 'B' | 'C'
-  oneLine: string
-  stuck: string
-  stuckDetail: string
-  deadline: string
-  future: string
-}
-
-/** 规则版报告用到的全部事实，也给 AI 当输入，避免两套口径不一致。 */
-export function docFacts(survey: Survey, answers: Answers): DocFacts {
-  const stuck = stuckLayer(survey, answers)
-  return {
-    priority: docPriority(survey, answers),
-    oneLine: oneLine(survey, answers),
-    stuck: stuck.short,
-    stuckDetail: stuck.full,
-    deadline: deadlineText(survey, answers),
-    future: futureText(survey, answers)
-  }
-}
-
 const WEEKLY_HOURS = [1.5, 5, 10.5, 17.5]
 
 function weeklyHours(survey: Survey, answers: Answers): number {
   const at = index(survey, answers, 'q20')
   return WEEKLY_HOURS[at] ?? 0
-}
-
-function salaryRange(city: string): string {
-  if (city === '北上广深') return '应届 6—10k（经验值，行业差异大）'
-  if (city.startsWith('新一线')) return '应届 5—8k（经验值）'
-  if (city === '家乡省会') return '应届 4—7k（经验值）'
-  if (city === '回家乡小城') return '应届 3—5k（经验值）'
-  return '还没有目标城市，先按你所在城市看'
 }
 
 /** 简历盘点：现在能写进简历的，不用等到“什么都准备好了”。 */
@@ -445,77 +361,51 @@ function resumeNow(survey: Survey, answers: Answers): string {
 function resumeMissing(survey: Survey, answers: Answers): string {
   const skills = labels(survey, answers, 'q10')
   const direction = label(survey, answers, 'q11')
+  const practice = label(survey, answers, 'q9')
   const gaps: string[] = []
   if (skills.some((item) => item.includes('还没培养出'))) gaps.push('一项能展示的技能')
   if (direction.includes('没落地')) gaps.push('一个落地的项目或作品')
-  gaps.push('一段相关实习')
+  if (!practice || /一段都没有|没有/.test(practice)) {
+    gaps.push('一段相关实习')
+  } else if (!/能写进简历/.test(practice)) {
+    gaps.push('一段能写进简历的相关实习')
+  }
   return [...new Set(gaps)].slice(0, 3).join('、')
 }
 
-/** 「你的底牌」：只从回答里列已经存在、能直接用的东西；不够就不凑。 */
-function assetsBlock(
-  survey: Survey,
-  answers: Answers,
-  scores: DocScores
-): ReportBlock | null {
-  const items: { key: string; name: string; text: string }[] = []
+/** 「你的底牌」：只把答卷里勾选过的经历、技能、支持原样列出来；不够就不凑。 */
+function assetsBlock(survey: Survey, answers: Answers): ReportBlock | null {
+  const items: { key: string; name: string; text: string; source?: string }[] = []
   const practice = label(survey, answers, 'q9')
-  const preparing = labels(survey, answers, 'q7')
+  const skills = labels(survey, answers, 'q10')
   const family = label(survey, answers, 'q15')
-  const info = label(survey, answers, 'q16')
-  const self = text(answers, 'q28')
-  const future = text(answers, 'q26')
 
-  if (practice && (practice.includes('兼职') || practice.includes('实习'))) {
+  if (practice && !/没有|没做过|无/.test(practice)) {
     items.push({
       key: 'practice',
-      name: '你做过一段兼职或实习',
-      text: `你写过「${practice}」。和专业无关也可以写进简历，按“在哪、做什么、怎么做的、结果是什么”写成条目，而不是只写“做过兼职”。`
+      name: practice,
+      source: 'Q9 实习实践',
+      text: ''
     })
   }
 
-  if (preparing.some((item) => item.includes('经济独立')) || future.includes('经济独立')) {
-    items.push({
-      key: 'independence',
-      name: '你已经把经济独立当成目标',
-      text: `你提到「${future || preparing.find((item) => item.includes('经济独立'))}」。它会直接影响你选城市、选岗位、接不接第一份实习；把它拆成“先覆盖一部分生活费”，第一步会具体。`
+  skills
+    .filter((item) => !/还没培养出|说不清/.test(item))
+    .forEach((item, index) => {
+      items.push({
+        key: `skill-${index}`,
+        name: item,
+        source: 'Q10 能力储备',
+        text: ''
+      })
     })
-  }
 
-  if (self) {
-    items.push({
-      key: 'self-awareness',
-      name: '你对自己有具体描述',
-      text: `你写的是「${self}」。把它分成两列：能改的（每天投入多少时间、要不要主动找实习）和暂时改不了的（性格底色、家庭条件）。计划只从能改的那列开始。`
-    })
-  }
-
-  if (info === '知道大概') {
-    items.push({
-      key: 'info',
-      name: '你不是完全不了解',
-      text: '你说自己对目标门槛“知道大概”。现在缺的不是从零了解，而是把“大概”变成 3 条具体公告、3 条岗位要求和 1 个时间点。'
-    })
-  }
-
-  if (family && (family.includes('一般') || family.includes('会想办法'))) {
+  if (family && !/完全|靠不上|帮不上|没有|基本靠自己/.test(family)) {
     items.push({
       key: 'family',
-      name: '家里能给你一个缓冲',
-      text: `你说家里「${family}」。这不是强托举，但意味着你不用在所有选择上只看“今天能不能赚到钱”，可以为接下来这段准备期留一点投入空间。`
-    })
-  }
-
-  const allScores = [...scores.background, ...scores.personal]
-    .filter((item) => !items.some((picked) => picked.key === item.key))
-    .sort((a, b) => b.score - a.score)
-  for (const item of allScores) {
-    if (items.length >= 3) break
-    if (item.score < 5) continue
-    items.push({
-      key: item.key,
-      name: `${item.label} ${item.score} 分`,
-      text: `这是你现有起点里分数较高的一项，可以先用它去换第一段经历，不代表已经够了。`
+      name: family,
+      source: 'Q15 家庭支持',
+      text: ''
     })
   }
 
@@ -525,8 +415,8 @@ function assetsBlock(
     type: 'assets',
     title: '你现在能用的东西',
     subtitle: '只列答卷里已经有的，不凑数',
-    items: items.slice(0, 3),
-    note: '这些不是评价，只是你下一步可以拿来用的起点。'
+    items: items.slice(0, 4),
+    note: ''
   }
 }
 
@@ -567,6 +457,20 @@ function salaryRangeNumbers(raw: string): { min: number; max: number } | null {
   return { min, max }
 }
 
+/** 专业名和招聘原文是否有共同的关键片段；用于「计算机相关专业」这类写法。 */
+function majorRelated(req: string, major: string): boolean {
+  const clean = major.replace(/专业$/, '').trim()
+  if (clean.length < 2) return false
+  if (req.includes(clean)) return true
+  if (req.includes(clean.slice(0, 2))) return true
+  if (clean.length >= 4) {
+    for (let index = 0; index < clean.length - 2; index += 1) {
+      if (req.includes(clean.slice(index, index + 3))) return true
+    }
+  }
+  return false
+}
+
 /**
  * 把招聘原文逐条对到填卷人的答卷上：
  * 已经符合的写「你符合」，还差什么写「你还缺」，不替学生判断“能不能录用”。
@@ -597,10 +501,9 @@ function jobMatch(
   const skills = labels(survey, answers, 'q10')
   const english = label(survey, answers, 'q17')
   const expectation = label(survey, answers, 'q27')
-  const postedAt = job.date ? new Date(job.date).getTime() : Number.NaN
+  const postedAt = job.date ? toCalendarDate(job.date) : null
   // 超过约 18 个月的公告只能对照要求结构，不能当作“你现在符合”。
-  const stale =
-    Number.isFinite(postedAt) && Date.now() - postedAt > 18 * 30 * 24 * 3600 * 1000
+  const stale = Boolean(job.date && isOlderThanMonths(job.date, 18))
 
   // 学历/院校层次：原文点名 985/211/双一流 时，不能只按“本科”算符合。
   const eliteRequired = /985|211|双一流|重点院校|知名院校/.test(req)
@@ -669,6 +572,8 @@ function jobMatch(
       meets.push(`专业：岗位要国际贸易/外贸相关，你的${major}对口`)
     } else if (broadAligned) {
       meets.push(`专业：岗位要${field}相关，你的${major}在相关范围内`)
+    } else if (majorRelated(req, major)) {
+      meets.push(`专业：原文写的是相关专业范围，你的${major}属于相关方向，投递前再确认具体专业目录`)
     } else {
       missing.push(`专业：原文写了专业范围，${major}不在列出的方向里，投递时确认是否接受相近专业`)
     }
@@ -777,7 +682,7 @@ function jobMatch(
 
   if (stale) {
     missing.unshift(
-      `时效：这是 ${new Date(postedAt).getFullYear()} 年的公告，只用来看要求结构，不要当现在的投递入口`
+      `时效：这是 ${postedAt?.year ?? ''} 年的公告，只用来看要求结构，不要当现在的投递入口`
     )
   }
 
@@ -790,9 +695,7 @@ function withJobMatch(
   job: JobCard,
   directionName?: string
 ): JobCard {
-  const posted = job.date ? new Date(job.date).getTime() : Number.NaN
-  const stale =
-    Number.isFinite(posted) && Date.now() - posted > 18 * 30 * 24 * 3600 * 1000
+  const stale = Boolean(job.date && isOlderThanMonths(job.date, 18))
   return {
     ...job,
     usedFor: job.usedFor || usedForJob(job, directionName),
@@ -857,162 +760,91 @@ function jobMapBlock(
   if (!directions.length) return null
 
   const assigned = new Set<string>()
-  const grouped = directions.map((direction) => {
-    const matchedAll = jobs.filter((job) => {
-      const key =
-        job.directionKey || inferDirectionKey(`${job.title} ${job.requirement}`, directions)
-      return key === direction.key
+  const grouped = directions
+    .map((direction) => {
+      const matchedAll = jobs.filter((job) => {
+        const key =
+          job.directionKey || inferDirectionKey(`${job.title} ${job.requirement}`, directions)
+        // 只有一个兜底方向时，没打上方向标签的招聘原文也归到它下面。
+        return key === direction.key || (!job.directionKey && directions.length === 1)
+      })
+      const facts = directionFacts(matchedAll)
+      const matched = matchedAll
+        .slice(0, 2)
+        .map((job) => withJobMatch(survey, answers, job, direction.name))
+      matched.forEach((job) => assigned.add(job.url))
+      return { ...direction, facts, jobs: matched }
     })
-    const facts = directionFacts(matchedAll)
-    const matched = matchedAll
-      .slice(0, 2)
-      .map((job) => withJobMatch(survey, answers, job, direction.name))
-    matched.forEach((job) => assigned.add(job.url))
-    return { ...direction, facts, jobs: matched }
-  })
+    .filter((direction) => direction.jobs.length > 0)
 
   const relatedJobs = jobs
     .filter((job) => !assigned.has(job.url))
     .slice(0, 3)
     .map((job) => withJobMatch(survey, answers, job))
 
-  const cityLabel = label(survey, answers, 'q8')
-  const city = cityLabel.includes('还没想好') ? '' : cityLabel.replace(/（.*?）/g, '')
-  const self = text(answers, 'q28')
-  const future = text(answers, 'q26')
-  const personal: string[] = []
-  if (self) personal.push(`你自评「${self}」`)
-  if (future) personal.push(`希望五年后「${future}」`)
-
-  const cityNote = city
-    ? `你选的城市是「${city}」，这些方向的岗位密度和薪资会受城市影响。`
-    : '你还没定城市：先用行业密度、生活成本、离家距离三项打分，最晚第 3 个月定一个主城市和一个备选。'
-  const personalNote = personal.length
-    ? ` ${personal.join('，')}。选方向时把这两条当筛选条件：先排除明确不想做的，再看起薪能不能覆盖生活。`
-    : ''
+  // 没有招聘原文支撑时，不靠专业名称凭空编方向。
+  if (!grouped.length && !relatedJobs.length) return null
 
   return {
     type: 'jobmap',
     title: '你能去的几个方向',
     subtitle: '先看方向，再看门槛；经验值区间和招聘原文一起看，具体以原文为准',
-    directions: grouped.map(({ key, name, what, entry, salary, fit, facts, jobs: directionJobs }) => ({
+    directions: grouped.map(({ key, name, facts, jobs: directionJobs }) => ({
       key,
       name,
-      what,
-      entry,
-      salary,
-      fit,
+      what: '',
+      entry: '',
+      salary: '',
+      fit: '',
       facts,
       jobs: directionJobs
     })),
     relatedJobs,
-    note: `${cityNote}${personalNote} 方向不是替你做决定，点开原文核对。`
+    note: ''
   }
 }
 
-/** 22 个月路线图：只排阶段主目标，不排满每一天。 */
+/** 路线图只排阶段时间窗，阶段名、主目标和验证产出由 AI 依据回答写。 */
 function roadmapBlock(survey: Survey, answers: Answers, scores: DocScores): ReportBlock {
   const node = deadlineFact(survey, answers)
   const months = Math.max(1, node.months)
   const weekly = scores.english.weeklyHours
-  const estimate = weekly > 0 ? weekly : 3
-  const total = Math.round(months * 4.33 * estimate)
+  const total = weekly > 0 ? Math.round(months * 4.33 * weekly) : 0
   const hoursLine =
     weekly > 0
-      ? `到${node.node}还有约 ${months} 个月；按每周约 ${weekly} 小时的英语投入算，到秋招约 ${total} 小时（只算英语）`
-      : `到${node.node}还有约 ${months} 个月；先按每周 3 小时的英语投入估，约 ${total} 小时（只算英语）`
+      ? `到${node.node}还有约 ${node.distance}；按每周约 ${weekly} 小时的英语投入算，约 ${total} 小时（只算英语）`
+      : `到${node.node}还有约 ${node.distance}；这次没有每周英语投入的数据，先不估算总时长`
 
+  const phase = (key: string, period: string) => ({ key, label: '', period, goal: '', output: '' })
   const phases =
     months >= 18
       ? [
-          {
-            key: 'direction',
-            label: '先定方向',
-            period: '现在—第 3 个月',
-            goal: '把列出的方向缩到 1 个',
-            output: '3 条岗位要求 + 1 份简历初稿'
-          },
-          {
-            key: 'practice',
-            label: '补第一段经历',
-            period: '第 4—9 个月',
-            goal: '拿到 1 段相关实习或实践',
-            output: '实习证明或项目复盘'
-          },
-          {
-            key: 'skill',
-            label: '补硬技能',
-            period: `第 10—${months - 6} 个月`,
-            goal: '补 1 项岗位需要的技能 + 四级',
-            output: '证书、作品或成绩'
-          },
-          {
-            key: 'sprint',
-            label: '秋招冲刺',
-            period: '最后 6 个月',
-            goal: '投递 + 面试',
-            output: '30 份投递记录 + 10 次面试复盘'
-          }
+          phase('direction', '现在—第 3 个月'),
+          phase('practice', '第 4—9 个月'),
+          phase('skill', `第 10—${months - 6} 个月`),
+          phase('sprint', '最后 6 个月')
         ]
       : months >= 9
         ? [
-            {
-              key: 'direction',
-              label: '先定方向',
-              period: '现在—第 3 个月',
-              goal: '把方向缩到 1 个',
-              output: '3 条岗位要求 + 1 份简历初稿'
-            },
-            {
-              key: 'practice',
-              label: '补一段经历',
-              period: '第 4—9 个月',
-              goal: '拿到 1 段相关实习或实践',
-              output: '实习证明或项目复盘'
-            },
-            {
-              key: 'sprint',
-              label: '冲刺',
-              period: `第 10—${months} 个月`,
-              goal: '投递 + 面试',
-              output: '投递记录 + 面试复盘'
-            }
+            phase('direction', '现在—第 3 个月'),
+            phase('practice', '第 4—9 个月'),
+            phase('sprint', `第 10—${months} 个月`)
           ]
         : [
-            {
-              key: 'direction',
-              label: '先定方向',
-              period: `现在—第 ${Math.max(1, Math.round(months / 3))} 个月`,
-              goal: '把方向缩到 1 个',
-              output: '3 条岗位要求'
-            },
-            {
-              key: 'practice',
-              label: '补一段经历',
-              period: `第 ${Math.max(1, Math.round(months / 3)) + 1}—${Math.max(2, Math.round((months * 2) / 3))} 个月`,
-              goal: '拿到 1 段相关实习或实践',
-              output: '实习证明或项目复盘'
-            },
-            {
-              key: 'sprint',
-              label: '冲刺',
-              period: `最后 ${Math.max(1, Math.round(months / 3))} 个月`,
-              goal: '投递 + 面试',
-              output: '投递记录 + 面试复盘'
-            }
+            phase('direction', `现在—第 ${Math.max(1, Math.round(months / 3))} 个月`),
+            phase(
+              'practice',
+              `第 ${Math.max(1, Math.round(months / 3)) + 1}—${Math.max(2, Math.round((months * 2) / 3))} 个月`
+            ),
+            phase('sprint', `最后 ${Math.max(1, Math.round(months / 3))} 个月`)
           ]
-
-  const future = text(answers, 'q26')
-  const moneyNote = future.includes('经济独立')
-    ? ' 你说要经济独立，第一段实习或兼职不用一开始就追求高薪，先追求能覆盖一部分生活费。'
-    : ''
 
   return {
     type: 'roadmap',
-    title: `${months} 个月怎么走`,
+    title: `${node.distance}怎么走`,
     subtitle: hoursLine,
     phases,
-    note: `每个阶段只推一个主目标；每周日 10 分钟复盘：写下周 3 件事，每件控制在 2 小时内，做完打勾。连续 3 周完成 2 件以上，再谈加量。${moneyNote}`
+    note: ''
   }
 }
 
@@ -1025,33 +857,22 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
 
   const lines: { label: string; value: string }[] = [
     { label: '你的第一选择', value: first || '还没确定' },
-    { label: '关键时间窗', value: `${node.node}：${node.windowText}，还剩约 ${node.months} 个月` }
+    { label: '关键时间窗', value: `${node.node}：${node.windowText}，还有约 ${node.distance}` }
   ]
 
   if (first === '就业') {
     lines.push({ label: '目标城市', value: city || '还没想好' })
     lines.push({ label: '目标岗位', value: role || '还没写清楚' })
     if (!role && major) lines.push({ label: '你的专业', value: major })
-    lines.push({ label: '现在能写进简历的', value: resumeNow(survey, answers) })
-    lines.push({ label: '还缺的', value: resumeMissing(survey, answers) })
-    lines.push({ label: '应届薪资区间（经验值）', value: salaryRange(city) })
+    const nowText = resumeNow(survey, answers)
+    const missingText = resumeMissing(survey, answers)
+    if (nowText) lines.push({ label: '现在能写进简历的', value: nowText })
+    if (missingText) lines.push({ label: '还缺的', value: missingText })
     const expected = label(survey, answers, 'q27')
     if (expected) lines.push({ label: '你写的期望月薪', value: expected })
-    const directionKeys = jobDirections(major).map((direction) => direction.key)
-    const techDirections = directionKeys.some((key) =>
-      ['backend', 'frontend', 'test', 'data'].includes(key)
-    )
-    const tradeDirections = directionKeys.some((key) =>
-      ['trade', 'ecommerce', 'banking'].includes(key)
-    )
-    const entryHint = techDirections
-      ? '技术岗更看项目和实习，英语以具体岗位为准'
-      : tradeDirections
-        ? '外贸业务员和银行国际业务岗多数写明四级，跨境电商/单证岗多写英语读写'
-        : '相关实习和岗位要求的技能优先，英语以具体岗位为准'
     lines.push({
-      label: '入场线（经验值）',
-      value: `本科 + 相关实习 1 段；${entryHint}`
+      label: '入场线',
+      value: '具体学历、专业、英语和实习要求，以检索到的招聘原文或目标单位最新公告为准'
     })
     if (city.includes('还没想好')) {
       lines.push({
@@ -1061,23 +882,23 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
     }
     const family = label(survey, answers, 'q15')
     if (family) {
-      lines.push({
-        label: '经济约束',
-        value: `${family}；异地实习或租房先按每月生活费算一笔账，别等 offer 下来才发现撑不住。`
-      })
+      lines.push({ label: '经济约束', value: family })
     }
   } else if (first === '考研') {
     lines.push({ label: '目标专业', value: major || '还没填' })
-    lines.push({ label: '入场线（经验值）', value: '过国家线 + 目标院校线；英语单科线 45 分左右，好学校更高' })
+    lines.push({ label: '入场线', value: '分数线、单科线和复试要求，以目标院校研究生院最新公告为准' })
   } else if (first === '保研') {
-    lines.push({ label: '入场线（经验值）', value: '专业排名前 10%—15%；六级 500 以上更稳；竞赛科研是加分项' })
+    lines.push({ label: '入场线', value: '推免比例、排名和英语要求，以目标院校推免办法和夏令营通知为准' })
   } else if (first === '考公' || first === '考编') {
     lines.push({
-      label: '入场线（经验值）',
-      value: first === '考公' ? '岗位表 + 专业限制 + 行测申论笔试；报名窗口很短' : '教师资格或岗位要求 + 笔试面试；各地公告不同'
+      label: '入场线',
+      value:
+        first === '考公'
+          ? '岗位表、专业限制和笔试科目，以本省人事考试网或国家公务员局最新公告为准'
+          : '教师资格和岗位要求，以目标单位及本省最新招聘公告为准'
     })
   } else if (first === '出国') {
-    lines.push({ label: '入场线（经验值）', value: '语言成绩（雅思 6.5 左右）+ 在校成绩 + 申请材料' })
+    lines.push({ label: '入场线', value: '语言成绩、GPA 和申请材料，以目标院校官网最新要求为准' })
   } else {
     lines.push({ label: '下一步', value: '先把第一选择定下来，后面所有门槛才谈得上对照' })
   }
@@ -1118,7 +939,8 @@ function scorecardBlock(survey: Survey, answers: Answers): ReportBlock {
     subtitle: '0—10 分，按你的回答算出来，不是感觉',
     background: scores.background,
     personal: scores.personal,
-    potential: scores.potential
+    // 分值是系统算的；怎么解释这个空间由 AI 依据本次回答写，不用规则文案兜底。
+    potential: { ...scores.potential, text: '' }
   }
 }
 
@@ -1128,248 +950,40 @@ function gapBlock(survey: Survey, answers: Answers, jobs: JobCard[] = []): Repor
     title: '和目标之间还差多少',
     subtitle: '门槛是经验值区间，以目标单位最新公告或招聘原文为准',
     lines: gapLines(survey, answers),
-    note: '这一屏不预测结果，只把「现在的位置」和「这条路的入场线」摆在一起。',
+    note: '',
     jobs: jobs.slice(0, 3).map((job) => withJobMatch(survey, answers, job))
   }
 }
 
-/** 把「门槛是经验值」落到三个能自己查的官方来源上，报告只指路，不替公告下结论。 */
+/** 核对清单只给检索词和固定 key；具体查什么、怎么查由 AI 依据回答写。 */
 function checklistBlock(survey: Survey, answers: Answers): ReportBlock {
   const first = label(survey, answers, 'q6')
-  const preparing = labels(survey, answers, 'q7')
   const cityLabel = label(survey, answers, 'q8').replace(/（.*?）/g, '')
   const city = cityLabel.includes('还没想好') ? '' : cityLabel
   const role = text(answers, 'q5a') || text(answers, 'q2')
-  const major = text(answers, 'q2')
   const place = city ? `${city} ` : ''
-  const job = role || major || '目标岗位'
-
-  let path = first
-  if ((!path || path === '还没确定') && preparing.some((item) => item.includes('专升本'))) {
-    path = '专升本'
-  }
-
-  const items: { title: string; detail: string; search: string }[] = []
-
-  if (path === '考研') {
-    items.push(
-      {
-        title: '目标院校研究生院官网',
-        detail: '招生简章、专业目录、近三年复试线和英语单科线',
-        search: `${major || '本专业'} 考研 目标院校 招生简章`
-      },
-      {
-        title: '中国研究生招生信息网（研招网）',
-        detail: '专业目录、考试科目、报名和确认时间',
-        search: '研招网 硕士专业目录'
-      },
-      {
-        title: '目标院校学院官网',
-        detail: '复试细则、面试是否含英文环节、是否接受跨专业',
-        search: `${major || '本专业'} 考研 复试细则`
-      }
-    )
-  } else if (path === '保研') {
-    items.push(
-      {
-        title: '目标院校研究生院官网',
-        detail: '推免办法、夏令营通知、英语和科研要求',
-        search: '目标院校 推免 夏令营 通知'
-      },
-      {
-        title: '本科学院教务或学工办',
-        detail: '保研细则、排名怎么算、竞赛科研加多少分',
-        search: '本校 保研细则 排名 加分'
-      },
-      {
-        title: '目标院校学院官网',
-        detail: '夏令营入营条件、面试形式、是否需要英文自我介绍',
-        search: '目标院校 学院 夏令营 入营条件'
-      }
-    )
-  } else if (path === '考公' || path === '考编') {
-    items.push(
-      {
-        title: '本省人事考试网 / 人社局官网',
-        detail: '岗位表、专业目录、报名时间、笔试科目',
-        search: `${path === '考公' ? '省考' : '事业单位'} 公告 岗位表 专业目录`
-      },
-      {
-        title: '目标单位官网',
-        detail: '招聘公告、专业限制、英语或资格证要求',
-        search: `${major || '本专业'} ${path === '考编' ? '教师招聘' : '公务员'} 专业要求`
-      },
-      {
-        title: '国家公务员局（仅国考）',
-        detail: '国考公告、职位表、报名和考试时间',
-        search: '国家公务员局 国考 职位表'
-      }
-    )
-  } else if (path === '出国') {
-    items.push(
-      {
-        title: '目标院校官网 Admissions 页面',
-        detail: '语言成绩、GPA、申请材料、截止日期',
-        search: '目标院校 官网 admission requirements'
-      },
-      {
-        title: '语言考试官网',
-        detail: '雅思或托福的分数要求、考试时间和送分方式',
-        search: '雅思 托福 官方 分数要求'
-      },
-      {
-        title: '学校国际处 / 留学基金委',
-        detail: '交换项目、公派项目、学分认定和资助条件',
-        search: '学校国际处 交换项目 留学基金委'
-      }
-    )
-  } else if (path.includes('升本')) {
-    items.push(
-      {
-        title: '本省教育考试院官网',
-        detail: '专升本考试科目、英语分值、报名和考试时间',
-        search: '本省 教育考试院 专升本 考试科目'
-      },
-      {
-        title: '目标本科院校招生网',
-        detail: '招生简章、专业对照表、近三年录取分数线',
-        search: '目标本科院校 专升本 招生简章 分数线'
-      },
-      {
-        title: '专科学校教务处',
-        detail: '报名资格、挂科和处分限制、推荐流程',
-        search: '专科学校 专升本 报名资格'
-      }
-    )
-  } else if (path === '就业') {
-    items.push(
-      {
-        title: '目标岗位的招聘原文',
-        detail: '学历、专业、英语、实习和证书要求',
-        search: `${place}${job} 招聘 应届 要求`
-      },
-      {
-        title: '学校就业信息网 / 校招公告',
-        detail: '来校招聘的单位、往届去向、宣讲会时间',
-        search: '学校就业信息网 校园招聘 宣讲会'
-      },
-      {
-        title: '目标行业资格证官网',
-        detail: '入行需不需要资格证、报名条件和考试时间',
-        search: `${job} 资格证 报考条件`
-      }
-    )
-  } else {
-    items.push(
-      {
-        title: '本省教育考试院官网',
-        detail: '升学、考编、专升本等考试的科目、报名时间和英语要求',
-        search: '本省 教育考试院 考试公告'
-      },
-      {
-        title: '目标单位或院校官网',
-        detail: '招生简章、招聘公告里的专业和英语要求',
-        search: `${place}${job} 官网 招生 招聘`
-      },
-      {
-        title: '学校就业信息网 / 教务处',
-        detail: '校招、实习、升学项目的官方通知',
-        search: '学校就业信息网 教务处 通知'
-      }
-    )
-  }
+  const target = role || '目标岗位'
+  const path = first && first !== '还没确定' ? first : '方向'
 
   return {
     type: 'checklist',
     title: '你可以自己核对的三件事',
-    subtitle: '报告里的门槛是经验值，真正的答案在官方原文里',
-    items,
-    note: '这三件事都能自己查。查完如果和报告不一致，以公告原文为准——报告只是帮你把该查的列出来，不替你做结论。'
+    subtitle: '报告里的判断要能回到原文；下面三条是检索入口，不是结论',
+    items: [
+      { key: 'check-requirements', title: '', detail: '', search: `${place}${target} ${path} 要求 公告` },
+      { key: 'check-deadline', title: '', detail: '', search: `${place}${target} ${path} 报名 时间` },
+      { key: 'check-source', title: '', detail: '', search: `${place}${target} ${path} 官方 原文` }
+    ],
+    note: ''
   }
 }
 
-function englishPlan(stuck: string): string {
-  switch (stuck) {
-    case '词汇层':
-      return '这 30 天只做一件事：每天 20 分钟复习前一天记不住的词，新的往后放；周末把一张纸重过一遍，30 天后压到 100 个以内。'
-    case '听力层':
-      return '这 30 天只做一件事：每天 10 分钟精听一句，跟读 3 遍；周末回听本周句子，能复述大意再换下一句。'
-    case '开口层':
-      return '这 30 天只做一件事：每周 2 次，每次 5 分钟，录音说一段自我介绍或岗位回答；回听时只改一个最卡的地方。'
-    case '时间层':
-      return '这 30 天只做一件事：把英语放进固定时段（如早课前 20 分钟），先保证每周 3 次，再谈加量。'
-    case '方法层':
-      return '这 30 天只做一件事：固定一套材料（真题或课程），每天 30 分钟，每周记一次正确率，不看总量只看有没有往上走。'
-    default:
-      return '这 30 天只做一件事：把英语放进固定时段，每天 20—30 分钟，每周记一次数字。'
-  }
-}
-
-function englishSection(survey: Survey, answers: Answers): ReportBlock {
-  const scores = computeDocScores(survey, answers)
-  const english = scores.english
-  const importance = typeof answers.q24 === 'number' ? answers.q24 : 0
-  const stuck = stuckLayer(survey, answers)
-
-  const position = english.stage
-    ? `你现在是「${english.stage}」。`
-    : '你这部分还没答，先按你勾的英语准备状态看。'
-
-  const target = label(survey, answers, 'q6') || '还在准备的方向'
-  const jobEnglish =
-    target === '就业' &&
-    jobDirections(text(answers, 'q2')).some((direction) => direction.key !== 'related')
-      ? '你上面列出的就业方向里，外贸、跨境电商和银行类岗位通常要求英语读写，部分写四级；'
-      : ''
-  const preparingCopy = english.stage.includes('更高等级')
-    ? '但你自己正在准备更高等级的英语考试'
-    : english.stage.includes('四级') || english.stage.includes('六级')
-      ? '但你自己正在准备四级/六级'
-      : `但你给英语的重要性打了 ${importance} 分`
-  const gapParts: string[] = []
-  if (english.pathNeeds && importance < 6) {
-    gapParts.push(
-      `你给英语打了 ${importance} 分，但你的目标（${target}）对英语有明确门槛：考研要考英语一/二、保研夏令营常是全英文面试、考编和专升本也普遍考英语。这个分数和你的目标之间有一条对不上的缝——不是英语不重要，是你还没看到它在这条路上具体卡在哪。`
-    )
-  } else if (english.pathNeeds) {
-    gapParts.push(
-      '这条路对英语有明确门槛，你现在的位置离它还差一截：先补最卡的那一层，不要平均用力。'
-    )
-  } else if (english.preparing) {
-    gapParts.push(
-      `${jobEnglish}具体以目标单位最新公告为准；${preparingCopy}。英语现在不是「够用就行」的加分项，而是你已经投入时间、需要看到结果的一项。`
-    )
-  } else {
-    gapParts.push(
-      `${jobEnglish}具体要不要、要到什么程度，以目标院校或单位的最新公告为准。别把阅读和表达完全放下。`
-    )
-  }
-
-  const plan = englishPlan(stuck.short)
-
-  const skipped = english.skippedDetail
-    ? '（你给英语的重要度低于 6 分，后面 5 道细节题按规则跳过了，不是你没答。）'
-    : ''
-
-  // 英语不是主线时只留一句，但不做「没有门槛、够用就行」的绝对判断。
-  if (!english.need) {
-    return {
-      type: 'section',
-      title: '英语这块',
-      paragraphs: [
-        position +
-          skipped +
-          (jobEnglish
-            ? `${jobEnglish}具体以目标单位最新公告为准。`
-            : '按你填的方向，暂时看不出英语的硬性门槛；具体要不要、要到什么程度，以目标院校或单位的最新公告为准。别把阅读和表达完全放下。')
-      ]
-    }
-  }
-
+/** 英语块的数字位置由系统给，解释和计划交给 AI。 */
+function englishSection(): ReportBlock {
   return {
     type: 'section',
     title: '英语这块',
-    paragraphs: [position + skipped, gapParts.join(''), plan]
+    paragraphs: []
   }
 }
 
@@ -1378,10 +992,9 @@ export function buildDocReport(
   jobs: JobCard[] = []
 ): ReportPayload {
   const { survey, answers, name, slug, createdAt, claimed } = input
-  const facts = docFacts(survey, answers)
-  const tier: Tier = facts.priority
+  const tier: Tier = docPriority(survey, answers)
   const scores = computeDocScores(survey, answers)
-  const assets = assetsBlock(survey, answers, scores)
+  const assets = assetsBlock(survey, answers)
   const jobMap = jobMapBlock(survey, answers, jobs)
 
   const blocks: ReportBlock[] = [
@@ -1389,11 +1002,11 @@ export function buildDocReport(
       type: 'hero',
       eyebrow: '我帮你看看现在在哪儿',
       title: survey.title,
-      summary: facts.oneLine,
+      summary: '',
       tier,
       // 分层 A/B/C 只给顾问看，报告里不显示档位和分数。
       tierLabel: '',
-      tierLine: '先看你现在最卡的那一层。',
+      tierLine: '',
       total: null
     },
     scorecardBlock(survey, answers),
@@ -1403,10 +1016,7 @@ export function buildDocReport(
     gapBlock(survey, answers, jobMap ? [] : jobs),
     roadmapBlock(survey, answers, scores),
     checklistBlock(survey, answers),
-    englishSection(survey, answers),
-    { type: 'note', title: '你现在卡在哪一层', text: facts.stuckDetail },
-    { type: 'note', title: '什么时候要命', text: facts.deadline },
-    { type: 'note', title: '五年后的你', text: facts.future }
+    englishSection()
   ]
 
   return {
@@ -1423,8 +1033,25 @@ export function buildDocReport(
   }
 }
 
+export interface DocAiModuleItem {
+  key: string
+  text?: string
+  fields?: Record<string, string>
+}
+
+export interface DocAiModule {
+  key: string
+  title: string
+  summary: string
+  paragraphs: string[]
+  items: DocAiModuleItem[]
+}
+
 export interface DocAiContent {
   conclusion: string
+  /** 新版：按数据模块输出，每个模块的标题和正文都由 AI 写 */
+  modules: DocAiModule[]
+  /** 旧版报告兼容：固定五段 */
   sections: { title: string; text: string }[]
 }
 
@@ -1441,15 +1068,59 @@ export function cleanReportText(input: string): string {
     .trim()
 }
 
+function cleanFields(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const fields: Record<string, string> = {}
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw !== 'string') continue
+    const text = cleanReportText(raw)
+    if (text) fields[key] = text
+  }
+  return fields
+}
+
 export function normalizeDocAiContent(raw: unknown): DocAiContent {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { conclusion: '', sections: [] }
+    return { conclusion: '', modules: [], sections: [] }
   }
   const record = raw as Record<string, unknown>
   const conclusion =
     typeof record.conclusion === 'string' ? cleanReportText(record.conclusion) : ''
-  const list = Array.isArray(record.sections) ? record.sections : []
-  const sections = list
+
+  const moduleList = Array.isArray(record.modules) ? record.modules : []
+  const modules = moduleList
+    .map((item): DocAiModule | null => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+      const entry = item as Record<string, unknown>
+      const key = typeof entry.key === 'string' ? entry.key.trim() : ''
+      const title = typeof entry.title === 'string' ? cleanReportText(entry.title) : ''
+      const summary = typeof entry.summary === 'string' ? cleanReportText(entry.summary) : ''
+      const paragraphs = Array.isArray(entry.paragraphs)
+        ? entry.paragraphs
+            .filter((text): text is string => typeof text === 'string')
+            .map((text) => cleanReportText(text))
+            .filter(Boolean)
+        : []
+      const items = Array.isArray(entry.items)
+        ? entry.items
+            .map((rawItem): DocAiModuleItem | null => {
+              if (!rawItem || typeof rawItem !== 'object' || Array.isArray(rawItem)) return null
+              const itemRecord = rawItem as Record<string, unknown>
+              const itemKey = typeof itemRecord.key === 'string' ? itemRecord.key.trim() : ''
+              if (!itemKey) return null
+              const text =
+                typeof itemRecord.text === 'string' ? cleanReportText(itemRecord.text) : ''
+              return { key: itemKey, text, fields: cleanFields(itemRecord.fields) }
+            })
+            .filter((rawItem): rawItem is DocAiModuleItem => Boolean(rawItem))
+        : []
+      if (!key || (!title && !summary && !paragraphs.length && !items.length)) return null
+      return { key, title, summary, paragraphs, items }
+    })
+    .filter((item): item is DocAiModule => Boolean(item))
+
+  const sectionList = Array.isArray(record.sections) ? record.sections : []
+  const sections = sectionList
     .map((item) => {
       if (!item || typeof item !== 'object' || Array.isArray(item)) return null
       const entry = item as Record<string, unknown>
@@ -1458,27 +1129,190 @@ export function normalizeDocAiContent(raw: unknown): DocAiContent {
       return title && text ? { title, text } : null
     })
     .filter((section): section is { title: string; text: string } => Boolean(section))
-  return { conclusion, sections }
+
+  return { conclusion, modules, sections }
 }
 
-/** 用 AI 内容替换规则版正文；AI 内容不完整时回落到规则版。 */
+function moduleMap(content: DocAiContent): Map<string, DocAiModule> {
+  return new Map(content.modules.map((module) => [module.key, module]))
+}
+
+function moduleText(module: DocAiModule): string {
+  return module.summary || module.paragraphs.join('\n')
+}
+
+function itemMap(module: DocAiModule): Map<string, DocAiModuleItem> {
+  return new Map(module.items.map((item) => [item.key, item]))
+}
+
+function applySystemModules(base: ReportPayload, content: DocAiContent): ReportBlock[] {
+  const modules = moduleMap(content)
+  const blocks = base.blocks.filter((block) => block.type !== 'hero')
+  const hero = base.blocks[0]
+
+  for (const block of blocks) {
+    if (block.type === 'scorecard') {
+      const module = modules.get('scorecard')
+      if (!module) continue
+      if (module.title) block.title = module.title
+      if (module.summary) block.potential.text = module.summary
+      const items = itemMap(module)
+      for (const score of [...block.background, ...block.personal]) {
+        const item = items.get(score.key)
+        if (item?.text) score.note = item.text
+      }
+    } else if (block.type === 'assets') {
+      const module = modules.get('assets')
+      if (!module) continue
+      if (module.title) block.title = module.title
+      if (module.summary) block.note = module.summary
+      const items = itemMap(module)
+      for (const item of block.items) {
+        const ai = items.get(item.key)
+        if (ai?.text) item.text = ai.text
+      }
+    } else if (block.type === 'jobmap') {
+      const module = modules.get('jobmap')
+      if (!module) continue
+      if (module.title) block.title = module.title
+      if (module.summary) block.note = module.summary
+      const items = itemMap(module)
+      for (const direction of block.directions) {
+        const ai = items.get(direction.key)
+        if (!ai) continue
+        if (ai.fields?.name) direction.name = ai.fields.name
+        if (ai.fields?.what) direction.what = ai.fields.what
+        if (ai.fields?.entry) direction.entry = ai.fields.entry
+        if (ai.fields?.salary) direction.salary = ai.fields.salary
+        if (ai.fields?.fit) direction.fit = ai.fields.fit
+      }
+    } else if (block.type === 'gap') {
+      const module = modules.get('gap')
+      if (!module) continue
+      if (module.title) block.title = module.title
+      if (module.summary) block.note = module.summary
+    } else if (block.type === 'roadmap') {
+      const module = modules.get('roadmap')
+      if (!module) continue
+      if (module.title) block.title = module.title
+      if (module.summary) block.note = module.summary
+      const items = itemMap(module)
+      for (const phase of block.phases) {
+        const ai = items.get(phase.key)
+        if (!ai) continue
+        const label = ai.fields?.label?.trim() ?? ''
+        // 时间窗由系统单独展示；AI 若把「第 10—28 个月」抄进 label，就不再重复显示。
+        if (label && !/\d+\s*个月/.test(label)) phase.label = label
+        if (ai.fields?.goal) phase.goal = ai.fields.goal
+        if (ai.fields?.output) phase.output = ai.fields.output
+      }
+    } else if (block.type === 'checklist') {
+      const module = modules.get('checklist')
+      if (!module) continue
+      if (module.title) block.title = module.title
+      if (module.summary) block.note = module.summary
+      const items = itemMap(module)
+      for (const item of block.items) {
+        const ai = items.get(item.key)
+        if (!ai) continue
+        if (ai.fields?.title) item.title = ai.fields.title
+        if (ai.fields?.detail) item.detail = ai.fields.detail
+      }
+    } else if (block.type === 'section') {
+      const module = modules.get('english')
+      if (!module) continue
+      if (module.title) block.title = module.title
+      if (module.paragraphs.length) block.paragraphs = module.paragraphs
+    }
+  }
+
+  return hero?.type === 'hero'
+    ? [{ ...hero, summary: content.conclusion || hero.summary }, ...blocks]
+    : blocks
+}
+
+function sourcesBlock(input: {
+  jobs?: JobCard[]
+  search?: ReportSearchMeta
+}): ReportBlock | null {
+  const search = input.search
+  const sources = search?.sources?.length
+    ? search.sources
+    : (input.jobs ?? []).map((job) => ({
+        title: job.title,
+        url: job.url,
+        site: job.company || job.city,
+        date: job.date
+      }))
+  const queries = search?.queries ?? []
+  const error = search?.error ?? ''
+  if (!sources.length && !queries.length && !error) return null
+
+  return {
+    type: 'sources',
+    title: '检索记录与原文',
+    subtitle: '服务器实际发送的检索词和返回的原文链接，点开可核对',
+    items: sources.slice(0, 12).map((source) => ({
+      title: source.title,
+      url: source.url,
+      site: source.site,
+      usedFor: source.date
+        ? `用于核对岗位门槛和薪资 · 发布于 ${source.date.slice(0, 10)}`
+        : '用于核对报告里的岗位和门槛'
+    })),
+    queries,
+    error,
+    retryable: Boolean(error || search?.configured === false),
+    searchedAt: search?.searchedAt ?? '',
+    configured: search?.configured ?? false
+  }
+}
+
+/** 用 AI 内容替换规则版正文；AI 内容不完整时直接报错，不回落成模板。 */
 export function buildDocReportWithAi(
-  input: DocReportInput & { content: DocAiContent; jobs?: JobCard[] }
+  input: DocReportInput & {
+    content: DocAiContent
+    jobs?: JobCard[]
+    search?: ReportSearchMeta
+  }
 ): ReportPayload {
   const base = buildDocReport(input, input.jobs ?? [])
   const hero = base.blocks[0]
-  if (hero?.type !== 'hero' || input.content.sections.length === 0) return base
+  if (hero?.type !== 'hero') throw new Error('报告基础结构不完整')
 
-  // 分数、差距、英语板块始终由系统算；AI 只替换文字段落。
-  const systemBlocks = base.blocks.filter(
-    (block) => block.type !== 'hero' && block.type !== 'note'
-  )
+  const sources = sourcesBlock({ jobs: input.jobs, search: input.search })
+
+  if (input.content.modules.length > 0) {
+    const blocks = applySystemModules(base, input.content)
+    const chapterKeys = new Set(['stuck', 'deadline', 'future'])
+    const chapters = input.content.modules
+      .filter((module) => chapterKeys.has(module.key))
+      .map(
+        (module): ReportBlock => ({
+          type: 'section',
+          title: module.title || module.key,
+          paragraphs: module.paragraphs.length ? module.paragraphs : [module.summary].filter(Boolean)
+        })
+      )
+    return {
+      ...base,
+      blocks: [...blocks, ...chapters, ...(sources ? [sources] : [])]
+    }
+  }
+
+  if (input.content.sections.length === 0) {
+    throw new Error('AI 报告没有可用的正文')
+  }
+
+  // 兼容旧报告：旧版只有五段正文，没有模块化字段。
+  const systemBlocks = base.blocks.filter((block) => block.type !== 'hero')
   const blocks: ReportBlock[] = [
-    { ...hero, summary: input.content.conclusion || hero.summary },
+    { ...hero, summary: input.content.conclusion },
     ...systemBlocks,
     ...input.content.sections.map(
       (section): ReportBlock => ({ type: 'note', title: section.title, text: section.text })
-    )
+    ),
+    ...(sources ? [sources] : [])
   ]
   return { ...base, blocks }
 }

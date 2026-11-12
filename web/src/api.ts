@@ -407,6 +407,7 @@ export const api = {
       defaultSkill: string
       templates: AdminReportSkillTemplate[]
       activeId: string
+      reportMode?: string
       ai: { configured: boolean; searchConfigured: boolean; model: string }
     }>('/api/admin/skill', { auth: true })
   },
@@ -768,6 +769,12 @@ export const api = {
     if (preview) params.set('preview', '1')
     const suffix = params.toString() ? `?${params.toString()}` : ''
     return request<ReportResponse>(`/api/report/${encodeURIComponent(slug)}${suffix}`)
+  },
+  retryReport(slug: string) {
+    return request<{ ok: true; status: string }>(
+      `/api/report/${encodeURIComponent(slug)}/retry`,
+      { method: 'POST' }
+    )
   },
   claim(slug: string, body: { wechat: string; slots: string[]; agree: boolean }) {
     return request<{ ok: true }>(`/api/report/${encodeURIComponent(slug)}/claim`, {

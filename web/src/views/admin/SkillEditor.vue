@@ -227,29 +227,17 @@ const dirty = computed(
 useUnsavedChanges(dirty, '当前分析规则模板还有未保存的修改，确定离开？')
 
 const outputExample = `{
-  "hero": { "summary": "一句话诊断", "tierLine": "档位说明" },
-  "target": {
-    "cityNote": "城市、岗位与原因的分析",
-    "salaryNote": "薪资期待与现实条件的对照",
-    "closing": "一句下一步要核实的事"
-  },
-  "strengths": [{ "key": "维度key", "text": "优势如何支撑目标" }],
-  "gaps": [{
-    "key": "维度key",
-    "what": "补什么",
-    "how": "怎么补",
-    "when": "什么时候开始"
-  }],
-  "consistency": null,
-  "cognition": { "paragraphs": ["第 1 段", "第 2 段"] },
-  "actions": {
-    "items": ["动作 1", "动作 2", "动作 3"],
-    "closing": "一句收尾"
-  },
-  "sources": [{
-    "title": "来源标题",
-    "url": "https://...",
-    "usedFor": "用来核对了什么"
+  "conclusion": "一句话结论，必须落到本次回答里的具体事实或系统数字",
+  "modules": [{
+    "key": "moduleSpecs 里的模块 key，例如 scorecard / jobmap / roadmap",
+    "title": "根据这个学生的材料自己起标题",
+    "summary": "这个模块的一句话判断",
+    "paragraphs": ["需要正文时写在这里"],
+    "items": [{
+      "key": "moduleSpecs 里对应 item 的 key",
+      "text": "只针对这个 item 的解释",
+      "fields": { "name": "方向名", "what": "做什么", "entry": "入场线" }
+    }]
   }]
 }`
 
