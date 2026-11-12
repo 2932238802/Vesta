@@ -949,6 +949,71 @@ function contentProblems(content: DocAiContent, specs: ModuleSpec[]): string[] {
   return problems
 }
 
+/** 跨模块一致性：同一件事不能让两个模块各说一套。返回给 AI 重写用的具体冲突。 */
+function crossModuleIssues(content: DocAiContent, specs: ModuleSpec[]): string[] {
+  const issues: string[] = []
+  const moduleOf = (key: string) => content.modules.find((item) => item.key === key)
+  const specOf = (key: string) => specs.find((item) => item.key === key)
+
+  // gap 的「只有一项空着」是整体结论，不能和评分卡里技能/实习的低分并存。
+  const scorecard = specOf('scorecard')
+  const gap = moduleOf('gap')
+  if (scorecard && gap) {
+    const weak = scorecard.items.some(
+      (item) =>
+        (item.key === 'skill' || item.key === 'practice') &&
+        typeof item.data.score === 'number' &&
+        item.data.score < 3
+    )
+    const texts = [gap.summary, ...gap.paragraphs]
+    if (
+      weak &&
+      texts.some((text) => /只有一[项个]|只剩一[项个]|只差一[项个]|只缺一[项个]/.test(text))
+    ) {
+      issues.push(
+        'gap 写了「只有一项空着」这类整体结论，但评分卡里技能或实习低于 3 分；只能说某一个答案字段空着，不能概括成整体只差一项'
+      )
+    }
+  }
+
+  // 方向卡：过期原文参与时 entry 必须带结构参考前缀；原文对专业写法不一致时 fit 必须写明。
+  const jobmap = moduleOf('jobmap')
+  const jobmapSpec = specOf('jobmap')
+  if (jobmap && jobmapSpec) {
+    for (const specItem of jobmapSpec.items) {
+      const item = jobmap.items.find((entry) => entry.key === specItem.key)
+      if (!item) continue
+      const jobs = Array.isArray(specItem.data.jobs)
+        ? (specItem.data.jobs as Record<string, unknown>[])
+        : []
+      const entry = item.fields?.entry?.trim() ?? ''
+      if (
+        entry &&
+        jobs.some((job) => job.stale === true) &&
+        !/仅看要求结构|不能当投递入口/.test(entry)
+      ) {
+        issues.push(
+          `方向 ${specItem.key} 有过期原文参与，entry 必须写「仅看要求结构，不能当投递入口」，不能当成现在的投递门槛`
+        )
+      }
+      const facts = Array.isArray(specItem.data.facts)
+        ? specItem.data.facts.filter((fact): fact is string => typeof fact === 'string')
+        : []
+      const fit = item.fields?.fit?.trim() ?? ''
+      if (
+        fit &&
+        facts.some((fact) => fact.includes('原文对专业的写法不一致')) &&
+        !/不一致|以具体岗位为准/.test(fit)
+      ) {
+        issues.push(
+          `方向 ${specItem.key} 的原文对专业写法不一致，fit 必须写明「原文对专业的写法不一致，以具体岗位为准」`
+        )
+      }
+    }
+  }
+  return issues
+}
+
 interface ContentText {
   where: string
   text: string
@@ -1180,6 +1245,9 @@ function outputContract(): string {
 - 每个模块的 items 必须覆盖该模块 items 里的每一个 key。
 - summaryRequired 为 true 的模块必须写 summary；paragraphsRequired 为 true 的模块必须写至少一段 paragraphs。
 - gap 的 summary / paragraphs 只能基于 moduleSpecs.data.lines 和 jobs 里已有的事实写；没有的事实不要补，不要再写固定的「入场线」「城市判断」「下一步」建议句。
+- gap 说「空着」「还没有」只能指某一个问卷答案字段（例如目标岗位没写），不能写成「整体只差一项」「只有一项空着」这类整体结论；moduleSpecs.data.lines 里「现在能写进简历的」写「还没有」时，必须承认简历里目前没有可写的经历或技能。
+- jobmap 某个方向有 stale 为 true 的招聘原文参与时，entry 必须以「仅看要求结构，不能当投递入口」开头，不能当成现在的投递门槛。
+- jobmap 的 facts 出现「原文对专业的写法不一致」时，fit 要写明这句、以具体岗位为准，不能只写「原文没写专业限制」。
 - scorecard 每个 item 的 text 如提到分数，必须等于该 item 在 moduleSpecs 里的 score；scorecard 的 summary 如提到分数，必须是本模块某一项的 score。不要写别的 item 的分数，也不要用 10 分制总分冒充单项分。
 - 所有数字只能原样使用 moduleSpecs、jobSpecs、问卷回答或检索记录里的值，不能自己计算、换算或估算。
 - jobSpecs 里 fallback 为 true 的原文是主检索不足时的补位结果，只能参考要求结构，不能用来统计「几条原文」或门槛数量；stale 为 true 的过期原文同理，不能当成当前投递门槛。
@@ -1287,9 +1355,17 @@ ${searchSummary}
 
   for (let pass = 0; pass < 2; pass += 1) {
     const problems = contentProblems(content, specs)
+    const consistencyIssues = crossModuleIssues(content, specs)
     const textIssues = findTextIssues(content, planPeriods)
     const numberIssues = auditNumbers(content, allowedNumbers, specs)
-    if (problems.length === 0 && textIssues.length === 0 && numberIssues.length === 0) break
+    if (
+      problems.length === 0 &&
+      consistencyIssues.length === 0 &&
+      textIssues.length === 0 &&
+      numberIssues.length === 0
+    ) {
+      break
+    }
     if (pass === 1) {
       if (numberIssues.length > 0) {
         throw new Error(`数字核对未通过：${numberIssues[0]}`)
@@ -1297,12 +1373,16 @@ ${searchSummary}
       if (problems.length > 0) {
         throw new Error(`AI 报告模块不完整：${problems[0]}`)
       }
+      if (consistencyIssues.length > 0) {
+        throw new Error(`AI 报告前后矛盾：${consistencyIssues[0]}`)
+      }
       throw new Error(`AI 报告审校未通过：${textIssues[0]}`)
     }
 
     const feedback = [
       '你上一次输出的报告有以下问题，需要修正：',
       ...problems.slice(0, 10).map((item) => `- ${item}`),
+      ...consistencyIssues.slice(0, 6).map((item) => `- ${item}`),
       ...textIssues.slice(0, 10).map((item) => `- ${item}`),
       ...numberIssues.slice(0, 10).map((item) => `- ${item}`),
       '请保留已经正确的分析，补全所有缺失模块和字段，并重新输出完整 JSON。',

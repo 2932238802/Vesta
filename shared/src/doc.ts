@@ -519,6 +519,21 @@ function majorRelated(req: string, major: string): boolean {
   return false
 }
 
+/** 原文写出的专业范围是否覆盖学生专业；只用于判断同一方向内原文写法是否冲突。 */
+function majorFits(req: string, major: string): boolean {
+  if (!major) return true
+  if (
+    /国际贸易|国际经济与贸易|外贸/.test(req) &&
+    /国际经济与贸易|国际贸易|外贸/.test(major)
+  ) {
+    return true
+  }
+  if (/经济|金融|商务英语|英语/.test(req) && /经济|贸易|金融|商务英语|英语/.test(major)) {
+    return true
+  }
+  return majorRelated(req, major)
+}
+
 /**
  * 把招聘原文逐条对到填卷人的答卷上：
  * 已经符合的写「你符合」，还差什么写「你还缺」，不替学生判断“能不能录用”。
@@ -758,7 +773,7 @@ function isStaleJob(job: JobCard): boolean {
 }
 
 /** 把同一方向的多条原文汇总成门槛事实，避免只靠单条招聘下结论。 */
-function directionFacts(jobs: JobCard[]): string[] {
+function directionFacts(jobs: JobCard[], major: string): string[] {
   // 过期原文只用于看「要求结构」，补位原文同理；两者都不进统计，避免老公告冒充当前门槛。
   const usable = jobs.filter((job) => !isStaleJob(job) && !job.fallback)
   if (usable.length < 2) return []
@@ -779,6 +794,23 @@ function directionFacts(jobs: JobCard[]): string[] {
     `${usable.length} 条原文里，` +
       [...levelCount.entries()].map(([name, count]) => `${name} ${count} 条`).join('，')
   )
+
+  // 专业口径：同一方向内有的原文写专业范围、学生的专业不在范围内，有的原文没写限制或写「不限专业」。
+  // 这时不能让方向卡只挑一条说法，否则会和单条原文的对照结论打架。
+  // 「专业八级 / 专业四级」是证书考试，不是专业范围，先剔掉再判断。
+  const majorRequirement = (job: JobCard) => /专业/.test(textOf(job).replace(/专业[八四]级/g, ''))
+  const majorListed = usable.filter(majorRequirement)
+  const majorOutside = majorListed.some(
+    (job) =>
+      !/不限专业|专业不限/.test(textOf(job)) &&
+      !majorFits(textOf(job).replace(/专业[八四]级/g, ''), major)
+  )
+  const majorOpen =
+    majorListed.some((job) => /不限专业|专业不限/.test(textOf(job))) ||
+    majorListed.length < usable.length
+  if (majorOutside && majorOpen) {
+    facts.push('这几条原文对专业的写法不一致，以具体岗位为准')
+  }
 
   // 「应届」必须看完整字段：标题写「应届毕业生求职」、正文却要求 2—3 年经验的，不算接受应届。
   const mentionsFresh = (text: string) => /经验不限|在校|应届/.test(text)
@@ -830,7 +862,7 @@ function jobMapBlock(
       const displayed = [...matchedAll]
         .sort((a, b) => Number(isStaleJob(a)) - Number(isStaleJob(b)))
         .slice(0, 2)
-      const facts = directionFacts(displayed)
+      const facts = directionFacts(displayed, major)
       const matched = displayed.map((job) => withJobMatch(survey, answers, job, direction.name))
       matched.forEach((job) => assigned.add(job.url))
       return { ...direction, facts, jobs: matched }
@@ -840,7 +872,16 @@ function jobMapBlock(
   const relatedJobs = jobs
     .filter((job) => !assigned.has(job.url))
     .slice(0, 3)
-    .map((job) => withJobMatch(survey, answers, job))
+    .map((job) => {
+      const matched = withJobMatch(survey, answers, job)
+      // 方向外原文的对照结论只代表这一条，注明出处，避免和方向卡的结论混读。
+      return {
+        ...matched,
+        usedFor: matched.usedFor
+          ? `这条原文写的是另一类岗位；${matched.usedFor}`
+          : '这条原文写的是另一类岗位'
+      }
+    })
 
   // 没有招聘原文支撑时，不靠专业名称凭空编方向。
   if (!grouped.length && !relatedJobs.length) return null
@@ -939,7 +980,8 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
     lines.push({ label: '目标岗位', value: role || '还没写清楚' })
     if (!role && major) lines.push({ label: '你的专业', value: major })
     const nowText = resumeNow(survey, answers)
-    if (nowText) lines.push({ label: '现在能写进简历的', value: nowText })
+    // 简历盘点为空也是事实：这一行不能省略，否则 AI 会以为只差目标岗位。
+    lines.push({ label: '现在能写进简历的', value: nowText || '还没有' })
     const expected = label(survey, answers, 'q27')
     if (expected) lines.push({ label: '你写的期望月薪', value: expected })
     const family = label(survey, answers, 'q15')
