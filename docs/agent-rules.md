@@ -53,7 +53,7 @@
 - 后端改动后执行 `npm run typecheck`。
 - 前端改动后执行 `npm run typecheck && npm run build`。
 - 没有自动化测试时，至少完成类型检查、构建和关键页面手工走查。
-- 服务器更新入口是 `bash update.sh`；生产服务由 systemd / PM2 / Docker 重启，不要用开发脚本替代。
+- 服务器更新入口是 `bash update.sh`（脚本自己拉取、校验、构建、重启）；生产服务由 systemd / PM2 / Docker 重启，不要用开发脚本替代。
 
 ## 文档维护
 

@@ -61,11 +61,34 @@ npm run dev
 日常更新：
 
 ```bash
-git pull
 bash update.sh
 ```
 
-`update.sh` 会先备份数据库，再安装依赖、构建前端、重启服务并检查健康状态。仅当 `.env` 已存在且部署方式（systemd / PM2 / Docker / 手动）已配置好时，这两条命令就足够。生产环境不会走本地免密登录。
+`update.sh` 自己完成拉取、校验、备份、构建和重启，执行结束后会逐层证明“运行的代码 = `origin/main` 最新提交”：
+
+- **L1 代码**：`git fetch` + `git pull --ff-only`，断言 HEAD 与 `origin/main` 完全一致、工作区干净；有未提交改动、detached HEAD 或无法快进时直接退出，不覆盖本地改动。
+- **L2 依赖**：对比拉取前后的 `package-lock.json`/`package.json` 哈希；有变化时执行 `npm ci`，并用 `npm ls --depth=0` 检查 missing/invalid。
+- **L3 构建**：构建前移走旧 `web/dist`，构建后断言所有产物晚于本次构建开始；构建失败会恢复上一版 `dist`，不会带着旧产物重启。
+- **L4 进程**：重启后读取 systemd `ExecMainStartTimestampMonotonic` / PM2 `pm_uptime` / Docker `StartedAt`，断言进程启动时间晚于构建完成。
+- **L5 对外**：`/api/health` 返回 200 且时间戳晚于本次重启；再校验首页引用了本次构建的 JS 指纹。
+
+如果本次拉取更新了 `update.sh` 本身，脚本会用新脚本重新执行（`--resumed` 防止循环）。脚本也会用 `flock` 防止并发执行。
+
+常用选项：
+
+```bash
+bash update.sh --help          # 查看全部参数
+bash update.sh --no-pull       # 跳过 pull，但仍 fetch 并校验 HEAD == origin/main
+bash update.sh --skip-build    # 跳过构建；源码比 dist 新时会拒绝
+bash update.sh --mode=systemd  # 覆盖 DEPLOY_MODE
+```
+
+说明：
+
+- `DEPLOY_MODE=none` 只构建、不重启，无法完成 L4/L5 校验，因此脚本会在构建后明确失败退出；需要验证运行版本时请改用 `systemd` / `pm2` / `docker`。
+- 当前 `/api/health` 只返回 `{ ok, time }`，没有版本字段。L5 会退化为“HTTP 200 + 重启后时间戳 + 前端构建指纹”校验；服务端源码版本由 L4 的进程启动时间保证。以后若 health 增加 `version` / `commit` / `sha` 字段，脚本会自动改成与 git HEAD 比对。
+- 服务器上如果还是很久以前的 `update.sh`（不认识上述参数、也不会自动拉取），先手动执行一次 `git pull`；之后日常只需 `bash update.sh`。
+- 失败时脚本会打印失败阶段、日志命令、数据库备份路径和回滚命令；健康检查失败还会自动带出最近 60 行服务日志。
 
 ## 常用环境变量
 

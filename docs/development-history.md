@@ -2,6 +2,21 @@
 
 本文档记录已经确认或完成的需求，帮助后续 Agent 理解“为什么这样做”。若代码与记录冲突，以用户最新明确要求为准，并同步更新本文档。
 
+## 本轮（2026-11-12）
+
+### update.sh：用五层校验证明“运行的就是远程最新代码”
+
+- 起因：原来的 `update.sh` 不拉代码，日常需要人工 `git pull` 后再运行；脚本也不校验拉取结果、依赖锁、构建产物和进程启动时间，无法证明线上运行的是 `origin/main` 最新提交。
+- L1 代码：`git fetch --prune origin main` 后 `git pull --ff-only origin main`；断言 HEAD 与 `origin/main` 完全一致、工作区干净。未提交改动、detached HEAD、非 main 分支、无法快进（分叉）都直接退出，不 reset、不 stash、不覆盖用户文件，并给出手动处理命令。`--no-pull` 只跳过 pull，仍 fetch 并校验 HEAD。
+- L2 依赖：拉取前后对比 `package-lock.json` 和 `package.json` 的 SHA256；有变化或 `node_modules` 缺失时执行 `npm ci --include=dev`（不再用 `npm install`），然后用 `npm ls --depth=0` 检查 missing/invalid；检查失败会自动再跑一次 `npm ci` 修复。
+- L3 构建：构建前把旧 `web/dist` 移到临时目录并创建构建时间戳；构建后断言 `index.html`、assets 存在且所有产物都晚于时间戳。构建失败或产物异常时恢复上一版 `dist` 并退出，不会带着旧产物重启。`--skip-build` 仅在 `web/dist` 不旧于前端源码时允许。
+- L4 进程：重启后分别读取 systemd `ExecMainStartTimestampMonotonic`/`ActiveEnterTimestampMonotonic`、PM2 `pm_uptime`、Docker `State.StartedAt`，断言进程启动时间晚于构建完成和本次重启请求。
+- L5 对外：`/api/health` 必须 200、`ok:true`，`time` 晚于本次重启且与当前时间相差不超过 3 分钟；再抓取首页，断言引用了本次构建的 JS 指纹。当前 health 没有版本字段，因此 L5 退化为时间戳 + 前端指纹，服务端源码版本由 L4 启动时间保证；若以后 health 返回 `version`/`commit`/`sha`，脚本会自动与 HEAD 比对。
+- 脚本自更新：拉取后比较 `update.sh` 的 git hash；变化时带 `--resumed` 用新脚本重新执行，并通过环境变量把更新前 HEAD 和依赖哈希传给新进程，避免丢失回滚点和依赖变化检测。exec 后沿用父进程的 `flock`，不会自己锁死自己。
+- 可用性：新增 `--help`、`--no-pull`、`--skip-build`、`--mode=xxx`、`--resumed`；非 TTY 自动关闭彩色输出；`flock` 防并发；失败时打印失败阶段、日志命令、数据库备份路径、代码/数据库回滚命令；健康检查失败自动输出最近 60 行服务日志。
+- 兼容性：保留 `DEPLOY_MODE` 的 docker/systemd/pm2/auto 语义、数据库备份保留 14 份、`/api/health` 端点不变。`DEPLOY_MODE=none` 仍然不自动重启，但因为无法完成 L4/L5，脚本会在构建后明确失败退出，而不是假装更新成功。
+- 未改动业务代码、`.env`、`data/`、`web/dist/`；只修改 `update.sh` 与文档。
+
 ## 本轮（2026-11-11）
 
 ### 报告招聘卡片：保留原文链接，修正检索与展示
@@ -105,7 +120,7 @@
 
 ### 服务器更新流程
 
-- 已确认日常更新为 `git pull` + `bash update.sh`。
+- 已确认日常更新为 `bash update.sh`（2026-11-12 起脚本自己拉取并校验；旧脚本仍需先手动 `git pull` 一次）。
 - `update.sh` 负责备份数据库、安装依赖、构建前端、重启服务、健康检查。
 - 前提是服务器 `.env` 已配置、首次安装已完成。
 
