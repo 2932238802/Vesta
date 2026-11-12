@@ -25,6 +25,16 @@
 - 其他文档：`docs/README.md` 补文档分工与设计文档入口、修正线上端口说明（8082）、补 `update.sh` 与本文件的交叉引用；`docs/consult-system.md` 架构图去掉已删除的「旺季 / 淡季模板」。
 - 规则：以后需求变更走「文档 → 代码」，见 `docs/agent-rules.md` 新增的「文档优先」一节。
 
+### 把「文档优先」做成可执行的 Agent 机制
+
+- 起因：规则只写在 `docs/agent-rules.md` 里，Agent 经常不读、读了也不执行；需要入口文件、执行清单、自动检查和「不会就查」的补足路径。
+- `AGENTS.md`（仓库根）：所有 Agent（Codex / Claude Code / DSH）开工必读——必读顺序、文档优先流程、实现纪律（摘 agent-rules）、交付前验证表、不熟的部分怎么办、禁止事项。
+- `CLAUDE.md`（仓库根）：Claude Code 入口，指向 `AGENTS.md` 并重复三条硬性要求。
+- `.dsh/skills/vesta-dev/SKILL.md`：项目级 skill，DSH 会话里可直接调用，把「读文档 → 按文档实现 → verify」固化成流程。
+- `scripts/check-docs.mjs` + `npm run check:docs`：自动核对 `shared/src/survey.ts` 每道题是否都写进设计文档、`docs/agent-rules.md` 关键小节是否还在；`npm run verify` = `check:docs` + `typecheck` + `build`。
+- MCP：`.mcp.json`（Claude Code）与 `.codex/config.toml` 都接入 **context7**（查官方文档）和 **playwright**（真实浏览器走查），补上 `web_search = "disabled"` 之后的资料检索缺口。
+- 边界：检查只覆盖「文档有没有写」，不保证「写得对」；口径分歧仍要人评审后先改文档。
+
 ## 本轮（2026-11-11）
 
 ### 报告招聘卡片：保留原文链接，修正检索与展示

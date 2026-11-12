@@ -8,6 +8,7 @@
 - 代码与文档冲突时，默认以文档为准修正代码；如果确实是文档过期，也先改文档说明变更，再改代码——不允许「先改代码、文档回头再说」。
 - 问卷与报告以 `docs/规划自测问卷-设计文档.md` 为准；咨询系统以 `docs/consult-system.md` 为准；历史决策查 `docs/development-history.md`。
 - 已作废的方案放 `docs/archive/`，正文里不要留会误导人的旧口径。
+- 开工前先读仓库根目录的 `AGENTS.md`（执行清单）和本文件（硬约束）；交付前跑 `npm run verify`。
 
 ## 产品与交互
 
@@ -61,6 +62,14 @@
 - 前端改动后执行 `npm run typecheck && npm run build`。
 - 没有自动化测试时，至少完成类型检查、构建和关键页面手工走查。
 - 服务器更新入口是 `bash update.sh`（脚本自己拉取、校验、构建、重启）；生产服务由 systemd / PM2 / Docker 重启，不要用开发脚本替代。
+
+## 能力不足时（2026-11-12 定）
+
+- 不熟的库 / 框架 API：先用 **context7 MCP** 查官方文档（`resolve-library-id` → `get-library-docs`），不凭记忆写。
+- 需要看真实页面：起 `npm run dev`，用 **playwright MCP** 打开 `http://127.0.0.1:5173` 走查，不臆测 DOM 和样式。
+- 先在仓库内找同类实现：`server/src`、`shared/src`、`web/src`、`docs/`。
+- 需要新能力时，优先找现成 skill（项目 `.dsh/skills/`、用户 `~/.dsh/skills`）或 MCP server；选型理由写进 `development-history.md`，不为一个工具大改架构。
+- 仍然拿不准：停下来问，给「已知信息 + 可选方案 + 风险」，不要硬编。
 
 ## 文档维护
 

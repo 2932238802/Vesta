@@ -26,6 +26,7 @@ update.sh          服务器更新入口
 
 文档分工（**改需求先改文档，再改代码**）：
 
+- [../AGENTS.md](../AGENTS.md)：Agent 开工规则——必读顺序、文档优先流程、验证门槛、MCP 使用。
 - [consult-system.md](./consult-system.md)：咨询目的树、目的路径、模块化长稿生成与反馈。
 - [规划自测问卷-设计文档.md](./规划自测问卷-设计文档.md)：问卷与报告的唯一口径——题目、选项、跳题逻辑、报告规则都在这里。
 - [development-history.md](./development-history.md)：历次需求与已做改动，记录「为什么这样做」。

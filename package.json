@@ -13,6 +13,8 @@
     "dev:web": "npm --workspace web run dev",
     "build": "npm --workspace web run build",
     "typecheck": "npm --workspace server run typecheck && npm --workspace web run typecheck",
+    "check:docs": "node scripts/check-docs.mjs",
+    "verify": "npm run check:docs && npm run typecheck && npm run build",
     "start": "npm --workspace server run start",
     "update": "bash update.sh"
   },
