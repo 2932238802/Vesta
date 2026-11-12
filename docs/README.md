@@ -52,6 +52,25 @@ npm run dev
 
 关闭方式：在 `.env` 增加 `DEV_GUEST_LOGIN=false`。免密登录只在显式 `NODE_ENV=development` 时生效；`npm start` 和生产服务不会开启。
 
+### 本地环境变量（2026-11-12 定）
+
+本地 dev 的变量分两层，按「是否跨项目复用」划分：
+
+| 层 | 位置 | 放什么 | 影响范围 |
+| --- | --- | --- | --- |
+| 全局 | WSL `~/.profile` 的 `ai-gateway-dev` 块 | `AI_BASE_URL` / `AI_MODEL` / `AI_API_KEY` | 所有本地项目 |
+| 项目 | 仓库 `.env`（已被 `.gitignore` 忽略） | `ADMIN_USER/PASSWORD`、`AUTH_SECRET`、`CONTACT_KEY`、`DATA_DIR`、`BOCHA_*` | 只影响 Vesta |
+
+- Windows 用户级环境变量**不会**自动传进 WSL，本地 dev 在 WSL 里跑就得在 WSL 侧配（`~/.profile` 或 `/etc/environment`）。
+- 本地 AI 走 one-api 网关（`http://one-api.server22.jz/v1`）。**该网关没有 `deepseek-chat`**，用 `deepseek-v4-flash`；换模型前先看实际列表：
+
+  ```bash
+  curl -s -H "Authorization: Bearer $AI_API_KEY" "$AI_BASE_URL/models"
+  ```
+
+- 改完 `~/.profile` 后，已开的终端和已启动的 dev server 不会自动生效，要重开终端或重启 `npm run dev`。
+- 变量清单以 `.env.example` 为准；`.env` 不入库、不写进文档、不进 memory。
+
 ## 生产部署
 
 首次部署参考 `deploy/install.sh`。生产环境必须配置：
@@ -109,9 +128,24 @@ bash update.sh --mode=systemd  # 覆盖 DEPLOY_MODE
 | `PUBLIC_BASE_URL` | 对外链接前缀，如 `https://example.com` |
 | `TRUST_PROXY` | 位于反向代理后时设为 `true` |
 | `SESSION_TTL` | 登录有效期秒数，默认 30 天 |
-| `DEEPSEEK_API_KEY` | AI 报告与咨询稿生成密钥 |
-| `BOCHA_API_KEY` | 可选的联网检索密钥 |
+| `AI_API_KEY` | AI 报告与咨询稿生成密钥；也兼容旧的 `DEEPSEEK_API_KEY` |
+| `AI_BASE_URL` | OpenAI 兼容接口地址；也兼容 `DEEPSEEK_BASE_URL` |
+| `AI_MODEL` | 模型名；也兼容 `DEEPSEEK_MODEL` |
+| `BOCHA_API_KEY` | 联网检索密钥；与 `BOCHA_BASE_URL` 同时配置才生效 |
+| `BOCHA_BASE_URL` | 博查检索接口地址 |
+| `AI_TIMEOUT_MS` | AI 单次请求超时，默认 120 秒 |
 | `DEPLOY_MODE` | `systemd` / `pm2` / `docker` / `none` / 自动 |
+
+## 报告生成
+
+doc 模式报告（`survey.reportMode === 'doc'`）完全由 AI 生成正文，程序只负责计算与校验：
+
+- **分析规则唯一来源**：后台 `/admin/skill` 当前启用的模板。默认设置内置在 `shared/src/doc-skill.ts`；自定义模板缺失或为空时直接报错，不会用模型常识或模板报告补位。
+- **证据边界**：AI 只能使用后台规则、问卷回答、数据库里的岗位/报告数据和博查检索结果。没有依据的项不写。
+- **数字由程序算**：分数、比例、天数、排序、阶段和岗位门槛都由 `shared/src/docScore.ts`、`shared/src/job-map.ts`、`shared/src/doc.ts` 计算；AI 只写标题、判断和正文。生成后会扫描 AI 文本里的数字，与允许的数据源比对，不一致就重写，最终报告以数据为准。
+- **时间统一函数**：所有时间距离走 `shared/src/date.ts`，按日历差计算，输出粗粒度中文（两年、一年半、X 个月、不到一个月、已过去 X）。`npx tsx shared/src/date.cases.ts` 覆盖跨年、闰日、月末、整年和已过期等情况。
+- **检索可追溯**：需要外部信息时，服务端主动调用博查，并记录检索词、时间、结果数量和来源链接，展示在报告底部。未配置密钥、超时或失败会显示真实原因，报告页提供“重新生成”；缺 `BOCHA_API_KEY` 或 `BOCHA_BASE_URL` 都会明确报错，不会静默跳过。
+- **失败不伪装**：AI 未配置、规则为空或生成失败时，报告页显示失败原因和重试入口，不展示规则版/模板版冒充 AI 结果。
 
 ## 登录与会话
 
@@ -185,11 +219,11 @@ npx tsx scripts/import-collections-docx.ts zxg --write
 ## 常用验证
 
 ```bash
-npm run typecheck
-npm run build
+npx tsx shared/src/date.cases.ts   # 日历时间距离用例
+npm run verify                     # check:docs + typecheck + build
 ```
 
-修改后端后至少执行 `typecheck`；修改前端后还要执行 `build`。当前没有自动化测试套件，验收以类型检查、构建和实际页面走查为准。
+修改后端后至少执行 `typecheck`；修改前端后还要执行 `build`。当前没有统一的自动化测试套件，验收以类型检查、构建、时间用例和实际页面走查为准。
 
 ## 注意事项
 
