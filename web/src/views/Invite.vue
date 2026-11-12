@@ -23,7 +23,7 @@
 
       <p v-if="draftFilled > 0" class="draft">
         <span class="draft-dot" aria-hidden="true" />
-        上次填到第 {{ draftStep + 1 }} 组，已填 {{ draftFilled }} 题
+        上次填到第 {{ draftStep + 1 }} 组
       </p>
       <p class="privacy">答案用于生成这份报告</p>
     </main>
@@ -38,6 +38,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, track, type Answers, type InvitePayload } from '@/api'
+import { visibleQuestions } from '@shared/doc'
 import { isEmptyValue } from '@shared/validate'
 
 const route = useRoute()
@@ -71,10 +72,17 @@ function readDraft() {
     ).length
     if (filled === 0) return
     draftFilled.value = filled
-    draftStep.value = Math.max(
-      0,
-      Math.min(Number(draft.step ?? 0), invite.value.survey.groups.length - 1)
+    // 草稿里的 step 是“可见题序号”，不是分组序号；显示前先换算成当前题所在分组。
+    const questions = visibleQuestions(invite.value.survey, draft.answers)
+    const step = Math.min(
+      Math.max(Number(draft.step ?? 0), 0),
+      Math.max(0, questions.length - 1)
     )
+    const current = questions[step]
+    const groupIndex = current
+      ? invite.value.survey.groups.findIndex((group) => group.id === current.groupId)
+      : 0
+    draftStep.value = Math.max(0, groupIndex)
   } catch {
     // 草稿不可用时从零开始
   }
@@ -126,6 +134,19 @@ function start() {
   width: 100%;
   padding: 40px 0 48px;
   text-align: center;
+}
+
+.content.fade-in {
+  animation: invite-fade 0.12s ease;
+}
+
+@keyframes invite-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .eyebrow {
@@ -197,6 +218,11 @@ h1 {
 }
 
 @media (max-width: 480px) {
+  .invite {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
   .wide-break {
     display: none;
   }

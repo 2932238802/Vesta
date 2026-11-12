@@ -17,7 +17,8 @@
         class="scale"
         :class="{ 'has-error': invalid }"
         role="radiogroup"
-        :aria-label="question.title"
+        :aria-labelledby="labelledby || undefined"
+        :aria-label="labelledby ? undefined : question.title"
         @keydown="onRadioKeydown($event, 'rating')"
       >
         <button
@@ -41,7 +42,8 @@
       class="options"
       :class="{ 'has-error': invalid }"
       role="radiogroup"
-      :aria-label="question.title"
+      :aria-labelledby="labelledby || undefined"
+      :aria-label="labelledby ? undefined : question.title"
       @keydown="onRadioKeydown($event, 'single')"
     >
       <button
@@ -247,6 +249,7 @@ const props = defineProps<{
   index?: number
   invalid?: boolean
   disabled?: boolean
+  labelledby?: string
 }>()
 
 const emit = defineEmits<{
@@ -693,11 +696,6 @@ function toggle(id: string) {
 .split-field {
   display: grid;
   gap: 5px;
-}
-
-.input,
-.textarea {
-  scroll-margin-bottom: 90px;
 }
 
 .question .textarea {

@@ -68,6 +68,16 @@ body:has(.quiz) {
   font-size: 16px;
 }
 
+.quiz .input,
+.quiz .textarea {
+  scroll-margin-bottom: 180px;
+}
+
+.quiz.kb-focus .input,
+.quiz.kb-focus .textarea {
+  scroll-margin-bottom: 24px;
+}
+
 *,
 *::before,
 *::after {

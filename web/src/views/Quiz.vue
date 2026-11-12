@@ -7,23 +7,6 @@
     @focusin="onFocusIn"
     @focusout="onFocusOut"
   >
-    <div
-      class="progress-wrap"
-      role="progressbar"
-      aria-valuemin="0"
-      aria-valuemax="100"
-      :aria-valuenow="progressPct"
-      :aria-valuetext="progressAriaText"
-    >
-      <div class="progress-meta">
-        <span class="progress-group">{{ groupTitle }}</span>
-        <span class="progress-pct">{{ progressPct }}%</span>
-      </div>
-      <div class="progress-track" aria-hidden="true">
-        <span class="progress-done" :style="{ width: `${progressPct}%` }" />
-      </div>
-    </div>
-
     <p id="quiz-status" class="sr-only" aria-live="polite">{{ statusText }}</p>
 
     <main v-if="loading" class="state">
@@ -56,7 +39,8 @@
 
       <main class="sheet">
         <div :key="current.id" class="group fade-in">
-          <h1 ref="titleEl" tabindex="-1">{{ resolved.title }}</h1>
+          <h1 v-if="groupTitle" class="group-title">{{ groupTitle }}</h1>
+          <h2 id="question-stem" ref="stemEl" class="stem" tabindex="-1">{{ resolved.title }}</h2>
           <p v-if="resolved.hint" class="sub">{{ resolved.hint }}</p>
 
           <div class="questions" :id="`q-${current.id}`">
@@ -64,6 +48,7 @@
             <QuestionField
               v-model="answers[current.id]"
               :question="currentQuestion"
+              labelledby="question-stem"
               :invalid="invalid.includes(current.id)"
               :disabled="resolved.disabled"
               @touch="touch"
@@ -122,7 +107,7 @@ const restored = ref(false)
 const showMissingHint = ref(false)
 const confirmRestart = ref(false)
 const rootEl = ref<HTMLElement | null>(null)
-const titleEl = ref<HTMLElement | null>(null)
+const stemEl = ref<HTMLElement | null>(null)
 const statusText = ref('')
 const keyboardMode = ref(false)
 const kbFocus = ref(false)
@@ -162,19 +147,11 @@ const currentQuestion = computed<Question | null>(() => {
 })
 const isLast = computed(() => step.value >= visible.value.length - 1)
 
-const progressPct = computed(() =>
-  visible.value.length
-    ? Math.min(100, Math.round(((step.value + 1) / visible.value.length) * 100))
-    : 0
-)
 const groupTitle = computed(() => {
   if (!survey.value || !current.value) return ''
   const group = survey.value.groups.find((item) => item.id === current.value?.groupId)
   return group?.title ?? ''
 })
-const progressAriaText = computed(() =>
-  groupTitle.value ? `${groupTitle.value}，完成 ${progressPct.value}%` : `完成 ${progressPct.value}%`
-)
 
 function announce(message: string) {
   statusText.value = ''
@@ -402,9 +379,11 @@ function back() {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-function jumpToQuestion(id: string) {
+function jumpToQuestion(id: string): boolean {
   const index = visible.value.findIndex((question) => question.id === id)
-  if (index >= 0) step.value = index
+  if (index < 0 || index === step.value) return false
+  step.value = index
+  return true
 }
 
 async function submit() {
@@ -435,8 +414,8 @@ async function submit() {
         ? err.details.missing.filter((id): id is string => typeof id === 'string')
         : []
       if (missingIds.length) {
-        suppressAnnounce = true
-        jumpToQuestion(missingIds[0])
+        // 只有真的发生跳题才抑制切题播报；当前题缺失时 step 不变，标记会泄漏。
+        suppressAnnounce = jumpToQuestion(missingIds[0])
         invalid.value = missingIds
         showMissingHint.value = true
         error.value = `还有 ${missingIds.length} 道必答题没完成`
@@ -479,7 +458,7 @@ watch(step, async () => {
     return
   }
   if (keyboardMode.value) {
-    titleEl.value?.focus({ preventScroll: true })
+    stemEl.value?.focus({ preventScroll: true })
   } else {
     announce(`下一题：${groupTitle.value}`)
   }
@@ -581,17 +560,7 @@ onBeforeUnmount(() => {
   background: var(--paper);
 }
 
-.progress-wrap {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  margin: 0 -24px;
-  padding: 8px 24px 10px;
-  background: var(--paper);
-}
-
 @media (min-width: 720px) and (pointer: fine) {
-  .progress-wrap,
   .foot {
     background: rgba(239, 241, 236, 0.94);
     backdrop-filter: blur(10px);
@@ -599,49 +568,9 @@ onBeforeUnmount(() => {
 }
 
 @supports not (backdrop-filter: blur(1px)) {
-  .progress-wrap,
   .foot {
     background: var(--paper);
   }
-}
-
-.progress-meta {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
-}
-
-.progress-group {
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--ink-2);
-}
-
-.progress-pct {
-  font-size: 12px;
-  line-height: 1.4;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-2);
-}
-
-.progress-track {
-  position: relative;
-  height: 2px;
-  background-image: repeating-linear-gradient(
-    90deg,
-    var(--line-strong) 0 2px,
-    transparent 2px 5px
-  );
-}
-
-.progress-done {
-  position: absolute;
-  inset: 0 auto 0 0;
-  height: 2px;
-  background: var(--accent);
-  transition: width 0.24s ease-out;
 }
 
 .sr-only {
@@ -680,6 +609,13 @@ onBeforeUnmount(() => {
   margin-top: 12px;
 }
 
+.restore-actions .btn {
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
 h1 {
   font-family: var(--sans);
   font-size: clamp(24px, 5.4vw, 28px);
@@ -690,6 +626,25 @@ h1 {
 
 h1:focus {
   outline: none;
+}
+
+.stem {
+  margin-top: 8px;
+  font-family: var(--sans);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+.stem:focus {
+  outline: none;
+}
+
+@media (min-width: 720px) {
+  .stem {
+    font-size: 20px;
+  }
 }
 
 .sub {
@@ -762,6 +717,7 @@ h1:focus {
 
 .back {
   height: 46px;
+  min-width: 96px;
   padding: 0 18px;
 }
 
@@ -860,12 +816,7 @@ h1:focus {
 
 @media (max-width: 560px) {
   .quiz {
-    padding: 16px 18px calc(120px + env(safe-area-inset-bottom));
-  }
-
-  .progress-wrap {
-    margin: 0 -18px;
-    padding: 8px 18px 10px;
+    padding: 16px 20px calc(120px + env(safe-area-inset-bottom));
   }
 
   .sheet {
@@ -875,6 +826,11 @@ h1:focus {
   .foot {
     padding-left: 16px;
     padding-right: 16px;
+  }
+
+  .back {
+    height: 44px;
+    min-width: 88px;
   }
 
   .next {

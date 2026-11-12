@@ -8,11 +8,30 @@
 
 - 依据：`docs/archive/问卷页面UI优化-开发设计方案-2026-11-12.md` v1.1，按第 10 节全部默认值（P1=A 只显示分组名 + 百分比 + 细条；P2=A 末题点选仍自动提交；P3=A 自动前进 250ms；P4=A 单题单屏；P5=A 不改结果页；P6=A playwright 不写入仓库；P7=A 真机未验证要如实记录）实施。
 - 视觉：新增问卷作用域令牌 `--q-*`（冷灰绿纸 `#EFF1EC`、松墨 `#1B231E`、深绿 `#2F5C48`），只在 `.invite` / `.quiz` 子树和这两个页面存在时的 `body` 背景生效；`/admin` 继续用原变量。邀请页、问卷页标题改用无衬线，衬线只留在结果页正文；取消 uppercase eyebrow、等宽题号与返回箭头。
-- 进度：只显示分组名、百分比和 2px 细条，不显示题数或完成数量；`role="progressbar"` + `aria-valuetext`，符合设计文档第 67 行「不显示已答 X / N」。
+- 进度：只显示分组名、百分比和细条（1px 点线轨道 + 2px 已完成段），不显示题数或完成数量；`role="progressbar"` + `aria-label="问卷进度"` + `aria-valuetext`，符合设计文档第 67 行「不显示已答 X / N」。
 - 交互：单选改为 `radiogroup` + `radio` + roving tabindex，方向键只移焦点、Space/Enter 选中、键盘不自动跳题；指针点选仍 250ms 自动前进，键盘选中后停留。错误就地红框 + 题下 `role="alert"` + 滚动并聚焦首个控件；`window.confirm` 改为题内二次确认。
 - 微信与键盘：`100svh` / `100dvh` 回退；聚焦输入时底栏先「让位」进文档流，`visualViewport` 检测到键盘后抬升到 `--kb-offset`，键盘占屏超过 45% 时隐藏底栏；`pagehide` / `visibilitychange` 兜底保存草稿。粗指针设备不用 `backdrop-filter`。
 - 一处实现偏差（记录以免回退）：原页面在 `Quiz.vue` 的 `h1` 和 `QuestionField.vue` 的 `.q-title` 各渲染一次题干，同屏出现两遍同一句话（历史截图可证）。本轮把题干收敛到 `Quiz.vue` 的 `h1` 一处，`QuestionField` 只保留多选/选填标签，`hint` 也只由 `Quiz.vue` 渲染；题目文案本身未改。
 - 范围：只改 `web/src/views/Invite.vue`、`web/src/views/Quiz.vue`、`web/src/components/QuestionField.vue`、`web/src/styles.css`；未改 `shared/src/survey.ts`、接口、提交 payload、计分、埋点事件名，未改 `ReportView.vue`。
+
+#### 统一按设计文档校正（同日复审后）
+
+- 标题层级（用户裁断：分组 H1 + 题干 18/20）：分组名渲染为 `h1.group-title`（24px / 桌面 28px），题干渲染为 `h2#question-stem`（18px / 桌面 20px，weight 500，`tabindex="-1"`），`hint` 为其后的 `.sub`。键盘切题时焦点落到题干，读屏顺序与视觉层级一致。
+- 可访问名称：`QuestionField` 新增 `labelledby` prop，rating `.scale` 与 single/choiceText `.options` 的 `radiogroup` 使用 `aria-labelledby="question-stem"`，不再重复 `aria-label` 题目文案。
+- 进度条：轨道改为 1px 点线（`repeating-linear-gradient`），已完成段 2px 叠在轨道上，补齐 `aria-hidden` 与 `aria-label`。
+- 尺寸与间距：问卷页移动端左右内边距 18px → 20px；「上一题」桌面 46×96、移动 44×88；草稿恢复按钮高度统一 44px；滚动余量改为默认 180px、键盘模式 `.kb-focus` 24px（由 `styles.css` 的 `.quiz` 作用域控制，删掉 `QuestionField` 里的固定 90px）。
+- 邀请页草稿提示（用户裁断：去掉「已填 X 题」）：只显示「上次填到第 N 组」。草稿里的 `step` 是可见题序号，现用 `visibleQuestions()` + `groupId → groups.findIndex` 换算成真实分组序号，不再直接把题号当组号显示；有草稿时内容淡入从 350ms 全局动画改为 120ms 局部 opacity。
+- 顺带修复：提交校验失败时 `suppressAnnounce` 只在确实跳题时置位（`jumpToQuestion()` 返回 boolean），避免当前题缺失时标记泄漏、吞掉下一次正常切题播报。
+- 验证：`npm run typecheck`、`npm run verify` 均通过；用 Playwright（缓存 Chromium，未写入仓库）在 375 / 1440 宽度复核：进度条 1px 轨道 + 2px 完成段、分组 24/28px、题干 18/20px、选项高 51px、roving tabindex `[0,-1,…]`、方向键只移焦点不改答案、Space 选中后停留、Enter 前进并聚焦 `#question-stem`、错误态红框 + `role="alert"` + 聚焦首个控件、指针点选 250ms 自动前进、文本题滚动余量 180 / 24px、邀请页草稿显示「上次填到第 2 组」、无横向滚动、无页面报错。真机（微信内置浏览器 / 暗色模式）仍未验证，如实记录。
+
+### 问卷移除顶部进度条（2026-11-12）
+
+- 依据：`docs/archive/问卷进度条移除-开发文档-2026-11-12.md`（方案 A，整块删除）。推翻本轮早先「分组名 + 百分比 + 细条」的进度口径（见上一条第 11、21 行）。
+- 原因：进度按「当前可见题数」当分母计算（`(step + 1) / visibleQuestions().length`）。Q19 英语重要性是 0—10 滑块，拖到 6 分及以上会让后面 5 道英语题变为可见，分母从 22 跳到 27，百分比和细条在用户停在同一题、什么都没提交的情况下往下掉；拖回 5 分又跳回去。这是分母随答案变化，不是样式抖动；其他会改变后续题可见性的题也有同样隐患。
+- 改动：`web/src/views/Quiz.vue` 删除 `.progress-wrap` 整块（含 `role="progressbar"` 与 `aria-*`）、`progressPct` / `progressAriaText` 两个 computed，以及 `.progress-wrap` / `.progress-meta` / `.progress-group` / `.progress-pct` / `.progress-track` / `.progress-done` 样式和 720px、560px 响应式里对 `.progress-wrap` 的覆盖（`.foot` 的半透明背景保留）。
+- 保留：`groupTitle`——它同时是页面标题 `h1.group-title` 和切题读屏播报（「下一题：分组名」）的来源，开发文档里「只被进度块使用」的判断已过时；`statusText` 的 `sr-only aria-live` 播报、上一题按钮、底部草稿提示、吸顶与键盘逻辑均不动。
+- 文档同步：设计文档第 67 行、第七节「交互与视觉」改为「不显示答题进度 / 进度条和题数」；不改 `shared/src/survey.ts`、`shared/src/doc.ts`、接口、提交 payload、计分、埋点事件名。
+- 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）。Playwright（npx 缓存里的 Chromium，脚本与截图不进仓库）在 375×812 走查：Q19（`q24`）滑块 5 → 6 → 5 拖动时，题干、分组名、`.sheet` 顶部、页面高度和滚动位置全部不变；页面已无 `[role="progressbar"]`、无 `aria-valuenow`/`aria-valuetext`、无百分比文本；下一题 / 上一题正常，切题仍播报一次 `aria-live`（「下一题：英语这块」）；缺答案时仍显示「这一题还没完成」+ `role="alert"` 并聚焦首个控件；末题按钮仍是「提交并生成报告」；1440×900 复核布局正常、无横向滚动、控制台无报错。为走查临时建了一个邀请，结束后已删除；未真正提交答卷（不触发 AI 生成报告），真机（微信内置浏览器 / 暗色模式）未验证。
 
 ### 报告模块重做：去硬编码、全量 AI 分析、数字与时间可追溯
 
