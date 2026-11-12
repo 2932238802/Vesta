@@ -1,0 +1,32 @@
+@media (max-width: 720px) {
+  .job a,
+  .source-title {
+    font-size: 15px;
+  }
+
+  .job p,
+  .job-match p,
+  .source-use,
+  .source-site,
+  .asset-source,
+  .score-note,
+  .roadmap-output,
+  .closing {
+    font-size: 14px;
+  }
+
+  .check-detail,
+  .roadmap-goal,
+  .direction-facts dd,
+  .gap-step dd,
+  .gap-analysis p,
+  .asset-body p,
+  .strength-text,
+  .target-note,
+  .potential p,
+  .prose p,
+  .source-error-text {
+    font-size: 15px;
+    line-height: 1.9;
+  }
+}

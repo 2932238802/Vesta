@@ -4,6 +4,34 @@
 
 ## 本轮（2026-11-12）
 
+### 前端拆包与巨型文件拆分（2026-11-12，产品版本 v1.62）
+
+- 依据：`docs/archive/20261112/13-前端拆包与巨型文件拆分-开发方案.md` v1.2（v1.1 第一批 / v1.2 第二批），并已按同目录 [`15-13号前端拆包方案-Review.md`](./archive/20261112/15-13号前端拆包方案-Review.md) 补齐事实与验证记录；只调整「代码怎么放、按需加载什么」，不改任何接口、路由路径和业务逻辑。产品版本按 `docs/README.md`「版本约定」递增（并行的 14 号方案为 v1.61）。
+- 前端拆包：`web/src/router.ts` 除 `Root` / `NotFound` 外全部改成路由级 `() => import(...)`；`web/vite.config.ts` 把 `vue` / `vue-router` 拆成 `vendor-vue` chunk。构建后入口 `index-*.js` 从约 383KB 降到 24.0KB，入口 + vendor 合计约 131KB（gzip 约 50KB）；管理端各页（ConsultWorkspace 35.5KB、ReportEditor 26.0KB、Submissions 25.4KB、ReportBlocks 25.6KB…）各自成 chunk，公开页不再下载管理后台代码。
+- admin 拆分：`server/src/routes/admin.ts`（1473 行）拆成 `admin/index.ts` + `shared.ts` + `resumes/overview/invites/roster/submissions/settings`；`server/src/index.ts` 的 import 改为 `./routes/admin/index`。注册顺序与「`/login`、`/dev-login` 在 `requireAdmin()` 之前」的边界不变。拆分后 38 条路由：`GET /appointments` 是并行的 `14-管理员界面交互优化` 方案按「已无消费方」删除的（前端页面同时改为重定向到学员名单），不是本次拆分丢失。
+- consult 拆分：`server/src/routes/consult.ts`（2378 行）拆成 `consult/index.ts` + `forest.ts` + `shared.ts` + `purposes.ts` + `collections.ts` + `trees.ts` + `runs.ts`；根路由 `GET /` 与 `/trees*` 一起放在 `trees.ts` 并最先挂载，`/collections/bundle` 仍在 `/collections/:id` 之前。目录比原文件深一层，读取 `shared/src/consult-purpose-data.json` 与 `consult-forest-seed.json` 的相对路径同步改成 `../../../../`，已确认种子树仍能并入森林。`runs.ts` 仍有 1228 行，留作后续单独处理。
+- 拆分纪律：路由注册顺序、请求/响应、错误文案、鉴权边界都不变；共享辅助函数只留一份，不复制。
+- 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）。用脚本对比拆分前后「方法 + 路径」清单：consult 33/33 完全一致；admin 38 条，与 HEAD 的唯一差异是上面那条已被 doc-14 删除的 `/appointments`。另用临时 `DATA_DIR` + 8799 端口起服务探测：`/api/health` 200；dev-login 后 `/api/admin/{me,invites,submissions,overview,survey,template,skill,roster,resumes}` 与 `/api/admin/consult/{purposes,collections,runs}` 全部 200；未带 token 的 `/api/admin/submissions`、`/api/admin/consult/trees` 均 401；`/api/invite/nope` 404。浏览器走查 `/`、`/admin`、`/admin/consult`、`/admin/consult/purposes`、`/admin/survey`、`/admin/submissions`、`/admin/resumes`，懒加载路由均正常渲染且无控制台报错。
+- 第二批（组件与巨型模块拆分，同日完成）：`ReportBlocks.vue` 2283 → 217 行，按 `block.type` 拆出 `report-blocks/` 下 17 个块组件与 `jobMeta.ts`，共用样式收进 `report-blocks/shared/`（8 个 CSS，`<style scoped src>` 引用）；`ConsultPurposes.vue` 2080 → 273 行、`ConsultWorkspace.vue` 1883 → 193 行，画布 / 详情侧栏 / 运行编辑 / 导入分别拆到 `components/consult/`，状态与请求收进 `useMindmapViewport`、`useConsultRuns`、`useConsultImport`；`doc-generate.ts` 1630 → 321 行，检索 / 提示词 / 审计拆到 `doc-search.ts`、`doc-prompts.ts`、`doc-audit.ts`，原导出名与 re-export 保留；`db.ts` 963 → 27 行入口，拆到 `db/` 下 connection / core / schema / migrations / sessions / surveys / templates / skill，迁移顺序与导出名不变（不建 `db/index.ts`，避免与 `db.ts` 解析歧义）。
+- 第二批验证：`npm run verify` 全绿。17 种 block 全部覆盖——9 种用真实报告页，6 种用 `/admin/report/preview`，`consistency` / `note` 无现成数据，用同构 payload 注入预览页。拆分前后同一份数据在 1440 / 375 的截图、计算样式、可见文本哈希逐字节一致，控制台无报错；期间发现并修正样式合并顺序导致的移动端 `LI.job` padding 偏差（`JobMapBlock.vue` 补回 720px 媒体查询的 `16px 16px`）。咨询工作台与用途页同样逐字节一致。
+- `db/` 启动验证：用含 WAL 的现有库副本（`vesta.db` + `-wal` + `-shm`）以临时 `DATA_DIR` 连续启动两次，两次 `/api/health` 均 200，`PRAGMA integrity_check` 为 `ok`；`invites` / `submissions` 补列齐全，`surveys` 1 条、`consult_forest` 为同一份已应用种子的森林，第二次启动没有重复 seed。
+- 剩余：`server/src/routes/consult/runs.ts`（1228 行），以及 `Submissions.vue`、`ResumeCollection.vue`、`shared/src/doc.ts`、`ReportView.vue` 等仍偏大的文件，拆分方向见方案第七节，留作后续单独处理。
+- 边界：纯文件移动 + 懒加载，回滚即 revert；未改数据、未改接口、未提交 `data/` 和 `web/dist/`。截至 2026-11-12 评审时，第一批、第二批改动仍在工作区、尚未提交；提交后把 commit hash 补进方案第六节和本文件。
+
+### 管理员界面交互优化（2026-11-12，产品版本 v1.61）
+
+- 依据：`docs/archive/20261112/14-管理员界面交互优化-设计方案.md` v1.0。产品版本约定从 v1.60 起算，本轮为 v1.61（见 `docs/README.md`「版本约定」）。
+- 删除咨询预约：移除后台 `Appointments.vue`、`/admin/appointments` 路由、`api.appointments()` 与 `AdminAppointment` 类型、侧栏入口；旧路径保留重定向到学员名单，避免旧书签 404。后端删除无消费方的 `GET /api/admin/appointments`。**保留**报告页领取/预约表单、`POST /api/report/:slug/claim`、`submissions` 的 `wechat_enc / slots / claimed_at / contact_status / admin_notes`，微信号和时间段继续在学员名单 / 答卷详情查看。
+- 导航调整：「答卷与名单」改名「学员名单」；侧栏拆出「设置」组（问卷设置 / 报告设置 / AI 分析规则），三个页面路由不变，顶部共享胶囊式设置切换条；`navGroups` 新增 `settings` 键，旧 localStorage 用默认展开兼容。
+- 交互统一：
+  - 共享 `AdminPageHeader`，补齐邀请链接、学员名单、答卷详情的页头；页头/空状态样式提升到全局。
+  - 共享 `SaveBar`：设置三页与答卷详情用底部保存条替代页头保存按钮；`useUnsavedChanges` 改为异步确认框守卫。
+  - 共享 `ConfirmHost` + `confirmAction` / `promptAction`，替换各页 `window.confirm` / `window.prompt`；`Modal` 增加焦点陷阱、焦点还原、弹窗栈与滚动锁计数。
+  - 学员名单：工具条/表头吸顶，行点击或 Enter 进详情，操作收进 `RowMenu`，选中行出现批量操作条，`/` 聚焦搜索，`Ctrl/Cmd+S` 保存。
+  - `ConsultWorkspace` 接入未保存提醒，`SaveBar` 逐模块保存并保留已完成部分；收藏栏卡片改为单击 / Enter 打开，不再依赖双击。
+- 范围外：不改问卷与报告业务口径，不重新生成旧报告，不做数据迁移。
+- 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）。Playwright 走查：侧栏无「咨询预约」，`/admin/appointments` 重定向学员名单；设置切换条与分组状态正常；学员名单 `/` 搜索、工具条吸顶、表头吸顶、行点击 / Enter 进详情、批量选择条、更多菜单 Escape 关闭均正常；设置页 SaveBar 出现 / 放弃回滚 / 离开守卫正常；答卷详情页头与保存条正常；390px 无横向溢出；报告页领取表单仍在（只读检查，未提交）；控制台无报错。旧答卷 `scores.dimensions` 为空属历史数据口径，未修改。
+
 ### 报告检索遗留与文案细节修复（2026-11-12）
 
 - 依据：`docs/archive/20261112/12-报告检索遗留与文案细节-修复方案.md` v1.0。剩余问题集中在「检索词届别、网络失败重试、错误文案、几处 UI 文案」。

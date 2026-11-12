@@ -1,5 +1,19 @@
 <template>
   <div class="submissions-page">
+    <AdminPageHeader eyebrow="学员" title="学员名单">
+      <template #actions>
+        <span class="quiet small">{{ roster.length }} 人</span>
+        <button
+          class="btn ghost small export-btn"
+          type="button"
+          :disabled="exporting"
+          @click="exportCsv"
+        >
+          {{ exporting ? '正在导出' : '导出答卷 CSV' }}
+        </button>
+      </template>
+    </AdminPageHeader>
+
     <div class="category-tabs" role="tablist" aria-label="名单分类">
       <button
         v-for="item in tabs"
@@ -172,35 +186,36 @@
       </div>
     </section>
 
-    <div class="toolbar">
-      <input v-model="q" class="input search" type="search" placeholder="搜索姓名、备注、渠道" />
+    <div v-if="!selected.size" class="toolbar list-toolbar">
+      <input
+        v-model="q"
+        class="input search"
+        type="search"
+        placeholder="搜索姓名、备注、渠道（/ 搜索）"
+        data-admin-search
+      />
       <span class="spacer" />
-      <span v-if="selected.size" class="quiet tiny">已选 {{ selected.size }} 条</span>
-      <select
-        v-if="selected.size"
-        class="input small-select"
-        :value="''"
-        @change="assignSelected($event)"
-      >
+      <span v-if="showDateTones" class="date-hint">表格颜色按邀请日期区分</span>
+    </div>
+
+    <div v-else class="toolbar selection-bar" role="region" aria-label="批量操作">
+      <strong>已选 {{ selected.size }} 条</strong>
+      <select class="input small-select" :value="''" @change="assignSelected($event)">
         <option value="">移到分组…</option>
         <option value="__none">移出分组</option>
         <option v-for="group in groups" :key="group.id" :value="group.id">
           {{ group.name }}
         </option>
       </select>
+      <span class="spacer" />
+      <button class="btn ghost small" type="button" @click="clearSelection">取消选择</button>
       <button
-        v-if="selected.size"
         class="btn ghost small danger-btn"
         type="button"
         :disabled="batchDeleting"
         @click="removeSelected"
       >
         {{ batchDeleting ? '删除中' : '批量删除' }}
-      </button>
-      <span v-if="showDateTones" class="date-hint">表格颜色按邀请日期区分</span>
-      <span class="quiet tiny">{{ roster.length }} 人</span>
-      <button class="btn ghost small export-btn" type="button" :disabled="exporting" @click="exportCsv">
-        {{ exporting ? '正在导出' : '导出答卷 CSV' }}
       </button>
     </div>
 
@@ -251,7 +266,14 @@
             <tr
               v-for="row in roster"
               :key="row.id"
-              :class="[rowTone(row), { unsubmitted: !row.submissionId, picked: selected.has(row.id) }]"
+              :class="[
+                rowTone(row),
+                { unsubmitted: !row.submissionId, picked: selected.has(row.id), 'row-link': !!row.detailPath }
+              ]"
+              :tabindex="row.detailPath ? 0 : undefined"
+              :role="row.detailPath ? 'link' : undefined"
+              @click="openRow(row, $event)"
+              @keydown.enter.self="openRow(row, $event)"
             >
               <td class="select-col">
                 <input
@@ -311,47 +333,8 @@
                   <div v-else-if="row.openedAt"><span>打开</span>{{ formatDate(row.openedAt, false) }}</div>
                 </div>
               </td>
-              <td>
-                <div class="row-actions">
-                  <template v-if="row.submissionId">
-                    <RouterLink v-if="row.detailPath" class="btn quiet" :to="row.detailPath">
-                      查看答卷
-                    </RouterLink>
-                    <a
-                      v-if="row.reportPath"
-                      class="btn quiet"
-                      :href="row.reportPath"
-                      target="_blank"
-                      rel="noopener"
-                    >
-                      打开报告
-                    </a>
-                    <button
-                      class="btn quiet danger"
-                      type="button"
-                      :disabled="deletingId === row.id"
-                      @click="removeSubmission(row)"
-                    >
-                      {{ deletingId === row.id ? '删除中' : '删除答卷' }}
-                    </button>
-                  </template>
-                  <template v-else-if="row.stage === 'expired'">
-                    <button class="btn quiet" type="button" @click="rotate(row)">换新链接</button>
-                  </template>
-                  <template v-else>
-                    <button class="btn quiet" type="button" @click="copyLink(row)">复制链接</button>
-                    <button class="btn quiet" type="button" @click="openInvite(row)">打开</button>
-                  </template>
-                  <button
-                    v-if="!row.submissionId"
-                    class="btn quiet danger"
-                    type="button"
-                    :disabled="deletingInviteId === row.id"
-                    @click="removeInvite(row)"
-                  >
-                    {{ deletingInviteId === row.id ? '删除中' : '删除记录' }}
-                  </button>
-                </div>
+              <td class="actions-col">
+                <RowMenu :items="rowMenuItems(row)" @select="onRowMenu(row, $event)" />
               </td>
             </tr>
           </tbody>
@@ -378,6 +361,10 @@ import {
   type AdminRosterStage
 } from '@/api'
 import { formatDate } from '@/format'
+import AdminPageHeader from '@/components/AdminPageHeader.vue'
+import RowMenu, { type RowMenuItem } from '@/components/RowMenu.vue'
+import { confirmAction, promptAction } from '@/useConfirm'
+import { useSlashFocus } from '@/useHotkeys'
 
 const tabs = [
   { key: '', label: '全部' },
@@ -460,7 +447,14 @@ async function createGroup() {
 }
 
 async function renameGroup(group: AdminRosterGroup) {
-  const name = window.prompt('新的分组名称', group.name)?.trim()
+  const name = (
+    await promptAction({
+      title: '分组改名',
+      message: `修改分组「${group.name}」的名称。`,
+      confirmText: '保存',
+      input: { label: '新的分组名称', value: group.name, maxlength: 24, required: true }
+    })
+  )?.trim()
   if (!name || name === group.name) return
   groupSaving.value = true
   try {
@@ -475,13 +469,13 @@ async function renameGroup(group: AdminRosterGroup) {
 }
 
 async function deleteGroup(group: AdminRosterGroup) {
-  if (
-    !confirm(
-      `删除分组「${group.name}」？只删分组本身，里面的 ${group.count} 条记录会回到「未分组」，之后可以恢复。`
-    )
-  ) {
-    return
-  }
+  const ok = await confirmAction({
+    title: '删除分组',
+    message: `删除分组「${group.name}」？只删分组本身，里面的 ${group.count} 条记录会回到「未分组」，之后可以恢复。`,
+    confirmText: '删除分组',
+    danger: true
+  })
+  if (!ok) return
   groupSaving.value = true
   try {
     await api.deleteRosterGroup(group.id)
@@ -509,13 +503,13 @@ async function restoreGroup(group: AdminRosterDeletedGroup) {
 }
 
 async function hideDate(day: AdminRosterDateOption) {
-  if (
-    !confirm(
-      `删除日期分类「${dateLabel(day.date)}」？只是不再出现在日期筛选里，${day.count} 条记录不会受影响，之后可以恢复。`
-    )
-  ) {
-    return
-  }
+  const ok = await confirmAction({
+    title: '删除日期分类',
+    message: `删除日期分类「${dateLabel(day.date)}」？只是不再出现在日期筛选里，${day.count} 条记录不会受影响，之后可以恢复。`,
+    confirmText: '删除分类',
+    danger: true
+  })
+  if (!ok) return
   try {
     await api.hideRosterDate(day.date)
     await load()
@@ -577,13 +571,13 @@ function toggleAll(event: Event) {
 async function removeSelected() {
   const ids = [...selected.value]
   if (ids.length === 0) return
-  if (
-    !confirm(
-      `删除选中的 ${ids.length} 条记录？答卷、报告和邀请链接都会一起删掉，删完不能恢复。`
-    )
-  ) {
-    return
-  }
+  const ok = await confirmAction({
+    title: '批量删除记录',
+    message: `删除选中的 ${ids.length} 条记录？答卷、报告和邀请链接都会一起删掉，删完不能恢复。`,
+    confirmText: '删除',
+    danger: true
+  })
+  if (!ok) return
   batchDeleting.value = true
   try {
     await api.batchDeleteRoster(ids)
@@ -814,15 +808,76 @@ function openInvite(row: AdminRosterRow) {
   window.open(inviteUrl(row.token), '_blank')
 }
 
-async function removeInvite(row: AdminRosterRow) {
-  const who = row.name || '这条邀请记录'
+function openRow(row: AdminRosterRow, event: MouseEvent | KeyboardEvent) {
+  if (!row.detailPath) return
+  const target = event.target as HTMLElement | null
   if (
-    !confirm(
-      `删除「${who}」这条记录？删除后链接失效，列表里不再显示。已提交的答卷不受影响，请先删答卷。`
+    target?.closest(
+      'a, button, input, select, textarea, label, [data-row-ignore], [role="menu"], [role="menuitem"]'
     )
   ) {
     return
   }
+  void router.push(row.detailPath)
+}
+
+function clearSelection() {
+  selected.value = new Set()
+}
+
+function rowMenuItems(row: AdminRosterRow): RowMenuItem[] {
+  if (row.submissionId) {
+    const items: RowMenuItem[] = []
+    if (row.detailPath) items.push({ key: 'detail', label: '查看答卷' })
+    if (row.reportPath) items.push({ key: 'report', label: '打开报告' })
+    items.push({
+      key: 'delete-submission',
+      label: deletingId.value === row.id ? '删除中…' : '删除答卷',
+      danger: true,
+      disabled: !!deletingId.value
+    })
+    return items
+  }
+  const items: RowMenuItem[] = []
+  if (row.stage === 'expired') items.push({ key: 'rotate', label: '换新链接' })
+  items.push({ key: 'copy', label: '复制链接' })
+  if (row.stage !== 'expired') items.push({ key: 'open', label: '打开' })
+  items.push({
+    key: 'delete-invite',
+    label: deletingInviteId.value === row.id ? '删除中…' : '删除记录',
+    danger: true,
+    disabled: !!deletingInviteId.value
+  })
+  return items
+}
+
+async function onRowMenu(row: AdminRosterRow, key: string) {
+  if (key === 'detail') {
+    if (row.detailPath) void router.push(row.detailPath)
+  } else if (key === 'report') {
+    if (row.reportPath) window.open(row.reportPath, '_blank', 'noopener')
+  } else if (key === 'copy') {
+    await copyLink(row)
+  } else if (key === 'open') {
+    openInvite(row)
+  } else if (key === 'rotate') {
+    await rotate(row)
+  } else if (key === 'delete-submission') {
+    await removeSubmission(row)
+  } else if (key === 'delete-invite') {
+    await removeInvite(row)
+  }
+}
+
+async function removeInvite(row: AdminRosterRow) {
+  const who = row.name || '这条邀请记录'
+  const ok = await confirmAction({
+    title: '删除记录',
+    message: `删除「${who}」这条记录？删除后链接失效，列表里不再显示。已提交的答卷不受影响，请先删答卷。`,
+    confirmText: '删除',
+    danger: true
+  })
+  if (!ok) return
   deletingInviteId.value = row.id
   try {
     await api.deleteInvite(row.inviteId)
@@ -838,13 +893,13 @@ async function removeInvite(row: AdminRosterRow) {
 async function removeSubmission(row: AdminRosterRow) {
   if (!row.submissionId) return
   const who = row.name || '这位学员'
-  if (
-    !confirm(
-      `删除「${who}」的答卷和报告？删除后这条邀请链接会回到「已打开」，可以重新填写。`
-    )
-  ) {
-    return
-  }
+  const ok = await confirmAction({
+    title: '删除答卷',
+    message: `删除「${who}」的答卷和报告？删除后这条邀请链接会回到「已打开」，可以重新填写。`,
+    confirmText: '删除答卷',
+    danger: true
+  })
+  if (!ok) return
   deletingId.value = row.id
   try {
     await api.deleteSubmission(row.submissionId)
@@ -858,7 +913,12 @@ async function removeSubmission(row: AdminRosterRow) {
 }
 
 async function rotate(row: AdminRosterRow) {
-  if (!confirm(`给「${row.name}」换一条新链接？旧链接会立即失效`)) return
+  const ok = await confirmAction({
+    title: '换新链接',
+    message: `给「${row.name || '这位学员'}」换一条新链接？旧链接会立即失效。`,
+    confirmText: '换新链接'
+  })
+  if (!ok) return
   try {
     const result = await api.rotateInvite(row.inviteId)
     await writeClipboard(`${location.origin}${result.path}`)
@@ -915,6 +975,7 @@ function flash(message: string) {
   }, 2200)
 }
 
+useSlashFocus()
 onMounted(load)
 </script>
 
@@ -1261,6 +1322,39 @@ onMounted(load)
   margin-bottom: 14px;
 }
 
+.selection-bar {
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  margin-bottom: 12px;
+}
+
+.selection-bar strong {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+@media (min-width: 901px) {
+  .list-toolbar,
+  .selection-bar {
+    position: sticky;
+    top: 0;
+    z-index: 18;
+  }
+
+  .list-toolbar {
+    margin: -8px 0 6px;
+    padding: 8px 0;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .selection-bar {
+    margin: -8px 0 12px;
+  }
+}
+
 .search {
   max-width: 300px;
   height: 40px;
@@ -1287,7 +1381,21 @@ onMounted(load)
 }
 
 .table-scroll {
-  overflow-x: auto;
+  overflow: auto;
+}
+
+@media (min-width: 901px) {
+  .table-scroll {
+    max-height: calc(100vh - 230px);
+  }
+
+  .roster-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface);
+    box-shadow: inset 0 -1px 0 var(--line);
+  }
 }
 
 .name {
@@ -1340,18 +1448,21 @@ onMounted(load)
   color: var(--ink-3);
 }
 
-.row-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 2px;
-  flex-wrap: wrap;
+.row-link {
+  cursor: pointer;
 }
 
-.row-actions .danger {
-  color: var(--danger);
+.roster-table tbody tr.row-link:focus-visible {
+  outline: 2px solid rgba(47, 93, 70, 0.55);
+  outline-offset: -2px;
 }
 
-.toolbar .danger-btn {
+.actions-col {
+  width: 64px;
+  text-align: right;
+}
+
+.selection-bar .danger-btn {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 35%, transparent);
 }

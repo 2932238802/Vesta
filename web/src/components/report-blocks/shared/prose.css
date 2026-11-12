@@ -1,0 +1,31 @@
+.prose {
+  display: grid;
+  gap: 16px;
+  max-width: 36em;
+}
+
+.prose p {
+  font-size: 14.5px;
+  line-height: 1.95;
+  color: var(--ink-2);
+}
+
+.prose p.first {
+  font-size: 16.5px;
+  line-height: 1.85;
+  color: var(--ink);
+}
+
+.prose {
+  gap: 20px;
+}
+
+.prose p {
+  font-size: var(--report-text);
+  line-height: 2;
+}
+
+.prose p.first {
+  font-size: var(--report-lead);
+  line-height: 1.9;
+}

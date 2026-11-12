@@ -1,12 +1,10 @@
 <template>
   <div class="dashboard">
-    <header class="page-head">
-      <div>
-        <p class="eyebrow">概览</p>
-        <h1 class="page-title">今天的情况</h1>
-      </div>
-      <button class="btn" type="button" @click="router.push('/admin/invites')">生成邀请链接</button>
-    </header>
+    <AdminPageHeader eyebrow="学员" title="今天的情况">
+      <template #actions>
+        <RouterLink class="btn" to="/admin/invites">生成邀请链接</RouterLink>
+      </template>
+    </AdminPageHeader>
 
     <div v-if="loading" class="card empty">正在读取数据</div>
     <div v-else-if="error" class="card empty">
@@ -36,11 +34,11 @@
           <p class="stat-meta">还有 {{ data.stats.pending }} 人未填写</p>
           <span class="stat-link">查看未填写 →</span>
         </RouterLink>
-        <RouterLink class="card stat" to="/admin/appointments">
+        <RouterLink class="card stat" to="/admin/submissions">
           <p class="stat-label">已领取规划</p>
           <p class="stat-value">{{ data.stats.claimed }}</p>
-          <p class="stat-meta">安排联系和咨询时间</p>
-          <span class="stat-link">查看预约 →</span>
+          <p class="stat-meta">联系状态在学员名单里更新</p>
+          <span class="stat-link">查看名单 →</span>
         </RouterLink>
       </section>
 
@@ -72,15 +70,17 @@
           </header>
           <div v-if="data.recent.length === 0" class="empty small-empty">还没有人提交</div>
           <ul v-else class="recent">
-            <li v-for="row in data.recent" :key="row.id" @click="router.push(`/admin/submissions/${row.id}`)">
-              <div class="recent-main">
-                <span class="recent-name">{{ row.name || '未命名' }}</span>
-                <span class="quiet tiny">{{ row.note || formatDate(row.createdAt, false) }}</span>
-              </div>
-              <div class="recent-meta">
-                <span class="chip accent">{{ row.tier }} 档</span>
-                <span class="quiet tiny">{{ formatDate(row.createdAt) }}</span>
-              </div>
+            <li v-for="row in data.recent" :key="row.id">
+              <RouterLink class="recent-item" :to="`/admin/submissions/${row.id}`">
+                <div class="recent-main">
+                  <span class="recent-name">{{ row.name || '未命名' }}</span>
+                  <span class="quiet tiny">{{ row.note || formatDate(row.createdAt, false) }}</span>
+                </div>
+                <div class="recent-meta">
+                  <span class="chip accent">{{ row.tier }} 档</span>
+                  <span class="quiet tiny">{{ formatDate(row.createdAt) }}</span>
+                </div>
+              </RouterLink>
             </li>
           </ul>
         </section>
@@ -121,11 +121,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink } from 'vue-router'
 import { api, type Overview } from '@/api'
 import { formatDate } from '@/format'
+import AdminPageHeader from '@/components/AdminPageHeader.vue'
 
-const router = useRouter()
 const data = ref<Overview | null>(null)
 const loading = ref(true)
 const error = ref('')
@@ -164,22 +164,6 @@ onMounted(load)
 </script>
 
 <style scoped>
-.page-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-  margin-bottom: 26px;
-}
-
-.page-title {
-  margin-top: 8px;
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -322,21 +306,27 @@ onMounted(load)
 }
 
 .recent li {
+  display: block;
+  border-top: 1px solid var(--line);
+}
+
+.recent li:first-child {
+  border-top: 0;
+}
+
+.recent-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 12px 0;
-  border-top: 1px solid var(--line);
-  cursor: pointer;
 }
 
-.recent li:first-child {
-  border-top: 0;
+.recent li:first-child .recent-item {
   padding-top: 0;
 }
 
-.recent li:hover .recent-name {
+.recent-item:hover .recent-name {
   color: var(--accent);
 }
 

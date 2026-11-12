@@ -250,6 +250,16 @@ svg {
   background: transparent;
 }
 
+.btn.danger-solid {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.btn.danger-solid:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
 .btn.wide {
   width: 100%;
 }
@@ -417,6 +427,58 @@ svg {
 
 .empty-action {
   margin-top: 16px;
+}
+
+.state-line {
+  margin: 10px 0;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.state-line.error {
+  color: var(--danger);
+}
+
+.empty-title {
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+/* 管理后台共享页面骨架（公开页不受影响） */
+.admin .page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 26px;
+  flex-wrap: wrap;
+}
+
+.admin .page-head-main {
+  min-width: 0;
+}
+
+.admin .page-title {
+  margin-top: 6px;
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.admin .page-sub {
+  margin-top: 6px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.admin .head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .notice {

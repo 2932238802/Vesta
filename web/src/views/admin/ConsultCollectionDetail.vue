@@ -92,6 +92,7 @@ import type { ConsultCollectionItem, ConsultCollectionKind } from '@/api'
 import { consultCollectionKindLabels } from '@shared/consult-collection'
 import { formatDate } from '@/format'
 import { renderMarkdown } from '@/markdown'
+import { confirmAction } from '@/useConfirm'
 
 const route = useRoute()
 const router = useRouter()
@@ -172,7 +173,14 @@ async function copy() {
 async function remove() {
   const entry = item.value
   if (!entry) return
-  if (!window.confirm(`删除「${displayTitle(entry)}」？`)) return
+  const ok = await confirmAction({
+    title: '删除收藏',
+    message: `删除「${displayTitle(entry)}」？`,
+    confirmText: '删除',
+    cancelText: '取消',
+    danger: true
+  })
+  if (!ok) return
   try {
     await api.deleteConsultCollection(entry.id)
     router.push({ name: 'admin-consult-collections' })

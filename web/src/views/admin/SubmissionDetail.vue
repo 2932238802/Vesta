@@ -1,6 +1,6 @@
 <template>
   <div class="detail-page">
-    <RouterLink class="back" to="/admin/submissions">← 返回答卷列表</RouterLink>
+    <RouterLink class="back" to="/admin/submissions">← 返回学员名单</RouterLink>
 
     <div v-if="loading" class="card empty">正在读取答卷</div>
     <div v-else-if="error" class="card empty">
@@ -11,28 +11,21 @@
     </div>
 
     <template v-else-if="detail">
-      <header class="head">
-        <div>
-          <p class="eyebrow">答卷 · {{ formatDate(detail.createdAt) }}</p>
-          <h1>{{ detail.name || '未命名' }}</h1>
-          <p class="head-sub">
-            <span v-if="detail.note">{{ detail.note }}</span>
-            <span v-if="detail.channel" class="sep">·</span>
-            <span v-if="detail.channel">{{ detail.channel }}</span>
-          </p>
-        </div>
-        <div class="head-actions">
+      <AdminPageHeader
+        :eyebrow="`答卷 · ${formatDate(detail.createdAt)}`"
+        :title="detail.name || '未命名'"
+        :subtitle="[detail.note, detail.channel].filter(Boolean).join(' · ')"
+        :dirty="dirty"
+      >
+        <template #actions>
           <a class="btn ghost small" :href="detail.reportPath" target="_blank" rel="noopener">
             打开报告
           </a>
-          <button class="btn small" type="button" :disabled="saving || !dirty" @click="save">
-            {{ saving ? '保存中' : '保存修改' }}
-          </button>
           <button class="btn ghost small danger" type="button" :disabled="deleting" @click="remove">
             {{ deleting ? '删除中' : '删除答卷' }}
           </button>
-        </div>
-      </header>
+        </template>
+      </AdminPageHeader>
 
       <div class="grid">
         <section class="card panel score-panel">
@@ -156,6 +149,15 @@
         </div>
       </section>
 
+      <SaveBar
+        :dirty="dirty"
+        :saving="saving"
+        save-label="保存修改"
+        message="答卷修改还没有保存"
+        @save="save"
+        @discard="discard"
+      />
+
       <Transition name="toast">
         <div v-if="toast" class="toast">{{ toast }}</div>
       </Transition>
@@ -168,7 +170,12 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { api, type AdminSubmissionDetail } from '@/api'
 import { formatDate } from '@/format'
+import AdminPageHeader from '@/components/AdminPageHeader.vue'
+import SaveBar from '@/components/SaveBar.vue'
 import ScoreBar from '@/components/ScoreBar.vue'
+import { confirmAction } from '@/useConfirm'
+import { useSaveHotkey } from '@/useHotkeys'
+import { useUnsavedChanges } from '@/useUnsavedChanges'
 
 const route = useRoute()
 const router = useRouter()
@@ -222,6 +229,16 @@ const dirty = computed(
     form.closing !== initial.closing
 )
 
+useUnsavedChanges(dirty, '答卷修改还没有保存，确定离开？')
+useSaveHotkey(() => {
+  if (dirty.value && !saving.value) void save()
+}, () => dirty.value && !saving.value)
+
+function discard() {
+  Object.assign(form, { ...initial })
+  flash('已放弃未保存的修改')
+}
+
 function answersOf(groupId: string) {
   if (!detail.value) return []
   const group = detail.value.groups.find((g) => g.id === groupId)
@@ -273,16 +290,18 @@ async function save() {
 
 async function remove() {
   const who = detail.value?.name || '这份答卷'
-  if (
-    !window.confirm(
-      `删除「${who}」的答卷和报告？删除后这条邀请链接会回到「已打开」，可以重新填写。`
-    )
-  ) {
-    return
-  }
+  const ok = await confirmAction({
+    title: '删除答卷',
+    message: `删除「${who}」的答卷和报告？删除后这条邀请链接会回到「已打开」，可以重新填写。`,
+    confirmText: '删除',
+    cancelText: '取消',
+    danger: true
+  })
+  if (!ok) return
   deleting.value = true
   try {
     await api.deleteSubmission(id)
+    Object.assign(initial, { ...form })
     await router.push('/admin/submissions')
   } catch (err) {
     flash(err instanceof Error ? err.message : '删除失败')
@@ -293,13 +312,14 @@ async function remove() {
 
 async function regenerate() {
   if (!detail.value) return
-  if (
-    !window.confirm(
-      '重新生成会替换当前 AI 报告。生成期间链接仍显示上一版，新版本完成后再替换。继续吗？'
-    )
-  ) {
-    return
-  }
+  const ok = await confirmAction({
+    title: '重新生成报告',
+    message: '重新生成会替换当前 AI 报告。生成期间链接仍显示上一版，新版本完成后再替换。',
+    confirmText: '重新生成',
+    cancelText: '取消',
+    danger: true
+  })
+  if (!ok) return
   regenerating.value = true
   try {
     await api.regenerateReport(id)
@@ -347,36 +367,8 @@ function flash(message: string) {
   color: var(--ink);
 }
 
-.head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-  margin: 6px 0 8px;
-}
-
-.head h1 {
-  margin-top: 8px;
-  font-size: 28px;
-  font-weight: 600;
-}
-
-.head-sub {
-  margin-top: 8px;
-  font-size: 12.5px;
-  color: var(--ink-3);
-  display: flex;
-  gap: 6px;
-}
-
-.sep {
-  color: var(--line-strong);
-}
-
-.head-actions {
-  display: flex;
-  gap: 8px;
+.detail-page :deep(.page-head) {
+  margin: 2px 0 4px;
 }
 
 .grid {

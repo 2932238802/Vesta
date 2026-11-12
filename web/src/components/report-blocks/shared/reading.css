@@ -1,0 +1,30 @@
+.target-note,
+.strength-text,
+.asset-body p,
+.direction-facts dd,
+.gap-step dd,
+.roadmap-goal,
+.check-detail,
+.potential p,
+.job-req,
+.lead {
+  font-size: var(--report-text);
+  line-height: 1.88;
+}
+
+.strength,
+.asset,
+.direction,
+.roadmap-body,
+.potential,
+.note {
+  border: 0;
+  background: color-mix(in srgb, var(--accent) 3.2%, var(--surface));
+}
+
+.asset-body h3,
+.direction-head h3,
+.roadmap-head h3 {
+  font-size: 16.5px;
+  line-height: 1.45;
+}

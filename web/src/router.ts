@@ -1,26 +1,28 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { api, getToken, setToken } from './api'
 import Root from './views/Root.vue'
-import Invite from './views/Invite.vue'
-import Quiz from './views/Quiz.vue'
-import ReportView from './views/ReportView.vue'
 import NotFound from './views/NotFound.vue'
-import Login from './views/admin/Login.vue'
-import AdminLayout from './views/admin/AdminLayout.vue'
-import Dashboard from './views/admin/Dashboard.vue'
-import Invites from './views/admin/Invites.vue'
-import Submissions from './views/admin/Submissions.vue'
-import Appointments from './views/admin/Appointments.vue'
-import SubmissionDetail from './views/admin/SubmissionDetail.vue'
-import SurveyEditor from './views/admin/SurveyEditor.vue'
-import ReportEditor from './views/admin/ReportEditor.vue'
-import ReportPreview from './views/admin/ReportPreview.vue'
-import SkillEditor from './views/admin/SkillEditor.vue'
-import ConsultWorkspace from './views/admin/ConsultWorkspace.vue'
-import ConsultPurposes from './views/admin/ConsultPurposes.vue'
-import ConsultCollections from './views/admin/ConsultCollections.vue'
-import ConsultCollectionDetail from './views/admin/ConsultCollectionDetail.vue'
-import ResumeCollection from './views/admin/ResumeCollection.vue'
+
+// 路由级拆包：入口页和 404 同步加载，其余页面按路由懒加载。
+// 公开页（邀请 / 问卷 / 报告）不再把整个管理后台打进首屏 chunk。
+const Invite = () => import('./views/Invite.vue')
+const Quiz = () => import('./views/Quiz.vue')
+const ReportView = () => import('./views/ReportView.vue')
+const Login = () => import('./views/admin/Login.vue')
+const AdminLayout = () => import('./views/admin/AdminLayout.vue')
+const Dashboard = () => import('./views/admin/Dashboard.vue')
+const Invites = () => import('./views/admin/Invites.vue')
+const Submissions = () => import('./views/admin/Submissions.vue')
+const SubmissionDetail = () => import('./views/admin/SubmissionDetail.vue')
+const SurveyEditor = () => import('./views/admin/SurveyEditor.vue')
+const ReportEditor = () => import('./views/admin/ReportEditor.vue')
+const ReportPreview = () => import('./views/admin/ReportPreview.vue')
+const SkillEditor = () => import('./views/admin/SkillEditor.vue')
+const ConsultWorkspace = () => import('./views/admin/ConsultWorkspace.vue')
+const ConsultPurposes = () => import('./views/admin/ConsultPurposes.vue')
+const ConsultCollections = () => import('./views/admin/ConsultCollections.vue')
+const ConsultCollectionDetail = () => import('./views/admin/ConsultCollectionDetail.vue')
+const ResumeCollection = () => import('./views/admin/ResumeCollection.vue')
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -49,11 +51,11 @@ export const router = createRouter({
         { path: '', name: 'admin-dashboard', component: Dashboard },
         { path: 'invites', name: 'admin-invites', component: Invites },
         { path: 'submissions', name: 'admin-submissions', component: Submissions },
-        { path: 'appointments', name: 'admin-appointments', component: Appointments },
+        { path: 'appointments', redirect: { name: 'admin-submissions' } },
         { path: 'submissions/:id', name: 'admin-submission', component: SubmissionDetail },
-        { path: 'survey', name: 'admin-survey', component: SurveyEditor },
-        { path: 'report', name: 'admin-report', component: ReportEditor },
-        { path: 'skill', name: 'admin-skill', component: SkillEditor },
+        { path: 'survey', name: 'admin-survey', component: SurveyEditor, meta: { settings: true } },
+        { path: 'report', name: 'admin-report', component: ReportEditor, meta: { settings: true } },
+        { path: 'skill', name: 'admin-skill', component: SkillEditor, meta: { settings: true } },
         { path: 'consult', name: 'admin-consult', component: ConsultWorkspace },
         { path: 'consult/tree', redirect: { name: 'admin-consult-purposes' } },
         { path: 'consult/purposes', name: 'admin-consult-purposes', component: ConsultPurposes },
@@ -78,8 +80,7 @@ const PAGE_TITLES: Record<string, string> = {
   'admin-login': '登录 · 管理后台',
   'admin-dashboard': '概览 · 管理后台',
   'admin-invites': '邀请链接 · 管理后台',
-  'admin-submissions': '答卷与名单 · 管理后台',
-  'admin-appointments': '咨询预约 · 管理后台',
+  'admin-submissions': '学员名单 · 管理后台',
   'admin-submission': '答卷详情 · 管理后台',
   'admin-survey': '问卷设置 · 管理后台',
   'admin-report': '报告设置 · 管理后台',

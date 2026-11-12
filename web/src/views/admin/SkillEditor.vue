@@ -1,17 +1,12 @@
 <template>
   <div class="skill-page">
-    <header class="page-head">
-      <div>
-        <p class="eyebrow">内容设置</p>
-        <h1 class="page-title">AI 分析规则</h1>
-      </div>
-      <div class="head-actions">
-        <span v-if="dirty" class="chip warn">未保存</span>
+    <AdminPageHeader eyebrow="设置" title="AI 分析规则" :dirty="dirty">
+      <template #actions>
         <button class="btn small" type="button" :disabled="loading" @click="openCreate">
           新建模板
         </button>
-      </div>
-    </header>
+      </template>
+    </AdminPageHeader>
 
     <div v-if="loading" class="card empty">正在读取分析规则</div>
 
@@ -182,6 +177,15 @@
       </template>
     </Modal>
 
+    <SaveBar
+      :dirty="dirty"
+      :saving="saving"
+      save-label="保存"
+      message="分析规则修改还没有保存"
+      @save="save"
+      @discard="discard"
+    />
+
     <Transition name="toast">
       <div v-if="toast" class="toast">{{ toast }}</div>
     </Transition>
@@ -191,7 +195,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, type AdminReportSkillTemplate } from '@/api'
+import AdminPageHeader from '@/components/AdminPageHeader.vue'
 import Modal from '@/components/Modal.vue'
+import SaveBar from '@/components/SaveBar.vue'
+import { confirmAction } from '@/useConfirm'
+import { useSaveHotkey } from '@/useHotkeys'
 import { useUnsavedChanges } from '@/useUnsavedChanges'
 
 const DEFAULT_SKILL_ID = 'default'
@@ -225,6 +233,9 @@ const dirty = computed(
 )
 
 useUnsavedChanges(dirty, '当前分析规则模板还有未保存的修改，确定离开？')
+useSaveHotkey(() => {
+  if (dirty.value && !saving.value) void save()
+}, () => dirty.value && !saving.value)
 
 const outputExample = `{
   "conclusion": "一句话结论，必须落到本次回答里的具体事实或系统数字",
@@ -284,15 +295,31 @@ async function load(preferredId?: string) {
 
 onMounted(() => void load())
 
-function selectTemplate(id: string) {
+async function selectTemplate(id: string) {
   if (id === selectedId.value) return
-  if (dirty.value && !window.confirm('当前模板有未保存的修改，确定切换？')) return
+  if (dirty.value) {
+    const ok = await confirmAction({
+      title: '当前模板有未保存的修改',
+      message: '切换模板会放弃这些修改。',
+      confirmText: '放弃并切换',
+      cancelText: '留在当前模板',
+      danger: true
+    })
+    if (!ok) return
+  }
   loadEditor(id)
 }
 
-function openCreate() {
-  if (dirty.value && !window.confirm('当前模板有未保存的修改，新建模板会放弃这些修改，继续？')) {
-    return
+async function openCreate() {
+  if (dirty.value) {
+    const ok = await confirmAction({
+      title: '当前模板有未保存的修改',
+      message: '新建模板会放弃这些修改。',
+      confirmText: '继续新建',
+      cancelText: '取消',
+      danger: true
+    })
+    if (!ok) return
   }
   createError.value = ''
   newTemplateName.value = `自定义模板 ${templates.value.length + 1}`
@@ -375,7 +402,14 @@ async function removeSelected() {
   const message = inUse
     ? `「${template.name}」正在使用，删除后会恢复默认设置。确定删除？`
     : `确定删除「${template.name}」？`
-  if (!window.confirm(message)) return
+  const ok = await confirmAction({
+    title: '删除模板',
+    message,
+    confirmText: '删除',
+    cancelText: '取消',
+    danger: true
+  })
+  if (!ok) return
   error.value = ''
   saving.value = true
   try {
@@ -391,6 +425,13 @@ async function removeSelected() {
   }
 }
 
+function discard() {
+  editorName.value = originalName.value
+  editorSkill.value = originalSkill.value
+  error.value = ''
+  flash('已放弃未保存的修改')
+}
+
 function flash(message: string) {
   toast.value = message
   setTimeout(() => {
@@ -402,26 +443,6 @@ function flash(message: string) {
 <style scoped>
 .skill-page {
   max-width: 980px;
-}
-
-.page-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 28px;
-}
-
-.page-title {
-  margin-top: 8px;
-  font-size: 26px;
-  font-weight: 500;
-}
-
-.head-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 .status-row {

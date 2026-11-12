@@ -1,12 +1,25 @@
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="open" class="overlay" @click.self="close">
-        <div class="panel" :class="{ wide }" role="dialog" aria-modal="true">
+      <div
+        v-if="open"
+        class="overlay"
+        :style="{ zIndex }"
+        @click.self="closeOnOverlay && close()"
+      >
+        <div
+          ref="panel"
+          class="panel"
+          :class="{ wide }"
+          role="dialog"
+          aria-modal="true"
+          :aria-labelledby="titleId"
+          tabindex="-1"
+        >
           <header class="panel-head">
             <div>
               <p v-if="eyebrow" class="eyebrow">{{ eyebrow }}</p>
-              <h2 class="panel-title">{{ title }}</h2>
+              <h2 :id="titleId" class="panel-title">{{ title }}</h2>
             </div>
             <button class="close" type="button" aria-label="关闭" @click="close">×</button>
           </header>
@@ -22,38 +35,124 @@
   </Teleport>
 </template>
 
-<script setup lang="ts">
-import { onBeforeUnmount, watch } from 'vue'
+<script lang="ts">
+// 模块级共享状态：多弹窗叠加时只有最上层响应 Escape / Tab，body 滚动锁用计数。
+const modalStack: symbol[] = []
+let scrollLocks = 0
+</script>
 
-const props = defineProps<{
-  open: boolean
-  title: string
-  eyebrow?: string
-  wide?: boolean
-}>()
+<script setup lang="ts">
+import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
+
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    title: string
+    eyebrow?: string
+    wide?: boolean
+    zIndex?: number
+    closeOnOverlay?: boolean
+  }>(),
+  { zIndex: 80, closeOnOverlay: true }
+)
 
 const emit = defineEmits<{ (event: 'close'): void }>()
+
+const panel = ref<HTMLElement | null>(null)
+const titleId = useId()
+const key = Symbol('modal')
+let lastActive: HTMLElement | null = null
+let locked = false
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 function close() {
   emit('close')
 }
 
+function focusables(): HTMLElement[] {
+  if (!panel.value) return []
+  return [...panel.value.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+    (el) => el.offsetParent !== null || el === document.activeElement
+  )
+}
+
+function isTop() {
+  return modalStack[modalStack.length - 1] === key
+}
+
 function onKey(event: KeyboardEvent) {
-  if (event.key === 'Escape') close()
+  if (!isTop()) return
+  if (event.key === 'Escape') {
+    event.stopPropagation()
+    close()
+    return
+  }
+  if (event.key !== 'Tab') return
+  const items = focusables()
+  if (items.length === 0) {
+    event.preventDefault()
+    panel.value?.focus()
+    return
+  }
+  const first = items[0]
+  const last = items[items.length - 1]
+  const active = document.activeElement as HTMLElement | null
+  if (event.shiftKey && (active === first || active === panel.value)) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+function lockBody() {
+  if (locked) return
+  locked = true
+  scrollLocks += 1
+  if (scrollLocks === 1) document.body.style.overflow = 'hidden'
+}
+
+function unlockBody() {
+  if (!locked) return
+  locked = false
+  scrollLocks = Math.max(0, scrollLocks - 1)
+  if (scrollLocks === 0) document.body.style.overflow = ''
 }
 
 watch(
   () => props.open,
   (open) => {
-    document.body.style.overflow = open ? 'hidden' : ''
-    if (open) window.addEventListener('keydown', onKey)
-    else window.removeEventListener('keydown', onKey)
-  }
+    if (open) {
+      if (!modalStack.includes(key)) modalStack.push(key)
+      lockBody()
+      window.addEventListener('keydown', onKey, true)
+      lastActive = document.activeElement as HTMLElement | null
+      void nextTick(() => {
+        const items = focusables()
+        ;(items[0] ?? panel.value)?.focus()
+      })
+    } else {
+      const index = modalStack.indexOf(key)
+      if (index >= 0) modalStack.splice(index, 1)
+      window.removeEventListener('keydown', onKey, true)
+      unlockBody()
+      if (lastActive?.isConnected) lastActive.focus()
+      lastActive = null
+    }
+  },
+  { immediate: true }
 )
 
 onBeforeUnmount(() => {
-  document.body.style.overflow = ''
-  window.removeEventListener('keydown', onKey)
+  const index = modalStack.indexOf(key)
+  if (index >= 0) {
+    modalStack.splice(index, 1)
+    window.removeEventListener('keydown', onKey, true)
+    unlockBody()
+  }
 })
 </script>
 
@@ -79,6 +178,7 @@ onBeforeUnmount(() => {
   border-radius: 20px;
   box-shadow: 0 24px 60px rgba(30, 28, 22, 0.14);
   overflow: hidden;
+  outline: none;
 }
 
 .panel.wide {

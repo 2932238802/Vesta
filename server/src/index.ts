@@ -3,7 +3,7 @@ import path from 'node:path'
 import express from 'express'
 import type { NextFunction, Request, Response } from 'express'
 import { config } from './env'
-import { adminRouter } from './routes/admin'
+import { adminRouter } from './routes/admin/index'
 import { publicRouter } from './routes/public'
 
 const app = express()

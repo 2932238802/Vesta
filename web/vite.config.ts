@@ -21,6 +21,14 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Vue 运行时单独成 chunk，避免被重复打进每个路由 chunk。
+        manualChunks: {
+          'vendor-vue': ['vue', 'vue-router']
+        }
+      }
+    }
   }
 })

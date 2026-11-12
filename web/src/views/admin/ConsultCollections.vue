@@ -1,11 +1,7 @@
 <template>
   <div class="collections-page">
-    <header class="page-head">
-      <div>
-        <p class="eyebrow">咨询</p>
-        <h1>收藏栏</h1>
-      </div>
-      <div class="head-actions">
+    <AdminPageHeader eyebrow="咨询" title="收藏栏">
+      <template #actions>
         <span class="count">{{ items.length }} 条收藏</span>
         <button class="btn ghost" type="button" :disabled="importing" @click="pickDocx">
           {{ importing ? '导入中…' : '导入 Word' }}
@@ -19,8 +15,8 @@
           @change="onFilesPicked"
         >
         <button class="btn" type="button" @click="startCreate(filter)">新增收藏</button>
-      </div>
-    </header>
+      </template>
+    </AdminPageHeader>
 
     <section class="card toolbar">
       <div class="kind-tabs" role="tablist" aria-label="收藏类型">
@@ -71,8 +67,11 @@
         :key="item.id"
         class="card collection-card"
         :class="[item.kind, { pinned: item.pinned }]"
-        title="双击查看详情"
-        @dblclick="onCardDblClick($event, item)"
+        title="单击查看详情"
+        tabindex="0"
+        role="link"
+        @click="onCardClick($event, item)"
+        @keydown.enter="onCardClick($event, item)"
       >
         <div class="card-top">
           <span class="kind-badge" :class="item.kind">{{ kindLabel(item.kind) }}</span>
@@ -111,7 +110,7 @@
         <div class="card-foot">
           <span>
             {{ formatDate(item.updatedAt, false) }}
-            <span class="dbl-hint">· 双击查看</span>
+            <span class="card-hint">· 查看详情</span>
           </span>
           <button class="link-btn" type="button" @click="copy(item)">
             {{ copiedId === item.id ? '已复制' : item.kind === 'link' ? '复制链接' : '复制内容' }}
@@ -245,6 +244,8 @@ import {
 } from '@shared/consult-collection'
 import { formatDate } from '@/format'
 import { renderMarkdown } from '@/markdown'
+import AdminPageHeader from '@/components/AdminPageHeader.vue'
+import { confirmAction } from '@/useConfirm'
 
 interface CollectionForm {
   id: string
@@ -341,9 +342,9 @@ function openDetail(item: ConsultCollectionItem) {
   router.push({ name: 'admin-consult-collection', params: { id: item.id } })
 }
 
-function onCardDblClick(event: MouseEvent, item: ConsultCollectionItem) {
+function onCardClick(event: MouseEvent | KeyboardEvent, item: ConsultCollectionItem) {
   const target = event.target as HTMLElement | null
-  if (target?.closest('button, a')) return
+  if (target?.closest('button, a, input, textarea, select')) return
   event.preventDefault()
   openDetail(item)
 }
@@ -515,7 +516,14 @@ async function togglePin(item: ConsultCollectionItem) {
 }
 
 async function remove(item: ConsultCollectionItem) {
-  if (!window.confirm(`删除「${displayTitle(item)}」？`)) return
+  const ok = await confirmAction({
+    title: '删除收藏',
+    message: `删除「${displayTitle(item)}」？`,
+    confirmText: '删除',
+    cancelText: '取消',
+    danger: true
+  })
+  if (!ok) return
   try {
     await api.deleteConsultCollection(item.id)
     items.value = items.value.filter((entry) => entry.id !== item.id)
@@ -554,37 +562,18 @@ onMounted(async () => {
   gap: 18px;
 }
 
-.page-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.eyebrow {
-  margin: 0 0 4px;
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  color: var(--ink-3);
-}
-
-h1 {
-  margin: 0;
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.head-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 .count {
   color: var(--ink-3);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 901px) {
+  .toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 18;
+  }
 }
 
 .toolbar {
@@ -812,14 +801,20 @@ h1 {
   text-overflow: ellipsis;
 }
 
-.dbl-hint {
+.card-hint {
   color: var(--ink-3);
   opacity: 0;
   transition: opacity 0.15s ease;
 }
 
-.collection-card:hover .dbl-hint {
+.collection-card:hover .card-hint,
+.collection-card:focus-visible .card-hint {
   opacity: 1;
+}
+
+.collection-card:focus-visible {
+  outline: 2px solid rgba(47, 93, 70, 0.55);
+  outline-offset: 2px;
 }
 
 .link-btn {

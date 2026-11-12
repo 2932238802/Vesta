@@ -1,0 +1,14 @@
+@media (max-width: 720px) {
+  .strength,
+  .asset,
+  .direction,
+  .gap,
+  .note {
+    padding: 20px 18px;
+  }
+
+  .roadmap-body,
+  .check-item {
+    padding: 16px 16px;
+  }
+}

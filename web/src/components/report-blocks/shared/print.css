@@ -1,0 +1,10 @@
+@media print {
+  .gap,
+  .strength,
+  .target-list,
+  .action-list li {
+    box-shadow: none;
+    transform: none;
+    break-inside: avoid;
+  }
+}

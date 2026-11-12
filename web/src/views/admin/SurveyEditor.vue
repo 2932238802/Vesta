@@ -1,18 +1,10 @@
 <template>
   <div class="survey-page">
-    <header class="page-head">
-      <div>
-        <p class="eyebrow">问卷</p>
-        <h1 class="page-title">题目、选项与计分</h1>
-      </div>
-      <div class="head-actions">
-        <span v-if="dirty" class="chip warn">未保存</span>
+    <AdminPageHeader eyebrow="设置" title="题目、选项与计分" :dirty="dirty">
+      <template #actions>
         <button class="btn ghost small" type="button" @click="previewOpen = true">预览</button>
-        <button class="btn small" type="button" :disabled="saving || !dirty" @click="save">
-          {{ saving ? '保存中' : '保存并发布' }}
-        </button>
-      </div>
-    </header>
+      </template>
+    </AdminPageHeader>
 
     <div v-if="loading" class="card empty">正在读取问卷</div>
     <div v-else-if="!survey" class="card empty">{{ error || '问卷加载失败' }}</div>
@@ -472,6 +464,15 @@
       </div>
     </Modal>
 
+    <SaveBar
+      :dirty="dirty"
+      :saving="saving"
+      save-label="保存并发布"
+      message="问卷修改还没有发布"
+      @save="save"
+      @discard="discard"
+    />
+
     <Transition name="toast">
       <div v-if="toast" class="toast">{{ toast }}</div>
     </Transition>
@@ -483,8 +484,11 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import type { Answers, Question, Survey } from '@shared/types'
 import { validateSurvey } from '@shared/validate'
 import { api } from '@/api'
+import AdminPageHeader from '@/components/AdminPageHeader.vue'
 import Modal from '@/components/Modal.vue'
 import QuestionField from '@/components/QuestionField.vue'
+import SaveBar from '@/components/SaveBar.vue'
+import { useSaveHotkey } from '@/useHotkeys'
 import { useUnsavedChanges } from '@/useUnsavedChanges'
 
 const survey = ref<Survey | null>(null)
@@ -514,6 +518,9 @@ const dirty = computed(
 )
 
 useUnsavedChanges(dirty, '问卷还有未保存的修改，确定离开？')
+useSaveHotkey(() => {
+  if (dirty.value && !saving.value) void save()
+}, () => dirty.value && !saving.value)
 
 function questionsOf(groupId: string): Question[] {
   return survey.value?.questions.filter((q) => q.groupId === groupId) ?? []
@@ -557,6 +564,13 @@ async function save() {
   } finally {
     saving.value = false
   }
+}
+
+function discard() {
+  if (!initialJson.value) return
+  survey.value = JSON.parse(initialJson.value) as Survey
+  error.value = ''
+  flash('已放弃未保存的修改')
 }
 
 function addGroup() {
@@ -797,28 +811,6 @@ function flash(message: string) {
 </script>
 
 <style scoped>
-.page-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-  margin-bottom: 22px;
-}
-
-.page-title {
-  margin-top: 8px;
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .tabs {
   display: flex;
   gap: 4px;

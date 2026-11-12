@@ -1,12 +1,7 @@
 <template>
   <div class="report-editor">
-    <header class="page-head">
-      <div>
-        <p class="eyebrow">报告</p>
-        <h1 class="page-title">文案、主题与模块</h1>
-      </div>
-      <div class="head-actions">
-        <span v-if="dirty" class="chip warn">未保存</span>
+    <AdminPageHeader eyebrow="设置" title="文案、主题与模块" :dirty="dirty">
+      <template #actions>
         <button
           class="btn ghost small"
           type="button"
@@ -15,11 +10,8 @@
         >
           {{ previewing ? '生成中' : '预览' }}
         </button>
-        <button class="btn small" type="button" :disabled="saving || !dirty" @click="save">
-          {{ saving ? '保存中' : '保存模板' }}
-        </button>
-      </div>
-    </header>
+      </template>
+    </AdminPageHeader>
 
     <div v-if="loading" class="card empty">正在读取报告模板</div>
     <div v-else-if="!template" class="card empty">{{ error || '模板加载失败' }}</div>
@@ -720,6 +712,15 @@
       </div>
     </Modal>
 
+    <SaveBar
+      :dirty="dirty"
+      :saving="saving"
+      save-label="保存模板"
+      message="报告模板修改还没有保存"
+      @save="save"
+      @discard="discard"
+    />
+
     <Transition name="toast">
       <div v-if="toast" class="toast">{{ toast }}</div>
     </Transition>
@@ -732,8 +733,11 @@ import { RouterLink } from 'vue-router'
 import type { ModuleKey, ReportPayload, ReportTemplate, Survey } from '@shared/types'
 import { validateTemplate } from '@shared/validate'
 import { api } from '@/api'
+import AdminPageHeader from '@/components/AdminPageHeader.vue'
 import Modal from '@/components/Modal.vue'
 import ReportBlocks from '@/components/ReportBlocks.vue'
+import SaveBar from '@/components/SaveBar.vue'
+import { useSaveHotkey } from '@/useHotkeys'
 import { useUnsavedChanges } from '@/useUnsavedChanges'
 
 const MODULE_LABELS: Record<ModuleKey, string> = {
@@ -773,6 +777,9 @@ const dirty = computed(
 )
 
 useUnsavedChanges(dirty, '报告设置还有未保存的修改，确定离开？')
+useSaveHotkey(() => {
+  if (dirty.value && !saving.value) void save()
+}, () => dirty.value && !saving.value)
 
 const dimensionRows = computed(() => {
   const value = template.value
@@ -843,6 +850,13 @@ async function save() {
   }
 }
 
+function discard() {
+  if (!initialJson.value) return
+  template.value = JSON.parse(initialJson.value) as ReportTemplate
+  error.value = ''
+  flash('已放弃未保存的修改')
+}
+
 async function openPreview() {
   if (!template.value) return
   previewError.value = ''
@@ -863,28 +877,6 @@ async function openPreview() {
 </script>
 
 <style scoped>
-.page-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-  margin-bottom: 22px;
-}
-
-.page-title {
-  margin-top: 8px;
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .ai-note {
   margin: 8px 0 4px;
   font-size: 12.5px;

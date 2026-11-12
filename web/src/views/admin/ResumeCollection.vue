@@ -1,16 +1,15 @@
 <template>
   <div class="resume-page">
-    <header class="page-head">
-      <div>
-        <p class="eyebrow">简历</p>
-        <h1 class="page-title">简历收集</h1>
-        <p class="page-sub">只收图片，按专业归档。点专业可以查看，也可以直接导入。</p>
-      </div>
-      <div class="head-actions">
+    <AdminPageHeader
+      eyebrow="简历"
+      title="简历收集"
+      subtitle="只收图片，按专业归档。点专业可以查看，也可以直接导入。"
+    >
+      <template #actions>
         <span class="summary">{{ items.length }} 张 · {{ coveredMajors }} 个专业</span>
         <button class="btn" type="button" @click="openUpload()">导入简历图片</button>
-      </div>
-    </header>
+      </template>
+    </AdminPageHeader>
 
     <section class="card toolbar">
       <input
@@ -325,6 +324,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { api, type ResumeImageSummary } from '@/api'
+import AdminPageHeader from '@/components/AdminPageHeader.vue'
 import { isResumeMajor, resumeMajorGroups, resumeMajors } from '@shared/resume'
 
 interface UploadEntry {
@@ -725,36 +725,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.page-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-  margin-bottom: 22px;
-}
-
-.page-title {
-  margin-top: 8px;
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.page-sub {
-  margin-top: 8px;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--ink-3);
-}
-
-.head-actions {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
 .summary {
   font-size: 12px;
   color: var(--ink-3);
@@ -767,6 +737,14 @@ onUnmounted(() => {
   gap: 14px;
   padding: 14px 16px;
   margin-bottom: 10px;
+}
+
+@media (min-width: 901px) {
+  .toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 18;
+  }
 }
 
 .search {
@@ -1478,11 +1456,6 @@ onUnmounted(() => {
     align-items: flex-start;
     flex-direction: column;
     gap: 16px;
-  }
-
-  .head-actions {
-    width: 100%;
-    justify-content: space-between;
   }
 
   .major-grid {

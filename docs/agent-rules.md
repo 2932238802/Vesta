@@ -74,5 +74,6 @@
 ## 文档维护
 
 - 改动涉及架构、认证、数据模型、部署流程或已确认需求时，同步更新 `docs/`。
+- 产品版本从 v1.60 起算，每完成一轮需求递增一个小版本（v1.61、v1.62……）；在 `development-history.md` 对应小节注明产品版本号。方案文档自身的 v1.0 / v1.1 与产品版本分开编号（见 `docs/README.md`「版本约定」）。
 - 用户的新要求如果推翻旧实现，要在 `development-history.md` 记录“何时、改了什么、为什么”，避免后续 Agent 又把旧逻辑加回来。
 - 开发设计文档统一放 `docs/archive/`；同一天的文档收进 `docs/archive/YYYYMMDD/`（如 `docs/archive/20261112/`），文件名按 `1-标题.md`、`2-标题.md` 依次递增。`docs/` 根目录只保留口径文档（`规划自测问卷-设计文档.md`、`consult-system.md`）与 `README.md` / `development-history.md` / `agent-rules.md`。

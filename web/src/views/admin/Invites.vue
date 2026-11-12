@@ -1,5 +1,7 @@
 <template>
   <div class="invites-page">
+    <AdminPageHeader eyebrow="学员" title="邀请链接" subtitle="生成问卷链接，发给学员填写" />
+
     <section v-if="!created.length" class="card generator-card">
       <form class="form" @submit.prevent="generate">
         <div class="mode">
@@ -69,7 +71,7 @@
       </div>
 
       <div class="result-actions">
-        <RouterLink class="btn" to="/admin/submissions">去答卷与名单查看</RouterLink>
+        <RouterLink class="btn" to="/admin/submissions">去学员名单查看</RouterLink>
       </div>
     </section>
 
@@ -83,6 +85,7 @@
 import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '@/api'
+import AdminPageHeader from '@/components/AdminPageHeader.vue'
 
 const mode = ref<'single' | 'bulk'>('single')
 const name = ref('')
