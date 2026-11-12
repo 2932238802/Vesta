@@ -406,6 +406,8 @@ export type ReportBlock =
       title: string
       subtitle: string
       lines: { label: string; value: string }[]
+      /** AI 依据 facts 写的分析；旧报告可能没有这个字段 */
+      paragraphs?: string[]
       note: string
       jobs: JobCard[]
     }

@@ -72,6 +72,22 @@ function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate()
 }
 
+/** 从日历日期加 N 个月，目标月没有这一天时截断到月末。 */
+function addCalendarMonthsClamped(base: CalendarDate, months: number): CalendarDate {
+  const targetMonthIndex = base.year * 12 + (base.month - 1) + months
+  const year = Math.floor(targetMonthIndex / 12)
+  const month = (((targetMonthIndex % 12) + 12) % 12) + 1
+  const day = Math.min(base.day, daysInMonth(year, month))
+  return { year, month, day }
+}
+
+/** 两个日历日期之间相差的天数；用 UTC 计算，避开夏令时。 */
+function calendarDaysBetween(from: CalendarDate, to: CalendarDate): number {
+  const start = Date.UTC(from.year, from.month - 1, from.day)
+  const end = Date.UTC(to.year, to.month - 1, to.day)
+  return Math.round((end - start) / 86_400_000)
+}
+
 /** 日历差；from 和 to 都按本机时区的年月日计算。 */
 export function calendarSpan(from: DateInput, to: DateInput): CalendarSpan | null {
   const start = toCalendarDate(from)
@@ -87,23 +103,21 @@ export function calendarSpan(from: DateInput, to: DateInput): CalendarSpan | nul
   const early = order < 0 ? start : end
   const late = order < 0 ? end : start
 
+  // 先按月字段差算出完整月：目标日小于起始日时，这个月还没满。
   let years = late.year - early.year
   let months = late.month - early.month
-  let days = late.day - early.day
-
-  if (days < 0) {
-    months -= 1
-    // 借上一个月的天数：late 的前一个月的天数。
-    const borrowMonth = late.month === 1 ? 12 : late.month - 1
-    const borrowYear = late.month === 1 ? late.year - 1 : late.year
-    days += daysInMonth(borrowYear, borrowMonth)
-  }
+  if (late.day < early.day) months -= 1
   if (months < 0) {
     years -= 1
     months += 12
   }
+  const totalMonths = years * 12 + months
 
-  return { direction, years, months, days, totalMonths: years * 12 + months }
+  // 余下的天数从「起点加完整月」算起，月末按月末截断，保证 days 非负。
+  const anchor = addCalendarMonthsClamped(early, totalMonths)
+  const days = calendarDaysBetween(anchor, late)
+
+  return { direction, years, months, days, totalMonths }
 }
 
 /** 只算完整月；用于招聘信息时效、新鲜度这类门槛判断。 */
@@ -164,11 +178,8 @@ export function describeDistance(from: DateInput, to: DateInput): string {
 export function addCalendarMonths(value: DateInput, months: number): Date | null {
   const base = toCalendarDate(value)
   if (!base) return null
-  const targetMonthIndex = base.year * 12 + (base.month - 1) + months
-  const year = Math.floor(targetMonthIndex / 12)
-  const month = (targetMonthIndex % 12) + 1
-  const day = Math.min(base.day, daysInMonth(year, month))
-  return new Date(year, month - 1, day)
+  const target = addCalendarMonthsClamped(base, months)
+  return new Date(target.year, target.month - 1, target.day)
 }
 
 export function formatCalendarDate(value: DateInput): string {

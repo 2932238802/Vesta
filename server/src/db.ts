@@ -840,13 +840,9 @@ export function getReportSkillState(): {
   activeId: string
 } {
   const templates = readSkillTemplates()
-  const storedActiveId = getSetting(ACTIVE_SKILL_KEY) || DEFAULT_REPORT_SKILL_ID
-  const activeId =
-    storedActiveId === DEFAULT_REPORT_SKILL_ID ||
-    templates.some((template) => template.id === storedActiveId)
-      ? storedActiveId
-      : DEFAULT_REPORT_SKILL_ID
-  if (activeId !== storedActiveId) setSetting(ACTIVE_SKILL_KEY, activeId)
+  // 保留原始 activeId；指向不存在的模板时由 getDocReportSkill 明确报错，
+  // 不能静默改回默认规则，否则文档承诺的「找不到就失败」永远不会发生。
+  const activeId = getSetting(ACTIVE_SKILL_KEY) || DEFAULT_REPORT_SKILL_ID
   return { templates, activeId }
 }
 

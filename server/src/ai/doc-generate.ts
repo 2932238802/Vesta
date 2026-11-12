@@ -16,7 +16,7 @@ import {
 } from '../../../shared/src/doc'
 import { computeDocScores } from '../../../shared/src/docScore'
 import { inferDirectionKey, jobDirections, type JobDirection } from '../../../shared/src/job-map'
-import { calendarMonthsBetween, isOlderThanMonths } from '../../../shared/src/date'
+import { calendarMonthsBetween, formatCalendarDate, isOlderThanMonths } from '../../../shared/src/date'
 import { config } from '../env'
 import { getDocReportSkill, now, type ReportSkillSource } from '../db'
 import { askDeepSeek, parseJsonObject } from './deepseek'
@@ -702,7 +702,7 @@ function buildModuleSpecs(input: {
         key: 'gap',
         kind: 'gap',
         summaryRequired: true,
-        paragraphsRequired: false,
+        paragraphsRequired: true,
         textRequired: false,
         allFields: [],
         anyFields: [],
@@ -896,20 +896,47 @@ function contentProblems(content: DocAiContent, specs: ModuleSpec[]): string[] {
   return problems
 }
 
-function contentTexts(content: DocAiContent): { where: string; text: string }[] {
-  const texts: { where: string; text: string }[] = [
+interface ContentText {
+  where: string
+  text: string
+  moduleKey?: string
+  itemKey?: string
+  moduleSummary?: boolean
+}
+
+function contentTexts(content: DocAiContent): ContentText[] {
+  const texts: ContentText[] = [
     { where: '结论', text: content.conclusion }
   ]
   for (const module of content.modules) {
-    texts.push({ where: `模块 ${module.key} 标题`, text: module.title })
-    texts.push({ where: `模块 ${module.key} 判断`, text: module.summary })
+    texts.push({ where: `模块 ${module.key} 标题`, text: module.title, moduleKey: module.key })
+    texts.push({
+      where: `模块 ${module.key} 判断`,
+      text: module.summary,
+      moduleKey: module.key,
+      moduleSummary: true
+    })
     module.paragraphs.forEach((text, index) =>
-      texts.push({ where: `模块 ${module.key} 第 ${index + 1} 段`, text })
+      texts.push({
+        where: `模块 ${module.key} 第 ${index + 1} 段`,
+        text,
+        moduleKey: module.key
+      })
     )
     for (const item of module.items) {
-      texts.push({ where: `模块 ${module.key} 的 ${item.key}`, text: item.text ?? '' })
+      texts.push({
+        where: `模块 ${module.key} 的 ${item.key}`,
+        text: item.text ?? '',
+        moduleKey: module.key,
+        itemKey: item.key
+      })
       for (const [key, value] of Object.entries(item.fields ?? {})) {
-        texts.push({ where: `模块 ${module.key} 的 ${item.key}.${key}`, text: value })
+        texts.push({
+          where: `模块 ${module.key} 的 ${item.key}.${key}`,
+          text: value,
+          moduleKey: module.key,
+          itemKey: item.key
+        })
       }
     }
   }
@@ -975,13 +1002,18 @@ function normalizeNumberToken(value: string): string {
   return Number.isFinite(number) ? String(number) : value
 }
 
-function collectAllowedNumbers(sources: string[]): Set<string> {
-  const allowed = new Set<string>()
+function collectNumberTokens(sources: string[]): Set<string> {
+  const numbers = new Set<string>()
   for (const source of sources) {
     for (const match of source.matchAll(/\d+(?:\.\d+)?/g)) {
-      allowed.add(normalizeNumberToken(match[0]))
+      numbers.add(normalizeNumberToken(match[0]))
     }
   }
+  return numbers
+}
+
+function collectAllowedNumbers(sources: string[]): Set<string> {
+  const allowed = collectNumberTokens(sources)
   // 中文数字和问卷里的「四级」「大一」是同一事实的另一种写法，不把它误判成新数字。
   const chinese: Record<string, string> = {
     一: '1',
@@ -1003,13 +1035,83 @@ function collectAllowedNumbers(sources: string[]): Set<string> {
   return allowed
 }
 
-function auditNumbers(content: DocAiContent, allowed: Set<string>): string[] {
+/** 「0—10 分」「满分 10 分」「10 分制」是量纲或门槛说明，不是单项得分。 */
+function isScoreDimension(text: string, index: number, end: number): boolean {
+  const before = text.slice(Math.max(0, index - 8), index)
+  // end 落在「分」之后；从「分」本身开始取，才能识别「10 分制」。
+  const after = text.slice(Math.max(index, end - 1), end + 1)
+  return (
+    /[—~\-至/]\s*$/.test(before) ||
+    /(满分|入场线|门槛|基准)\s*$/.test(before) ||
+    /^\s*分制/.test(after)
+  )
+}
+
+/** 识别文本里的分数表达：`N 分`、`得分 N`、`N/10`。其余数字交给全报告白名单。 */
+function findScoreValues(text: string): { value: number; index: number; end: number }[] {
+  const hits: { value: number; index: number; end: number }[] = []
+  const seen = new Set<string>()
+  const patterns = [
+    /(\d+(?:\.\d+)?)\s*分/g,
+    /(?:得分|分数)\s*(?:为|是|约|在|：|:)?\s*(\d+(?:\.\d+)?)/g,
+    /(\d+(?:\.\d+)?)\s*\/\s*10(?!\d)/g
+  ]
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const value = Number(match[1])
+      if (!Number.isFinite(value)) continue
+      const matchIndex = match.index ?? 0
+      const index = matchIndex + match[0].indexOf(match[1])
+      const key = `${value}@${index}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      hits.push({ value, index, end: matchIndex + match[0].length })
+    }
+  }
+  return hits
+}
+
+function auditNumbers(content: DocAiContent, allowed: Set<string>, specs: ModuleSpec[]): string[] {
   const problems: string[] = []
-  for (const { where, text } of contentTexts(content)) {
-    for (const match of text.matchAll(/\d+(?:\.\d+)?/g)) {
+
+  // scorecard 的分数单独校验：item 文本里的分数必须等于该项 score，
+  // 模块 summary 里的分数必须是本模块某一项的 score；都不能靠全报告白名单混过去。
+  const itemScores = new Map<string, number>()
+  const scorecardScores = new Set<string>()
+  for (const spec of specs) {
+    if (spec.key !== 'scorecard') continue
+    for (const item of spec.items) {
+      if (typeof item.data.score !== 'number') continue
+      itemScores.set(`${spec.key}/${item.key}`, item.data.score)
+      scorecardScores.add(normalizeNumberToken(String(item.data.score)))
+    }
+  }
+
+  for (const entry of contentTexts(content)) {
+    for (const match of entry.text.matchAll(/\d+(?:\.\d+)?/g)) {
       const token = normalizeNumberToken(match[0])
-      if (allowed.has(token)) continue
-      problems.push(`${where} 出现系统没有提供的数字「${match[0]}」`)
+      if (!allowed.has(token)) {
+        problems.push(`${entry.where} 出现系统没有提供的数字「${match[0]}」`)
+      }
+    }
+
+    const itemScore = entry.itemKey
+      ? itemScores.get(`${entry.moduleKey}/${entry.itemKey}`)
+      : undefined
+    const isScorecardSummary = entry.moduleSummary === true && entry.moduleKey === 'scorecard'
+    if (itemScore === undefined && !isScorecardSummary) continue
+
+    for (const hit of findScoreValues(entry.text)) {
+      if (isScoreDimension(entry.text, hit.index, hit.end)) continue
+      if (itemScore !== undefined) {
+        if (hit.value !== itemScore) {
+          problems.push(
+            `${entry.where} 写了 ${hit.value} 分，但系统给这一项的分数是 ${itemScore} 分`
+          )
+        }
+      } else if (!scorecardScores.has(normalizeNumberToken(String(hit.value)))) {
+        problems.push(`${entry.where} 写了 ${hit.value} 分，但不是这一模块任何一项的分数`)
+      }
     }
   }
   return [...new Set(problems)].slice(0, 8)
@@ -1024,6 +1126,8 @@ function outputContract(): string {
 - modules 必须覆盖 moduleSpecs 里的每一个 key，不能增、不能删、不能改 key。
 - 每个模块的 items 必须覆盖该模块 items 里的每一个 key。
 - summaryRequired 为 true 的模块必须写 summary；paragraphsRequired 为 true 的模块必须写至少一段 paragraphs。
+- gap 的 summary / paragraphs 只能基于 moduleSpecs.data.lines 和 jobs 里已有的事实写；没有的事实不要补，不要再写固定的「入场线」「城市判断」「下一步」建议句。
+- scorecard 每个 item 的 text 如提到分数，必须等于该 item 在 moduleSpecs 里的 score；scorecard 的 summary 如提到分数，必须是本模块某一项的 score。不要写别的 item 的分数，也不要用 10 分制总分冒充单项分。
 - 所有数字只能原样使用 moduleSpecs、jobSpecs、问卷回答或检索记录里的值，不能自己计算、换算或估算。
 - 时间只使用系统给出的粗粒度表达；不要写「547 天」「24 个月」「2 年」这种数字加时间单位。
 - roadmap 的 label 只写阶段名（如「方向确认」「实践积累」），不要重复系统给的时间窗，也不要写月份数字。`
@@ -1083,7 +1187,7 @@ export async function generateDocContent(input: {
       .filter((period): period is string => typeof period === 'string' && period.length > 0)
   )
   const answerLines = answerText(survey, answers)
-  const today = new Date().toISOString().slice(0, 10)
+  const today = formatCalendarDate(new Date())
   const jobSpecs = jobs.map(jobSpec)
   const searchSummary = search.error
     ? `状态：${search.error}`
@@ -1129,7 +1233,7 @@ ${searchSummary}
   for (let pass = 0; pass < 2; pass += 1) {
     const problems = contentProblems(content, specs)
     const textIssues = findTextIssues(content, planPeriods)
-    const numberIssues = auditNumbers(content, allowedNumbers)
+    const numberIssues = auditNumbers(content, allowedNumbers, specs)
     if (problems.length === 0 && textIssues.length === 0 && numberIssues.length === 0) break
     if (pass === 1) {
       if (numberIssues.length > 0) {

@@ -335,17 +335,11 @@ function weeklyHours(survey: Survey, answers: Answers): number {
   return WEEKLY_HOURS[at] ?? 0
 }
 
-/** 简历盘点：现在能写进简历的，不用等到“什么都准备好了”。 */
+/** 简历盘点：只列答卷里已经有的经历、技能和方向，不把系统判断写成事实。 */
 function resumeNow(survey: Survey, answers: Answers): string {
   const parts: string[] = []
   const practice = label(survey, answers, 'q9')
-  if (practice) {
-    parts.push(
-      practice.includes('兼职')
-        ? '一段兼职（可写成沟通、执行、抗压）'
-        : practice
-    )
-  }
+  if (practice && !/没有|没做过|无/.test(practice)) parts.push(practice)
   const skills = labels(survey, answers, 'q10').filter(
     (item) => !item.includes('还没培养出') && !item.includes('说不清')
   )
@@ -354,23 +348,7 @@ function resumeNow(survey: Survey, answers: Answers): string {
   if (direction && !direction.includes('没落地') && !direction.includes('完全不知道')) {
     parts.push(`方向：${direction}`)
   }
-  return parts.length ? parts.join('；') : '暂时还没有能写进简历的经历或技能'
-}
-
-/** 简历缺口：只列能在这 22 个月里补上的，不把“没有”说成“不行”。 */
-function resumeMissing(survey: Survey, answers: Answers): string {
-  const skills = labels(survey, answers, 'q10')
-  const direction = label(survey, answers, 'q11')
-  const practice = label(survey, answers, 'q9')
-  const gaps: string[] = []
-  if (skills.some((item) => item.includes('还没培养出'))) gaps.push('一项能展示的技能')
-  if (direction.includes('没落地')) gaps.push('一个落地的项目或作品')
-  if (!practice || /一段都没有|没有/.test(practice)) {
-    gaps.push('一段相关实习')
-  } else if (!/能写进简历/.test(practice)) {
-    gaps.push('一段能写进简历的相关实习')
-  }
-  return [...new Set(gaps)].slice(0, 3).join('、')
+  return parts.join('；')
 }
 
 /** 「你的底牌」：只把答卷里勾选过的经历、技能、支持原样列出来；不够就不凑。 */
@@ -848,6 +826,7 @@ function roadmapBlock(survey: Survey, answers: Answers, scores: DocScores): Repo
   }
 }
 
+/** gap 只输出程序能算出的事实；入场线、城市判断和下一步交给 AI 写在 paragraphs。 */
 function gapLines(survey: Survey, answers: Answers): { label: string; value: string }[] {
   const first = label(survey, answers, 'q6')
   const city = label(survey, answers, 'q8')
@@ -865,42 +844,15 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
     lines.push({ label: '目标岗位', value: role || '还没写清楚' })
     if (!role && major) lines.push({ label: '你的专业', value: major })
     const nowText = resumeNow(survey, answers)
-    const missingText = resumeMissing(survey, answers)
     if (nowText) lines.push({ label: '现在能写进简历的', value: nowText })
-    if (missingText) lines.push({ label: '还缺的', value: missingText })
     const expected = label(survey, answers, 'q27')
     if (expected) lines.push({ label: '你写的期望月薪', value: expected })
-    lines.push({
-      label: '入场线',
-      value: '具体学历、专业、英语和实习要求，以检索到的招聘原文或目标单位最新公告为准'
-    })
-    if (city.includes('还没想好')) {
-      lines.push({
-        label: '城市判断',
-        value: '先用行业密度、生活成本、离家距离三项打分，最晚第 3 个月定主城市 + 备选'
-      })
-    }
     const family = label(survey, answers, 'q15')
     if (family) {
       lines.push({ label: '经济约束', value: family })
     }
   } else if (first === '考研') {
     lines.push({ label: '目标专业', value: major || '还没填' })
-    lines.push({ label: '入场线', value: '分数线、单科线和复试要求，以目标院校研究生院最新公告为准' })
-  } else if (first === '保研') {
-    lines.push({ label: '入场线', value: '推免比例、排名和英语要求，以目标院校推免办法和夏令营通知为准' })
-  } else if (first === '考公' || first === '考编') {
-    lines.push({
-      label: '入场线',
-      value:
-        first === '考公'
-          ? '岗位表、专业限制和笔试科目，以本省人事考试网或国家公务员局最新公告为准'
-          : '教师资格和岗位要求，以目标单位及本省最新招聘公告为准'
-    })
-  } else if (first === '出国') {
-    lines.push({ label: '入场线', value: '语言成绩、GPA 和申请材料，以目标院校官网最新要求为准' })
-  } else {
-    lines.push({ label: '下一步', value: '先把第一选择定下来，后面所有门槛才谈得上对照' })
   }
 
   const hours = weeklyHours(survey, answers)
@@ -914,18 +866,7 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
 
   const english = computeDocScores(survey, answers).english
   if (english.stage) {
-    const preparingLine = english.stage.includes('更高等级')
-      ? '你已经在准备更高等级的英语考试，英语要算进计划，不能停在「够用」'
-      : '你正在准备四级/六级，英语要算进计划，不能停在「够用」'
-    const englishLine = english.pathNeeds
-      ? '这条路对英语有明确要求，先把它算进计划'
-      : english.preparing
-        ? preparingLine
-        : '这条路的英语要求，以目标院校或单位的最新公告为准'
-    lines.push({
-      label: '门槛对照',
-      value: `你现在是「${english.stage}」；${englishLine}`
-    })
+    lines.push({ label: '英语现状', value: english.stage })
   }
 
   return lines
@@ -950,6 +891,7 @@ function gapBlock(survey: Survey, answers: Answers, jobs: JobCard[] = []): Repor
     title: '和目标之间还差多少',
     subtitle: '门槛是经验值区间，以目标单位最新公告或招聘原文为准',
     lines: gapLines(survey, answers),
+    paragraphs: [],
     note: '',
     jobs: jobs.slice(0, 3).map((job) => withJobMatch(survey, answers, job))
   }
@@ -1191,6 +1133,7 @@ function applySystemModules(base: ReportPayload, content: DocAiContent): ReportB
       if (!module) continue
       if (module.title) block.title = module.title
       if (module.summary) block.note = module.summary
+      if (module.paragraphs.length) block.paragraphs = module.paragraphs
     } else if (block.type === 'roadmap') {
       const module = modules.get('roadmap')
       if (!module) continue

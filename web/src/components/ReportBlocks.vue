@@ -201,16 +201,23 @@
           <p class="source-label">检索状态</p>
           <p class="source-error-text">{{ block.error }}</p>
           <p v-if="block.configured === false" class="source-error-hint">
-            这是服务端配置问题，不是报告内容判断。配置修复后可以重新生成。
+            这是服务端配置问题，不是报告内容判断。{{
+              allowRetry === false
+                ? '配置修复后，新建报告即可重新检索。'
+                : '配置修复后可以重新生成。'
+            }}
           </p>
           <button
-            v-if="block.retryable"
+            v-if="block.retryable && allowRetry !== false"
             class="source-retry"
             type="button"
             @click="emit('retry')"
           >
             重新检索并生成
           </button>
+          <p v-else-if="block.error && allowRetry === false" class="source-error-hint">
+            报告已经生成；要重新检索需要新建一份报告。
+          </p>
         </div>
 
         <ul v-if="block.items.length" class="source-list">
@@ -310,6 +317,9 @@
             <dd>{{ line.value }}</dd>
           </div>
         </dl>
+        <div v-if="block.paragraphs?.length" class="gap-analysis">
+          <p v-for="(text, i) in block.paragraphs" :key="i">{{ text }}</p>
+        </div>
         <p v-if="block.jobs.length" class="job-caption">
           下面几条招聘/薪资原文用于核对上面的岗位门槛和薪资，点标题看原文；具体以原文为准。
         </p>
@@ -477,7 +487,11 @@ import ScoreBar from './ScoreBar.vue'
 import SectionHead from './SectionHead.vue'
 import { formatDate } from '../format'
 
-const props = defineProps<{ payload: ReportPayload; claimLink?: boolean }>()
+const props = defineProps<{
+  payload: ReportPayload
+  claimLink?: boolean
+  allowRetry?: boolean
+}>()
 const emit = defineEmits<{ retry: [] }>()
 
 function jobMeta(job: JobCard): string {
@@ -1347,6 +1361,19 @@ const dateText = computed(() => {
   color: var(--ink);
 }
 
+.gap-analysis {
+  margin-top: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.gap-analysis p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--ink-2);
+}
+
 .job-caption {
   margin-top: 18px;
   font-size: 12.5px;
@@ -1955,6 +1982,16 @@ const dateText = computed(() => {
   font-size: 15px;
 }
 
+.gap-analysis {
+  margin-top: 24px;
+  gap: 16px;
+}
+
+.gap-analysis p {
+  font-size: 15px;
+  line-height: 1.9;
+}
+
 .job-caption {
   font-size: 13.5px;
 }
@@ -2224,6 +2261,7 @@ const dateText = computed(() => {
   .roadmap-goal,
   .direction-facts dd,
   .gap-step dd,
+  .gap-analysis p,
   .asset-body p,
   .strength-text,
   .target-note,

@@ -82,7 +82,21 @@ app.use((error: Error & { status?: number }, req: Request, res: Response, next: 
   res.status(500).json({ error: '服务器出了点问题，请稍后再试' })
 })
 
+function warnIncompleteConfig(): void {
+  if (config.deepseekApiKey && !config.deepseekBaseUrl) {
+    console.warn(
+      '[配置] 已配置 AI_API_KEY/DEEPSEEK_API_KEY，但缺少 AI_BASE_URL/DEEPSEEK_BASE_URL；AI 报告和咨询稿会不可用。'
+    )
+  }
+  if (config.bochaApiKey && !config.bochaBaseUrl) {
+    console.warn(
+      '[配置] 已配置 BOCHA_API_KEY，但缺少 BOCHA_BASE_URL；联网检索会不可用。'
+    )
+  }
+}
+
 const server = app.listen(config.port, () => {
+  warnIncompleteConfig()
   console.log(`Vesta 已启动 http://127.0.0.1:${config.port}`)
   console.log(`数据目录 ${config.dataDir}`)
 })

@@ -69,8 +69,14 @@
 
     <main v-else class="wrap fade-in">
       <p v-if="reportNotice" class="notice report-notice">{{ reportNotice }}</p>
+      <p v-if="reportError" class="notice report-notice report-error">{{ reportError }}</p>
       <div ref="sheetEl" class="sheet">
-        <ReportBlocks :payload="payload" :claim-link="!claimed" @retry="retryReport" />
+        <ReportBlocks
+          :payload="payload"
+          :claim-link="!claimed"
+          :allow-retry="reportStatus !== 'ready'"
+          @retry="retryReport"
+        />
       </div>
 
       <section id="claim" class="claim-section">
@@ -632,6 +638,10 @@ function flash(message: string) {
 .report-notice {
   margin-bottom: 18px;
   text-align: left;
+}
+
+.report-error {
+  color: #8a3b2e;
 }
 
 .sheet {

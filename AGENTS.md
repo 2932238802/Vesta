@@ -41,7 +41,7 @@
 | 后端 `server/` | `npm run typecheck` |
 | 前端 `web/` | `npm run typecheck && npm run build` |
 | 文档 / 问卷口径 | `npm run check:docs` |
-| 以上全部 | `npm run verify`（= check:docs + typecheck + build） |
+| 以上全部 | `npm run verify`（= check:docs + check:dates + typecheck + build） |
 
 - 没有自动化测试套件，关键页面必须手工走查：问卷一整套（含跳题）、报告页、后台列表。
 - **没验证过不要写「完成」**；拿不准就说「不确定」，给出已知信息和可选方案。
