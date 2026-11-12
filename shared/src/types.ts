@@ -92,6 +92,8 @@ export interface JobCard {
   missing?: string[]
   /** 发布日期超过约 18 个月：只用于看要求结构，不能当投递入口 */
   stale?: boolean
+  /** 主检索不足时用更宽时间窗补来的原文：只作要求结构参考，不参与门槛统计 */
+  fallback?: boolean
 }
 
 export interface ScoreItem {

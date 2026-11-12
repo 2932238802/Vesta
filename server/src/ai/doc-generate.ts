@@ -8,8 +8,11 @@ import type {
 } from '../../../shared/src/types'
 import {
   buildDocReport,
+  cityInText,
   deadlineFact,
+  MAJOR_CITIES,
   normalizeDocAiContent,
+  resolveTargetCity,
   serializeDoc,
   type DocAiContent,
   type DocReportInput
@@ -63,13 +66,6 @@ function answerText(survey: Survey, answers: Answers): string {
     .join('\n')
 }
 
-const MAJOR_CITIES = [
-  '北京', '上海', '广州', '深圳', '杭州', '成都', '武汉', '西安', '南京', '苏州',
-  '重庆', '天津', '长沙', '郑州', '青岛', '厦门', '合肥', '宁波', '东莞', '佛山',
-  '无锡', '济南', '福州', '大连', '沈阳', '昆明', '南昌', '贵阳', '南宁', '石家庄',
-  '太原', '长春', '哈尔滨', '兰州', '乌鲁木齐', '呼和浩特', '海口', '银川', '西宁', '拉萨'
-]
-
 // 招聘原文超过 18 个整月就不再当投递入口，只保留要求结构。
 const JOB_MAX_AGE_MONTHS = 18
 
@@ -79,29 +75,34 @@ function parseTime(value?: string): number {
   return Number.isFinite(time) ? time : 0
 }
 
-function isOldJob(date?: string): boolean {
-  return isOlderThanMonths(date ?? '', JOB_MAX_AGE_MONTHS)
-}
-
-function cityInText(value: string): string {
-  return MAJOR_CITIES.find((city) => value.includes(city)) ?? ''
-}
-
-function cityOf(survey: Survey, answers: Answers): string {
-  const question = survey.questions.find((item) => item.id === 'q8')
-  const value = answers.q8
-  if (!question || typeof value !== 'string') return ''
-  const label = question.options?.find((option) => option.id === value)?.label ?? ''
-  if (!label || label.includes('还没想好')) return ''
-  const clean = label.replace(/（.*?）/g, '').trim()
-  // Q8 里有「新一线」「北上广深」「家乡省会」这类档位，不能直接当城市去搜。
-  if (MAJOR_CITIES.includes(clean)) return clean
-  if (/家乡|回家/.test(clean)) {
-    const q4 = answers.q4
-    const home = Array.isArray(q4) ? String(q4[0] ?? '') : ''
-    return cityInText(home)
+/** 标题里常带「2022届」「[2024]」这类年份，是发布时间之外的第二条时效证据。 */
+function yearInTitle(title?: string): number {
+  if (!title) return 0
+  let earliest = 0
+  const maxYear = new Date().getFullYear() + 1
+  for (const match of title.matchAll(
+    /(?<!\d)((?:19|20)\d{2})(?!\d)\s*(?:届|年|[-/.]\d{1,2})?/g
+  )) {
+    const year = Number(match[1])
+    if (year < 2000 || year > maxYear) continue
+    earliest = earliest === 0 ? year : Math.min(earliest, year)
   }
-  return ''
+  return earliest
+}
+
+/** 发布日期和标题年份冲突时按更早的年份从年初算，宁严勿松。 */
+function jobEvidenceDate(date?: string, title?: string): string {
+  const published = parseTime(date)
+  const publishedYear = published ? new Date(published).getFullYear() : 0
+  const titleYear = yearInTitle(title)
+  if (!published) return titleYear ? `${titleYear}-01-01` : ''
+  if (titleYear && publishedYear && titleYear === publishedYear) return date ?? ''
+  if (titleYear) return `${Math.min(publishedYear || titleYear, titleYear)}-01-01`
+  return date ?? ''
+}
+
+function isOldJob(date?: string, title?: string): boolean {
+  return isOlderThanMonths(jobEvidenceDate(date, title), JOB_MAX_AGE_MONTHS)
 }
 
 /** 摘要截断时尽量停在句号，避免出现半句话。 */
@@ -119,10 +120,10 @@ function clipSentence(value: string, max = 96): string {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-async function searchOne(query: string): Promise<SearchResult[]> {
+async function searchOne(query: string, freshness = 'oneYear'): Promise<SearchResult[]> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await searchWeb(query, { count: 6 })
+      return await searchWeb(query, { count: 6, freshness })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const limited = /429|request limit|频率|限流/i.test(message)
@@ -141,7 +142,7 @@ interface SearchRun {
 }
 
 /** 博查有 QPS 限制，串行跑并留间隔，避免一份报告把配额瞬间打满。 */
-async function runSearches(specs: { query: string }[]): Promise<SearchRun> {
+async function runSearches(specs: QuerySpec[]): Promise<SearchRun> {
   const results: SearchResult[][] = []
   const errors: string[] = []
   const queries: string[] = []
@@ -151,7 +152,7 @@ async function runSearches(specs: { query: string }[]): Promise<SearchRun> {
     const query = specs[index].query
     queries.push(query)
     try {
-      const items = await searchOne(query)
+      const items = await searchOne(query, specs[index].freshness)
       results.push(items)
       items.forEach((item) => uniqueUrls.add(item.url.replace(/\/$/, '')))
     } catch (error) {
@@ -248,7 +249,7 @@ function isPortalPage(title: string): boolean {
 
 function jobScore(item: SearchResult, targetCity: string): number {
   let score = 0
-  const time = parseTime(item.publishedAt)
+  const time = parseTime(jobEvidenceDate(item.publishedAt, item.title))
   if (time > 0) {
     const months = calendarMonthsBetween(time, new Date())
     if (months > JOB_MAX_AGE_MONTHS) score -= 4
@@ -344,6 +345,10 @@ function directionRelevant(text: string, direction: JobDirection): boolean {
 interface QuerySpec {
   key?: string
   query: string
+  /** 博查时间窗：主检索用一年，补位用一个月；不传时沿用博查默认 */
+  freshness?: string
+  /** 补位结果只作要求结构参考，不参与门槛统计 */
+  fallback?: boolean
 }
 
 function queryYear(): number {
@@ -360,7 +365,8 @@ function buildSearchSpecs(input: {
   const year = queryYear()
   const fresh = (keyword: string, key?: string): QuerySpec => ({
     key,
-    query: `${place}${keyword} ${year} 应届 招聘`.trim()
+    query: `${place}${keyword} ${year} 应届 招聘`.trim(),
+    freshness: 'oneYear'
   })
   const specs: QuerySpec[] = []
   if (input.useDirections) {
@@ -378,6 +384,7 @@ interface RankedJob {
   score: number
   weak: boolean
   directionKey?: string
+  fallback: boolean
 }
 
 /** 用博查抓真实招聘原文，做成可点开的卡片；查询词、来源和失败原因全部记录下来。 */
@@ -405,7 +412,7 @@ export async function searchJobs(
     }
   }
 
-  const city = cityOf(survey, answers)
+  const city = resolveTargetCity(survey, answers).city
   const explicitRole = String(answers.q5a ?? '').trim()
   const major = String(answers.q2 ?? '').trim()
   // 学生没写具体岗位时，用专业方向去搜；不要把「专业+相关岗位」当岗位名。
@@ -429,7 +436,7 @@ export async function searchJobs(
   const useDirections = directions.length > 0 && !explicitRole
   const primarySpecs = buildSearchSpecs({ city, role, directions, useDirections })
 
-  const byUrl = new Map<string, { item: SearchResult; directionKey?: string }>()
+  const byUrl = new Map<string, { item: SearchResult; directionKey?: string; fallback: boolean }>()
   const allErrors: string[] = []
   const allQueries: string[] = []
   const allUrls = new Set<string>()
@@ -439,13 +446,20 @@ export async function searchJobs(
     allQueries.push(...run.queries)
     run.uniqueUrls.forEach((url) => allUrls.add(url))
     run.results.forEach((items, index) => {
+      const spec = specs[index]
       for (const item of items) {
         const key = dedupeKey(item.url)
         const existing = byUrl.get(key)
         if (!existing) {
-          byUrl.set(key, { item, directionKey: specs[index]?.key })
-        } else if (!existing.directionKey && specs[index]?.key) {
-          byUrl.set(key, { item, directionKey: specs[index].key })
+          byUrl.set(key, {
+            item,
+            directionKey: spec?.key,
+            fallback: Boolean(spec?.fallback)
+          })
+        } else {
+          // 同一 URL 在主检索和补位里都出现时，按主检索处理（不标 fallback）。
+          if (!existing.directionKey && spec?.key) existing.directionKey = spec.key
+          if (!spec?.fallback) existing.fallback = false
         }
       }
     })
@@ -454,7 +468,7 @@ export async function searchJobs(
   const buildRanked = (): RankedJob[] => {
     const seenTitles = new Set<string>()
     const ranked: RankedJob[] = []
-    for (const { item, directionKey } of byUrl.values()) {
+    for (const { item, directionKey, fallback } of byUrl.values()) {
       const titleKey = `${item.title.replace(/\s+/g, '')}|${item.site}`
       if (seenTitles.has(titleKey)) continue
       seenTitles.add(titleKey)
@@ -470,8 +484,9 @@ export async function searchJobs(
       ranked.push({
         item,
         directionKey: inferred,
-        score: jobScore(item, city) + (inferred ? 1 : 0) - (article ? 2 : 0),
-        weak: article || !looksLikeJob(item.title, item.snippet)
+        score: jobScore(item, city) + (inferred ? 1 : 0) - (article ? 2 : 0) - (fallback ? 1 : 0),
+        weak: article || !looksLikeJob(item.title, item.snippet),
+        fallback
       })
     }
     return ranked
@@ -479,7 +494,9 @@ export async function searchJobs(
 
   const usableOf = (ranked: RankedJob[]): RankedJob[] =>
     ranked
-      .filter((entry) => !entry.weak && !isOldJob(entry.item.publishedAt))
+      .filter(
+        (entry) => !entry.weak && !isOldJob(entry.item.publishedAt, entry.item.title)
+      )
       .sort((a, b) => b.score - a.score)
 
   // 渐进式检索：先搜第 1 个方向，可用原文够 3 条就不再花后面的额度；
@@ -513,11 +530,13 @@ export async function searchJobs(
   if (usable.length < 3 || missingDirections.length > 0) {
     const supplementSpecs: QuerySpec[] = missingDirections.slice(0, 2).map((direction) => ({
       key: direction.key,
-      query: `${city ? `${city} ` : ''}${direction.query} 应届 招聘`.trim()
+      query: `${city ? `${city} ` : ''}${direction.query} 应届 招聘`.trim(),
+      freshness: 'oneYear'
     }))
     if (usable.length < 3) {
       supplementSpecs.push({
-        query: `${city ? `${city} ` : ''}${role} 应届 招聘`.trim()
+        query: `${city ? `${city} ` : ''}${role} 应届 招聘`.trim(),
+        freshness: 'oneYear'
       })
     }
     if (supplementSpecs.length) {
@@ -528,13 +547,29 @@ export async function searchJobs(
     }
   }
 
+  // 一年内可用原文仍不足 3 条时，用一个月窗补一次。
+  // 补来的结果只作「要求结构参考」，标记 fallback 后不进 directionFacts 统计。
+  if (usable.length < 3 && primarySpecs[0]) {
+    const fallbackSpec: QuerySpec = {
+      ...primarySpecs[0],
+      freshness: 'oneMonth',
+      fallback: true
+    }
+    run = await runSearches([fallbackSpec])
+    collect(run, [fallbackSpec])
+    ranked = buildRanked()
+    usable = usableOf(ranked)
+  }
+
   // 还没有任何可用原文时，才退回普通网页检索；只接受像具体招聘的结果。
   if (ranked.length === 0) {
-    const fallbackSpecs: QuerySpec[] = [
-      { query: `${city ? `${city} ` : ''}${role} ${queryYear()} 校园招聘`.trim() }
-    ]
-    run = await runSearches(fallbackSpecs)
-    collect(run, fallbackSpecs)
+    const fallbackSpec: QuerySpec = {
+      query: `${city ? `${city} ` : ''}${role} ${queryYear()} 校园招聘`.trim(),
+      freshness: 'oneYear',
+      fallback: true
+    }
+    run = await runSearches([fallbackSpec])
+    collect(run, [fallbackSpec])
     ranked = buildRanked()
     usable = usableOf(ranked)
   }
@@ -578,16 +613,17 @@ export async function searchJobs(
   }
 
   picked.sort((a, b) => b.score - a.score)
-  const jobs = picked.slice(0, 10).map(({ item, directionKey }) => ({
+  const jobs = picked.slice(0, 10).map(({ item, directionKey, fallback }) => ({
     title: cleanJobTitle(item.title),
     company: companyOf(item),
     city: cityInText(`${item.title} ${item.snippet}`),
-    salary: salaryOf(item.snippet) || '薪资以原文为准',
+    salary: salaryOf(item.snippet),
     requirement: requirementOf(item),
     url: item.url,
     date: item.publishedAt,
     directionKey,
-    stale: isOldJob(item.publishedAt)
+    stale: isOldJob(item.publishedAt, item.title),
+    fallback
   }))
 
   let error = ''
@@ -630,6 +666,7 @@ function jobSpec(job: JobCard): Record<string, unknown> {
     date: job.date ?? '',
     url: job.url,
     stale: Boolean(job.stale),
+    fallback: Boolean(job.fallback),
     directionKey: job.directionKey ?? '',
     meets: job.meets ?? [],
     missing: job.missing ?? []
@@ -1145,6 +1182,8 @@ function outputContract(): string {
 - gap 的 summary / paragraphs 只能基于 moduleSpecs.data.lines 和 jobs 里已有的事实写；没有的事实不要补，不要再写固定的「入场线」「城市判断」「下一步」建议句。
 - scorecard 每个 item 的 text 如提到分数，必须等于该 item 在 moduleSpecs 里的 score；scorecard 的 summary 如提到分数，必须是本模块某一项的 score。不要写别的 item 的分数，也不要用 10 分制总分冒充单项分。
 - 所有数字只能原样使用 moduleSpecs、jobSpecs、问卷回答或检索记录里的值，不能自己计算、换算或估算。
+- jobSpecs 里 fallback 为 true 的原文是主检索不足时的补位结果，只能参考要求结构，不能用来统计「几条原文」或门槛数量；stale 为 true 的过期原文同理，不能当成当前投递门槛。
+- 原文没有写薪资时不要写「薪资以原文为准」之类的话，也不要补一个薪资数字；没有就略过薪资。
 - 时间只使用系统给出的粗粒度表达；不要写「547 天」「24 个月」「2 年」这种数字加时间单位。
 - roadmap 的 label 只写阶段名（如「方向确认」「实践积累」），不要重复系统给的时间窗，也不要写月份数字。`
 }
@@ -1379,7 +1418,8 @@ export function readDocContent(raw: string | null): StoredDocReport | null {
         url: job.url,
         date,
         directionKey: typeof job.directionKey === 'string' ? job.directionKey : undefined,
-        stale: isOldJob(date)
+        stale: isOldJob(date, title),
+        fallback: job.fallback === true
       })
     }
     jobs.sort((a, b) => parseTime(b.date) - parseTime(a.date))

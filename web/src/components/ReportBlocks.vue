@@ -321,7 +321,7 @@
           <p v-for="(text, i) in block.paragraphs" :key="i">{{ text }}</p>
         </div>
         <p v-if="block.jobs.length" class="job-caption">
-          下面几条招聘/薪资原文用于核对上面的岗位门槛和薪资，点标题看原文；具体以原文为准。
+          下面几条招聘原文用于核对上面的岗位门槛{{ hasSalary(block.jobs) ? '和薪资' : '' }}，点标题看原文；具体以原文为准。
         </p>
         <ul v-if="block.jobs.length" class="job-list">
           <li v-for="job in block.jobs" :key="job.url" class="job">
@@ -371,9 +371,6 @@
                 <dd>{{ direction.fit }}</dd>
               </div>
             </dl>
-            <p v-if="direction.facts?.length" class="direction-mix">
-              <span>原文门槛</span>{{ direction.facts.join('；') }}
-            </p>
             <ul v-if="direction.jobs.length" class="job-list direction-jobs">
               <li v-for="job in direction.jobs" :key="job.url" class="job">
                 <a :href="job.url" target="_blank" rel="noopener noreferrer">
@@ -407,7 +404,7 @@
         </div>
         <template v-if="block.relatedJobs.length">
           <p class="job-caption">
-            下面几条是专业相关岗位/薪资原文，用来核对上面的方向；不直接对应某一个方向。
+            下面几条是专业相关招聘原文，用来核对上面的方向；不直接对应某一个方向。
           </p>
           <ul class="job-list">
             <li v-for="job in block.relatedJobs" :key="job.url" class="job">
@@ -505,6 +502,10 @@ function jobMeta(job: JobCard): string {
 
 function hasDirectionJobs(directions: { jobs: JobCard[] }[]): boolean {
   return directions.some((direction) => direction.jobs.length > 0)
+}
+
+function hasSalary(jobs: JobCard[]): boolean {
+  return jobs.some((job) => Boolean(job.salary))
 }
 
 function radarDimensions(items: ScoreItem[]): DimScore[] {
@@ -933,24 +934,6 @@ const dateText = computed(() => {
 
 .direction-jobs {
   margin-top: 14px;
-}
-
-.direction-mix {
-  margin: 10px 0 0;
-  font-size: 12.5px;
-  line-height: 1.7;
-  color: var(--ink-2);
-}
-
-.direction-mix span {
-  display: inline-block;
-  margin-right: 6px;
-  padding: 0 5px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ink-3);
-  background: color-mix(in srgb, var(--ink-3) 10%, transparent);
 }
 
 .direction-empty {
@@ -1885,10 +1868,6 @@ const dateText = computed(() => {
   padding: 5px 10px;
 }
 
-.direction-mix {
-  font-size: 13.5px;
-}
-
 .gap-list {
   gap: 20px;
 }
@@ -2252,7 +2231,6 @@ const dateText = computed(() => {
   .asset-source,
   .score-note,
   .roadmap-output,
-  .direction-mix,
   .closing {
     font-size: 14px;
   }

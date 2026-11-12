@@ -20,6 +20,76 @@ import {
   toCalendarDate
 } from './date'
 
+/** 报告里出现的主流就业城市；只用于从自由文本里识别城市，不限制 Q8 的选项。 */
+export const MAJOR_CITIES = [
+  '北京', '上海', '广州', '深圳', '杭州', '成都', '武汉', '西安', '南京', '苏州',
+  '重庆', '天津', '长沙', '郑州', '青岛', '厦门', '合肥', '宁波', '东莞', '佛山',
+  '无锡', '济南', '福州', '大连', '沈阳', '昆明', '南昌', '贵阳', '南宁', '石家庄',
+  '太原', '长春', '哈尔滨', '兰州', '乌鲁木齐', '呼和浩特', '海口', '银川', '西宁', '拉萨'
+]
+
+const FIRST_TIER_CITIES = ['北京', '上海', '广州', '深圳']
+
+/** 从「福建 - 莆田」「学校在杭州」这类自由文本里取第一个主流城市。 */
+export function cityInText(value: string): string {
+  return MAJOR_CITIES.find((city) => value.includes(city)) ?? ''
+}
+
+export interface TargetCity {
+  /** 能落到检索词里的具体城市；为空表示本次不限定城市 */
+  city: string
+  /** 城市是怎么定下来的，用来在报告里说明依据 */
+  basis: 'explicit' | 'school' | 'home' | 'label' | 'none'
+  /** 直接给报告展示的一句说明；明确写「本次未限定城市」 */
+  note: string
+}
+
+/**
+ * 把 Q8 的档位（如「新一线」「北上广深」）落到具体城市。
+ * 只做检索用，不改问卷答案本身；抓不到具体城市时不加城市，并在报告里写明。
+ */
+export function resolveTargetCity(survey: Survey, answers: Answers): TargetCity {
+  const cityLabel = label(survey, answers, 'q8')
+  if (!cityLabel || /还没想好|还没确定/.test(cityLabel)) {
+    return { city: '', basis: 'none', note: '本次未限定城市' }
+  }
+  const clean = cityLabel.replace(/（.*?）/g, '').trim()
+  const q4 = answers.q4
+  const fields = Array.isArray(q4)
+    ? q4.filter((item): item is string => typeof item === 'string')
+    : []
+  const home = cityInText(fields[0] ?? '')
+  const school = cityInText(fields[1] ?? '')
+
+  if (MAJOR_CITIES.includes(clean)) {
+    return { city: clean, basis: 'explicit', note: '' }
+  }
+  if (/家乡|回家/.test(clean)) {
+    return home
+      ? { city: home, basis: 'home', note: `按家乡城市 ${home} 检索` }
+      : { city: '', basis: 'none', note: '本次未限定城市' }
+  }
+  if (/新一线/.test(clean)) {
+    // 学校在北上广深时，不能拿它当「新一线」的目标城市。
+    if (school && !FIRST_TIER_CITIES.includes(school)) {
+      return { city: school, basis: 'school', note: `按学校所在城市 ${school} 检索` }
+    }
+    const fromLabel = cityInText(cityLabel)
+    return fromLabel
+      ? { city: fromLabel, basis: 'label', note: `按 ${fromLabel} 检索` }
+      : { city: '', basis: 'none', note: '本次未限定城市' }
+  }
+  if (/北上广深/.test(clean)) {
+    return FIRST_TIER_CITIES.includes(school)
+      ? { city: school, basis: 'school', note: `按学校所在城市 ${school} 检索` }
+      : { city: '', basis: 'none', note: '本次未限定城市' }
+  }
+  const fromLabel = cityInText(cityLabel)
+  return fromLabel
+    ? { city: fromLabel, basis: 'label', note: `按 ${fromLabel} 检索` }
+    : { city: '', basis: 'none', note: '本次未限定城市' }
+}
+
 export interface ResolvedQuestion {
   visible: boolean
   disabled: boolean
@@ -673,18 +743,25 @@ function withJobMatch(
   job: JobCard,
   directionName?: string
 ): JobCard {
-  const stale = Boolean(job.date && isOlderThanMonths(job.date, 18))
+  const stale = isStaleJob(job)
   return {
     ...job,
     usedFor: job.usedFor || usedForJob(job, directionName),
     ...jobMatch(survey, answers, job),
-    stale: job.stale || stale
+    stale
   }
+}
+
+/** 招聘原文是否已过期；旧报告可能只有日期没有 stale 标记，所以两处都看。 */
+function isStaleJob(job: JobCard): boolean {
+  return Boolean(job.stale) || Boolean(job.date && isOlderThanMonths(job.date, 18))
 }
 
 /** 把同一方向的多条原文汇总成门槛事实，避免只靠单条招聘下结论。 */
 function directionFacts(jobs: JobCard[]): string[] {
-  if (jobs.length < 2) return []
+  // 过期原文只用于看「要求结构」，补位原文同理；两者都不进统计，避免老公告冒充当前门槛。
+  const usable = jobs.filter((job) => !isStaleJob(job) && !job.fallback)
+  if (usable.length < 2) return []
   const textOf = (job: JobCard) => `${job.title} ${job.requirement}`
   const facts: string[] = []
 
@@ -695,19 +772,22 @@ function directionFacts(jobs: JobCard[]): string[] {
     if (/大专|专科/.test(value)) return '大专'
     return '学历未写'
   }
-  const levels = jobs.map(level)
+  const levels = usable.map(level)
   const levelCount = new Map<string, number>()
   for (const item of levels) levelCount.set(item, (levelCount.get(item) ?? 0) + 1)
   facts.push(
-    `${jobs.length} 条原文里，` +
+    `${usable.length} 条原文里，` +
       [...levelCount.entries()].map(([name, count]) => `${name} ${count} 条`).join('，')
   )
 
-  const fresh = jobs.filter((job) =>
-    /经验不限|在校|应届/.test(textOf(job))
+  // 「应届」必须看完整字段：标题写「应届毕业生求职」、正文却要求 2—3 年经验的，不算接受应届。
+  const mentionsFresh = (text: string) => /经验不限|在校|应届/.test(text)
+  const requiresYears = (text: string) => /\d+\s*[-—~至]\s*\d+\s*年|\d+\s*年以上/.test(text)
+  const fresh = usable.filter(
+    (job) => mentionsFresh(textOf(job)) && !requiresYears(textOf(job))
   ).length
   if (fresh > 0) facts.push(`接受应届/经验不限的 ${fresh} 条`)
-  const senior = jobs.filter((job) => /\d+-\d+年|\d+年以上/.test(textOf(job))).length
+  const senior = usable.filter((job) => requiresYears(textOf(job))).length
   if (senior > 0) facts.push(`写明年限要求的 ${senior} 条`)
 
   const skills: [string, RegExp][] = [
@@ -720,7 +800,7 @@ function directionFacts(jobs: JobCard[]): string[] {
     ['英语/四级', /英语|四级|六级/i]
   ]
   const hits = skills
-    .filter(([, pattern]) => jobs.some((job) => pattern.test(textOf(job))))
+    .filter(([, pattern]) => usable.some((job) => pattern.test(textOf(job))))
     .map(([name]) => name)
   if (hits.length) facts.push(`原文点名：${hits.slice(0, 4).join('、')}`)
 
@@ -746,10 +826,12 @@ function jobMapBlock(
         // 只有一个兜底方向时，没打上方向标签的招聘原文也归到它下面。
         return key === direction.key || (!job.directionKey && directions.length === 1)
       })
-      const facts = directionFacts(matchedAll)
-      const matched = matchedAll
+      // 卡片展示与门槛统计用同一批原文：优先展示未过期原文，最多 2 条。
+      const displayed = [...matchedAll]
+        .sort((a, b) => Number(isStaleJob(a)) - Number(isStaleJob(b)))
         .slice(0, 2)
-        .map((job) => withJobMatch(survey, answers, job, direction.name))
+      const facts = directionFacts(displayed)
+      const matched = displayed.map((job) => withJobMatch(survey, answers, job, direction.name))
       matched.forEach((job) => assigned.add(job.url))
       return { ...direction, facts, jobs: matched }
     })
@@ -763,10 +845,15 @@ function jobMapBlock(
   // 没有招聘原文支撑时，不靠专业名称凭空编方向。
   if (!grouped.length && !relatedJobs.length) return null
 
+  const targetCity = resolveTargetCity(survey, answers)
+  const subtitle = `先看方向，再看门槛；经验值区间和招聘原文一起看，具体以原文为准${
+    targetCity.note ? `；${targetCity.note}` : ''
+  }`
+
   return {
     type: 'jobmap',
     title: '你能去的几个方向',
-    subtitle: '先看方向，再看门槛；经验值区间和招聘原文一起看，具体以原文为准',
+    subtitle,
     directions: grouped.map(({ key, name, facts, jobs: directionJobs }) => ({
       key,
       name,
@@ -830,6 +917,7 @@ function roadmapBlock(survey: Survey, answers: Answers, scores: DocScores): Repo
 function gapLines(survey: Survey, answers: Answers): { label: string; value: string }[] {
   const first = label(survey, answers, 'q6')
   const city = label(survey, answers, 'q8')
+  const targetCity = resolveTargetCity(survey, answers)
   const role = text(answers, 'q5a')
   const major = text(answers, 'q2')
   const node = deadlineFact(survey, answers)
@@ -840,7 +928,14 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
   ]
 
   if (first === '就业') {
-    lines.push({ label: '目标城市', value: city || '还没想好' })
+    // 具体城市由方向卡的副标题说明检索依据；这里只在完全落不到城市时明确标注。
+    const cityValue =
+      !city || city.includes('还没想好')
+        ? '还没想好'
+        : targetCity.basis === 'none'
+          ? `${city}（本次未限定城市）`
+          : city
+    lines.push({ label: '目标城市', value: cityValue })
     lines.push({ label: '目标岗位', value: role || '还没写清楚' })
     if (!role && major) lines.push({ label: '你的专业', value: major })
     const nowText = resumeNow(survey, answers)
@@ -900,8 +995,8 @@ function gapBlock(survey: Survey, answers: Answers, jobs: JobCard[] = []): Repor
 /** 核对清单只给检索词和固定 key；具体查什么、怎么查由 AI 依据回答写。 */
 function checklistBlock(survey: Survey, answers: Answers): ReportBlock {
   const first = label(survey, answers, 'q6')
-  const cityLabel = label(survey, answers, 'q8').replace(/（.*?）/g, '')
-  const city = cityLabel.includes('还没想好') ? '' : cityLabel
+  // 核对清单里的检索词也要用具体城市；「新一线」这类档位词不能直接拿去搜。
+  const city = resolveTargetCity(survey, answers).city
   const role = text(answers, 'q5a') || text(answers, 'q2')
   const place = city ? `${city} ` : ''
   const target = role || '目标岗位'
@@ -1190,6 +1285,20 @@ function sourcesBlock(input: {
   const queries = search?.queries ?? []
   const error = search?.error ?? ''
   if (!sources.length && !queries.length && !error) return null
+  const jobByUrl = new Map((input.jobs ?? []).map((job) => [job.url.replace(/\/$/, ''), job]))
+  const usedForOf = (source: { url: string; date?: string }): string => {
+    const job = jobByUrl.get(source.url.replace(/\/$/, ''))
+    const fields: string[] = []
+    if (job?.requirement && /本科|大专|专科|学历|专业|经验|实习|证书|英语|四级|六级/.test(job.requirement)) {
+      fields.push('门槛')
+    }
+    if (job?.salary) fields.push('薪资')
+    if (job?.city) fields.push('城市')
+    const base = fields.length
+      ? `用于核对${fields.join('、')}`
+      : '用于核对报告里的岗位原文'
+    return source.date ? `${base} · 发布于 ${source.date.slice(0, 10)}` : base
+  }
 
   return {
     type: 'sources',
@@ -1199,9 +1308,7 @@ function sourcesBlock(input: {
       title: source.title,
       url: source.url,
       site: source.site,
-      usedFor: source.date
-        ? `用于核对岗位门槛和薪资 · 发布于 ${source.date.slice(0, 10)}`
-        : '用于核对报告里的岗位和门槛'
+      usedFor: usedForOf(source)
     })),
     queries,
     error,

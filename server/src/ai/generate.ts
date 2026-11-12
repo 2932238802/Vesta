@@ -313,7 +313,9 @@ async function generateContent(input: GenerateInput): Promise<{
   if (!isSearchConfigured()) {
     searchError = '未配置 BOCHA_API_KEY，本次没有联网检索'
   } else if (queries.length > 0) {
-    const settled = await Promise.allSettled(queries.map((query) => searchWeb(query)))
+    const settled = await Promise.allSettled(
+      queries.map((query) => searchWeb(query, { freshness: 'oneYear' }))
+    )
     const errors: string[] = []
     for (const item of settled) {
       if (item.status === 'fulfilled') results.push(...item.value)

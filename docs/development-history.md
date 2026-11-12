@@ -4,6 +4,19 @@
 
 ## 本轮（2026-11-12）
 
+### 博查检索时效与岗位块修复（2026-11-12）
+
+- 依据：`docs/archive/20261112/9-博查检索时效与岗位块-问题与修复方案.md` v1.0。现象来自本地报告 `/r/gDJT5DqM9-X9IVfxtrYs2vr6N3M`（答卷「312」）：检索词全部不带城市、返回 2018—2024 年高校就业网老公告、过期原文仍参与「入场线」统计、AI 照抄「薪资以原文为准」占位符、「原文门槛」与 `entry` 重复渲染。
+- 检索时间窗：`server/src/ai/doc-generate.ts` 的 `searchOne()` 与 `server/src/ai/generate.ts` 的旧版报告检索统一传 `freshness: 'oneYear'`；`searchWeb()` 的默认值仍是 `noLimit`，但所有调用点显式给值，缓存 key 已含 freshness，不受旧缓存影响。
+- 补位检索：主检索（oneYear）可用原文不足 3 条时，再用同一检索词跑一次 `oneMonth`，结果标记 `fallback: true`；`fallback` 原文会随 `JobCard` 传给报告（`jobSpec` / `readDocContent`），但 `directionFacts()` 只统计 `!stale && !fallback` 的原文，补位结果只作要求结构参考。完全没有结果时的校园招聘兜底也标 `fallback: true`。
+- 过期不进统计：`shared/src/doc.ts` 的 `directionFacts()` 先过滤 `stale`，剩余不足 2 条直接返回空；统计口径改为与卡片展示的原文（最靠前的 2 条非过期原文）一致，不再出现「展示 2 条、按 3 条算」。
+- 时效双证据：`isOldJob(date, title)` 同时看 `datePublished` 和标题里的 4 位年份，冲突时按更早年份从年初算（宁严勿松）；`jobScore`、`usableOf`、`readDocContent` 都走同一判断。
+- 城市落地：`shared/src/doc.ts` 新增并导出 `MAJOR_CITIES` / `cityInText()` / `resolveTargetCity()`；Q8 选「新一线」时优先用 Q4 学校所在地（排除北上广深），否则从档位括号文案抓第一个城市；「家乡省会 / 回家」用 Q4 家乡城市；「北上广深」只在 Q4 学校所在地属于该档位时使用。抓不到城市时检索词不加城市，并在报告「你能去的几个方向」副标题里写明「本次未限定城市」；`checklist` 的检索词改用落地后的具体城市。
+- 薪资兜底：`server/src/ai/doc-generate.ts` 删除 `'薪资以原文为准'` 占位符，`salaryOf()` 抓不到就留空，前端 `v-if="direction.salary"` 自动隐藏；报告底部来源文案改为按原文实际字段生成（有薪资才写「薪资」）。
+- 重复渲染：删除 `web/src/components/ReportBlocks.vue` 中方向卡下方重复的 `direction.facts` 脚注（事实仍进 `moduleSpecs` 供 AI 写 `entry`），同步删除 `.direction-mix` 样式。
+- 正则假阳性：`directionFacts()` 的「接受应届/经验不限」改为原文命中 `经验不限|在校|应届` 且不含 `\d+-\d+年` / `\d+年以上`，避免标题带「应届毕业生求职」但要求 2—3 年经验的原文被算成接受应届。
+- 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）。另用临时脚本（`DATA_DIR` 指向 `/tmp`，不写仓库、不提交）以「计算机科学与技术、Q8 新一线、Q4 学校在杭州」调用真实 `searchJobs()`：城市落为杭州（`basis: school`），实际检索词为「杭州 Java开发 / 前端开发 / 软件测试 / 数据分析 2026 应届 招聘」；返回岗位日期集中在 2025-12 至 2026-05，多条带 13-26K、20-40K 等薪资，本次未触发 fallback。另用本地构造的 `JobCard` 验证：过期原文和 fallback 原文都不进 `facts`，「应届毕业生求职」但要求 2-3 年经验的原文不再被算成接受应届。未跑完整 AI 报告生成，避免额外 AI 费用；上线后仍建议用同一份答卷重试一次做最终走查。
+
 ### 问卷分组：Q27 拆出独立「未来画面」（2026-11-12）
 
 - 起因：最后一题 Q27 挂在第四部分「英语这块」下面，问卷页大标题跟着分组显示「英语这块」，与「五年后，你希望自己是什么样」不符；`docs/archive/20261112/6-问卷连续性-优化建议.md` 也提过「最后连着 8 道英语 + 1 道未来画面」。
