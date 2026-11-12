@@ -18,16 +18,19 @@ shared/src/        问卷、报告、咨询目的树等共享类型与算法
 web/src/           Vue 管理后台、问卷、报告页面
 deploy/            systemd、Nginx、安装与备份脚本
 scripts/           一次性导入与维护脚本
-docs/              架构、运行、历史和 Agent 交接文档
+docs/              架构、运行、历史、问卷口径与 Agent 交接文档
+docs/archive/      已作废的历史方案（只存档，不要照着实现）
 data/              本地数据库与备份（不提交 Git）
 update.sh          服务器更新入口
 ```
 
-进一步阅读：
+文档分工（**改需求先改文档，再改代码**）：
 
-- `docs/consult-system.md`：咨询目的树、目的路径、长稿生成与反馈。
-- `docs/development-history.md`：历次需求和已做改动。
-- `docs/agent-rules.md`：后续 Agent 必须遵守的约束。
+- [consult-system.md](./consult-system.md)：咨询目的树、目的路径、模块化长稿生成与反馈。
+- [规划自测问卷-设计文档.md](./规划自测问卷-设计文档.md)：问卷与报告的唯一口径——题目、选项、跳题逻辑、报告规则都在这里。
+- [development-history.md](./development-history.md)：历次需求与已做改动，记录「为什么这样做」。
+- [agent-rules.md](./agent-rules.md)：后续 Agent 必须遵守的约束。
+- [archive/](./archive/)：已作废的历史方案（如 28 题八维计分版《项目计划书》），只用于追溯设计来路。
 
 ## 本地开发
 
@@ -38,7 +41,7 @@ npm run dev
 
 - Vite：`http://127.0.0.1:5173`
 - 本地后端：`http://127.0.0.1:8788`
-- 生产端口：`8787`
+- 生产默认端口：`8787`（可用 `PORT` 覆盖）；本机线上实例是 `8082`（`.env` + `vesta.service.d/zz-port.conf`）
 
 本地 `npm run dev` 会设置 `NODE_ENV=development`。默认启用后台免密登录：
 
@@ -73,6 +76,8 @@ bash update.sh
 - **L5 对外**：`/api/health` 返回 200 且时间戳晚于本次重启；再校验首页引用了本次构建的 JS 指纹。
 
 如果本次拉取更新了 `update.sh` 本身，脚本会用新脚本重新执行（`--resumed` 防止循环）。脚本也会用 `flock` 防止并发执行。
+
+五层校验的动机、失败处理和兼容性说明见 [development-history.md](./development-history.md) 的「本轮（2026-11-12）」；改 `update.sh` 时，本文与那一节要一起同步。
 
 常用选项：
 
