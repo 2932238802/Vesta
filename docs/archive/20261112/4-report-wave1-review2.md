@@ -1,7 +1,7 @@
 # 报告模块第一波 Review 复审（2026-11-12）
 
 > 审查方式：只读审查 + 运行校验命令；本次除新增本文档外未改代码、未提交、未部署、未调用真实 AI/博查。  
-> 审查对象：当前未提交工作区，对照基线 `118fbc7` 与 `docs/archive/2026-11-12-report-wave1-review.md`（下称「原报告」）。  
+> 审查对象：当前未提交工作区，对照基线 `118fbc7` 与 `docs/archive/20261112/2-report-wave1-review.md`（下称「原报告」）。  
 > 范围：原报告的 3 个阻断、5 个重要、3 个建议，以及本轮改动本身引入的风险。
 
 ## 0. 审查对象
@@ -12,7 +12,7 @@
 - 时间计算：`shared/src/date.ts`、`shared/src/date.cases.ts`、`package.json`
 - 规则来源与配置：`server/src/db.ts`、`server/src/index.ts`
 - 报告 UI：`web/src/components/ReportBlocks.vue`、`web/src/views/ReportView.vue`
-- 文档：`docs/README.md`、`docs/规划自测问卷-设计文档.md`、`docs/development-history.md`、`docs/archive/报告生成-路线图月份误判-2026-11-12.md`、`AGENTS.md`、`CLAUDE.md`
+- 文档：`docs/README.md`、`docs/规划自测问卷-设计文档.md`、`docs/development-history.md`、`docs/archive/20261112/3-报告生成-路线图月份误判.md`、`AGENTS.md`、`CLAUDE.md`
 - 原 review 文档从 `docs/plans/` 归档到 `docs/archive/`。
 
 ## 1. 结论

@@ -75,3 +75,4 @@
 
 - 改动涉及架构、认证、数据模型、部署流程或已确认需求时，同步更新 `docs/`。
 - 用户的新要求如果推翻旧实现，要在 `development-history.md` 记录“何时、改了什么、为什么”，避免后续 Agent 又把旧逻辑加回来。
+- 开发设计文档统一放 `docs/archive/`；同一天的文档收进 `docs/archive/YYYYMMDD/`（如 `docs/archive/20261112/`），文件名按 `1-标题.md`、`2-标题.md` 依次递增。`docs/` 根目录只保留口径文档（`规划自测问卷-设计文档.md`、`consult-system.md`）与 `README.md` / `development-history.md` / `agent-rules.md`。

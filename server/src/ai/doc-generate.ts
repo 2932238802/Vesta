@@ -482,16 +482,32 @@ export async function searchJobs(
       .filter((entry) => !entry.weak && !isOldJob(entry.item.publishedAt))
       .sort((a, b) => b.score - a.score)
 
-  let run = await runSearches(primarySpecs)
-  collect(run, primarySpecs)
+  // 渐进式检索：先搜第 1 个方向，可用原文够 3 条就不再花后面的额度；
+  // 不足时才退回全量检索，行为与改动前一致（见 docs/archive/20261112/7-博查检索成本优化-设计方案.md）。
+  const [firstSpec, ...restSpecs] = primarySpecs
+  let run = await runSearches(firstSpec ? [firstSpec] : [])
+  collect(run, firstSpec ? [firstSpec] : [])
   let ranked = buildRanked()
   let usable = usableOf(ranked)
+  let searchedAll = restSpecs.length === 0
 
-  const missingDirections = useDirections
-    ? directions.filter(
-        (direction) => !usable.some((entry) => entry.directionKey === direction.key)
-      )
-    : []
+  if (usable.length < 3 && restSpecs.length > 0) {
+    // runSearches 只在同一个 run 内保持 500ms 间隔；这里另起一轮，手动补上间隔。
+    await sleep(500)
+    run = await runSearches(restSpecs)
+    collect(run, restSpecs)
+    ranked = buildRanked()
+    usable = usableOf(ranked)
+    searchedAll = true
+  }
+
+  // 没搜完就不判断缺失方向，避免「只搜了一个方向」把其余方向当成缺位再补搜一次。
+  const missingDirections =
+    searchedAll && useDirections
+      ? directions.filter(
+          (direction) => !usable.some((entry) => entry.directionKey === direction.key)
+        )
+      : []
 
   // 校招方向没搜到足够的新岗位、或某个方向完全没有原文时，再用通用词补位。
   if (usable.length < 3 || missingDirections.length > 0) {

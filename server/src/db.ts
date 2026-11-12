@@ -173,6 +173,13 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_consult_collections_updated ON consult_collections(pinned DESC, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_consult_collections_kind ON consult_collections(kind);
+
+  CREATE TABLE IF NOT EXISTS search_cache (
+    key TEXT PRIMARY KEY,
+    results TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_search_cache_created ON search_cache(created_at);
 `)
 
 function ensureInviteColumns(): void {

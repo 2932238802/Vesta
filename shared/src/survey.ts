@@ -15,7 +15,8 @@ export const defaultSurvey: Survey = {
     { id: 'p1', code: '一', title: '基本情况', subtitle: '' },
     { id: 'p2', code: '二', title: '你现在的位置', subtitle: '' },
     { id: 'p3', code: '三', title: '你怎么学、家里什么情况', subtitle: '' },
-    { id: 'p4', code: '四', title: '英语这块', subtitle: '' }
+    { id: 'p4', code: '四', title: '英语这块', subtitle: '' },
+    { id: 'p5', code: '五', title: '未来画面', subtitle: '' }
   ],
   questions: [
     {
@@ -474,7 +475,7 @@ export const defaultSurvey: Survey = {
     {
       id: 'q26',
       code: 'Q27',
-      groupId: 'p4',
+      groupId: 'p5',
       title: '五年后，你希望自己是什么样',
       hint: '一句话也行，想到什么写什么',
       type: 'text',

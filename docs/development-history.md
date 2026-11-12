@@ -4,9 +4,30 @@
 
 ## 本轮（2026-11-12）
 
+### 问卷分组：Q27 拆出独立「未来画面」（2026-11-12）
+
+- 起因：最后一题 Q27 挂在第四部分「英语这块」下面，问卷页大标题跟着分组显示「英语这块」，与「五年后，你希望自己是什么样」不符；`docs/archive/20261112/6-问卷连续性-优化建议.md` 也提过「最后连着 8 道英语 + 1 道未来画面」。
+- 改动：`shared/src/survey.ts` 的 `groups` 新增 `{ id: 'p5', code: '五', title: '未来画面' }`，Q27 的 `groupId` 由 `p4` 改为 `p5`；题目顺序、题号、选项、跳转、计分、报告规则都不变。
+- 生效范围：没在后台「问卷设置」发布过的问卷，启动迁移会按默认结构对齐（`server/src/db.ts` 的 `migrateSurvey`）；后台改过分组/文案的自定义问卷不会自动改，需要在后台手动调整。
+- 文档：`docs/规划自测问卷-设计文档.md` 升到 v1.2，分组表拆成四（Q19–Q26）/五（Q27），闸门说明同步。
+- 验证：`npm run verify`（check:docs / check:dates / typecheck / build）。
+
+### 博查检索成本优化：检索缓存 + 渐进式检索（2026-11-12）
+
+- 依据：`docs/archive/20261112/7-博查检索成本优化-设计方案.md` v1.0（已批准并实施；按用户 2026-11-12 的约定，开发文档统一放 `docs/archive/`）。用户反馈博查按次计费、单份报告要外呼 4—8 次，确认按方案 A（缓存）+ B（渐进式检索）做，P5（计费口径）、P6（日预算熔断）不在本轮。
+- 起因：计算机 / 国贸专业一份求职报告要搜 4 个方向（`doc-generate.ts` 的 `primarySpecs`），不足 3 条再补位最多 3 次，完全没有结果再兜底 1 次；`generate.ts` 的 `MAX_AI_ATTEMPTS = 4` 自动重试每次都重跑 `searchJobs`，上一轮检索结果直接丢弃；全站无检索缓存，同城同专业学生的检索词一模一样却各付一次。
+- 缓存（`server/src/db.ts`、`server/src/ai/bocha.ts`）：新增 `search_cache(key PRIMARY KEY, results TEXT, created_at TEXT)` 与 `idx_search_cache_created`，`CREATE TABLE IF NOT EXISTS` 放在同一段 schema 内，旧库启动自动补表、可重复执行。key = 空白折叠 + 转小写的检索词 + `c{count}` + `f{freshness}`（不改词序、不删词，避免把语义不同的词合并）。TTL 7 天；读时过期或 JSON 解析失败就删行当未命中；写时 `ON CONFLICT(key) DO UPDATE` 并顺手 `DELETE` 过期行，不新增定时任务。`now()` 统一取 ISO 时间。
+- 并发去重：模块级 `inflight: Map<string, Promise<SearchResult[]>>`，同一 key 并发只外呼一次，`finally` 必删，失败请求不会永久挂住后续调用；错误不缓存，429 重试和 AI 重试行为不变。只对单进程有效（当前 systemd 单实例）。
+- 缓存边界：`searchWeb()` 仍是唯一外呼入口，`generate.ts` 的老版问卷报告（`Promise.allSettled` 并行 1—3 个检索词）也自动受益。缓存命中照样记本次「实际检索词/来源/结果数」到 `ReportSearchMeta`，报告底部展示口径不变，也没有给 `shared/src/types.ts` 加 `cached` 字段（P4 默认值）。
+- 渐进式检索（`server/src/ai/doc-generate.ts` 的 `searchJobs()`）：`buildSearchSpecs()` 不动，仍返回全部方向；调用顺序改为先跑第 1 个方向，若可用原文（非旧、像招聘、过方向相关性）≥3 条就停，不足才补跑其余方向，之后才计算 `missingDirections` 并走原有补位/兜底。命中时 4 方向专业只花 1 次，不命中时退回现有行为，不会比改动前更差。
+- 代价（已写进方案 4.3）：停得早时报告「岗位方向」只显示实际搜到结果的那一个方向，覆盖变窄但不编造数据。若要恢复多方向覆盖，把阈值 3 调高或改成「先搜 2 条方向」；回滚只要删掉 `searchJobs()` 里的渐进式 `if` 分支。
+- 风险与默认值：缓存可能把 7 天内的岗位原文喂进报告，但 `isOldJob()`（18 个月）仍会过滤；空结果默认也缓存 7 天（P2），补位/兜底用的是不同检索词，不受影响；表体积远小于 `events`，写入即清理。
+- 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）。另用临时桩脚本（`fetch` 打桩，不进仓库，`DATA_DIR` 指向临时目录）验证：规范化 key 命中缓存、`count` 进 key、并发 single-flight 只外呼一次、空结果也缓存、8 天前的行按过期重取并覆盖、错误不缓存、损坏行当未命中并删除、写入时清理过期行；渐进式检索验证了「首个方向够 3 条只搜 1 次」「首个方向 0 条时补搜全部方向 + 补位」「同答案第二次检索 0 次外呼且检索记录照常」。未在真机跑博查（会产生费用），因此没有「连提两份真实报告」的走查；上线后按方案第七节第 3 步用 `SELECT count(*), max(created_at) FROM search_cache` 观察一周命中情况，再决定是否做预算熔断。
+- 复核修复（2026-11-12，见 `docs/archive/20261112/8-博查检索成本优化-实施Review.md`）：首个方向与其余方向之间补 500ms 限流间隔（`doc-generate.ts`）；`readCache` 按 `fetchSearch` 同一规则归一化缓存字段，原数组非空但过滤后为空时删行当未命中（`bocha.ts`）；README 修正「待实施稿」「检索记录」两处旧口径；恢复被本次归档整理误删的 `docs/archive/项目计划书-2026-11-10.md`（归档记录只保留、不删除，`development-history.md:100` 的引用因此仍有效）。
+
 ### 问卷页面 UI 优化（邀请页 / 问卷页）
 
-- 依据：`docs/archive/问卷页面UI优化-开发设计方案-2026-11-12.md` v1.1，按第 10 节全部默认值（P1=A 只显示分组名 + 百分比 + 细条；P2=A 末题点选仍自动提交；P3=A 自动前进 250ms；P4=A 单题单屏；P5=A 不改结果页；P6=A playwright 不写入仓库；P7=A 真机未验证要如实记录）实施。
+- 依据：`docs/archive/20261112/1-问卷页面UI优化-开发设计方案.md` v1.1，按第 10 节全部默认值（P1=A 只显示分组名 + 百分比 + 细条；P2=A 末题点选仍自动提交；P3=A 自动前进 250ms；P4=A 单题单屏；P5=A 不改结果页；P6=A playwright 不写入仓库；P7=A 真机未验证要如实记录）实施。
 - 视觉：新增问卷作用域令牌 `--q-*`（冷灰绿纸 `#EFF1EC`、松墨 `#1B231E`、深绿 `#2F5C48`），只在 `.invite` / `.quiz` 子树和这两个页面存在时的 `body` 背景生效；`/admin` 继续用原变量。邀请页、问卷页标题改用无衬线，衬线只留在结果页正文；取消 uppercase eyebrow、等宽题号与返回箭头。
 - 进度：只显示分组名、百分比和细条（1px 点线轨道 + 2px 已完成段），不显示题数或完成数量；`role="progressbar"` + `aria-label="问卷进度"` + `aria-valuetext`，符合设计文档第 67 行「不显示已答 X / N」。
 - 交互：单选改为 `radiogroup` + `radio` + roving tabindex，方向键只移焦点、Space/Enter 选中、键盘不自动跳题；指针点选仍 250ms 自动前进，键盘选中后停留。错误就地红框 + 题下 `role="alert"` + 滚动并聚焦首个控件；`window.confirm` 改为题内二次确认。
@@ -26,7 +47,7 @@
 
 ### 问卷移除顶部进度条（2026-11-12）
 
-- 依据：`docs/archive/问卷进度条移除-开发文档-2026-11-12.md`（方案 A，整块删除）。推翻本轮早先「分组名 + 百分比 + 细条」的进度口径（见上一条第 11、21 行）。
+- 依据：`docs/archive/20261112/5-问卷进度条移除-开发文档.md`（方案 A，整块删除）。推翻本轮早先「分组名 + 百分比 + 细条」的进度口径（见上一条第 11、21 行）。
 - 原因：进度按「当前可见题数」当分母计算（`(step + 1) / visibleQuestions().length`）。Q19 英语重要性是 0—10 滑块，拖到 6 分及以上会让后面 5 道英语题变为可见，分母从 22 跳到 27，百分比和细条在用户停在同一题、什么都没提交的情况下往下掉；拖回 5 分又跳回去。这是分母随答案变化，不是样式抖动；其他会改变后续题可见性的题也有同样隐患。
 - 改动：`web/src/views/Quiz.vue` 删除 `.progress-wrap` 整块（含 `role="progressbar"` 与 `aria-*`）、`progressPct` / `progressAriaText` 两个 computed，以及 `.progress-wrap` / `.progress-meta` / `.progress-group` / `.progress-pct` / `.progress-track` / `.progress-done` 样式和 720px、560px 响应式里对 `.progress-wrap` 的覆盖（`.foot` 的半透明背景保留）。
 - 保留：`groupTitle`——它同时是页面标题 `h1.group-title` 和切题读屏播报（「下一题：分组名」）的来源，开发文档里「只被进度块使用」的判断已过时；`statusText` 的 `sr-only aria-live` 播报、上一题按钮、底部草稿提示、吸顶与键盘逻辑均不动。
@@ -40,7 +61,7 @@
 - 模块化输出：`server/src/ai/doc-generate.ts` 先由程序生成 `moduleSpecs`（评分卡、现有资源、岗位方向、目标差距、路线图、行动清单、英语和三个章节），每个模块带着允许引用的数据；AI 只写标题、一句话判断、正文和逐项解释。输出结构固定为 `{conclusion, modules[]}`，缺模块、多模块、空字段或占位符都会判失败。
 - 去硬编码：删除按域名过滤招聘结果、`site:` 检索词、从 URL 解析岗位字段、固定城市薪资、固定岗位方向兜底、固定“简历里能写什么”等逻辑。岗位方向只保留 `shared/src/job-map.ts` 的专业方向映射，且方向下没有真实检索结果时整块不显示；“你现在能用的东西”只列 Q9/Q10/Q15 里勾选过的内容。顺带删除了 `shared/src/doc.ts` 中已不再使用的 `docFacts`、`oneLine`、`stuckLayer`、`futureText`、`salaryRange` 等规则版函数。
 - 数字审计：程序计算分数、比例、月份、阶段和岗位门槛；生成后扫描 AI 文本中的数字，只允许来自问卷回答、`moduleSpecs`、岗位数据和检索记录的数值。出现 `547 天`、`24 个月`、数字年份等表达直接重写一次，仍不通过则整份报告失败，不把错数字写进报告。
-- 审校误判修复：答卷 `zYLSmH0iTmVuCywgguQmGrrIrVA`（大一、就业、距秋招 34 个月）的路线图阶段窗是程序算出的「第 10—28 个月」，AI 把它抄进 `label` 后被“≥12 个月必须粗粒度”的规则整份判失败。现在 `findTextIssues()` 接收 `moduleSpecs` 里的阶段窗白名单，只放行真正落在系统时间窗里的月份；「还有 28 个月」仍会拦截。输出约束要求 `roadmap.label` 只写阶段名，不重复时间窗。审校/数字/模块完整性失败改为可自动重试和手动重试，只有配置缺失、规则为空/不存在才不可重试。合并 roadmap 时，AI `label` 若仍带月份数字会被丢弃，时间窗只由系统 `period` 显示一次；`label` 为空时不再渲染空标题。复盘见 `docs/archive/报告生成-路线图月份误判-2026-11-12.md`。
+- 审校误判修复：答卷 `zYLSmH0iTmVuCywgguQmGrrIrVA`（大一、就业、距秋招 34 个月）的路线图阶段窗是程序算出的「第 10—28 个月」，AI 把它抄进 `label` 后被“≥12 个月必须粗粒度”的规则整份判失败。现在 `findTextIssues()` 接收 `moduleSpecs` 里的阶段窗白名单，只放行真正落在系统时间窗里的月份；「还有 28 个月」仍会拦截。输出约束要求 `roadmap.label` 只写阶段名，不重复时间窗。审校/数字/模块完整性失败改为可自动重试和手动重试，只有配置缺失、规则为空/不存在才不可重试。合并 roadmap 时，AI `label` 若仍带月份数字会被丢弃，时间窗只由系统 `period` 显示一次；`label` 为空时不再渲染空标题。复盘见 `docs/archive/20261112/3-报告生成-路线图月份误判.md`。
 - 时间：所有时间距离统一走 `shared/src/date.ts` 的日历差函数，输出两年/三年、一年/一年半、X 个月、不到一个月、已过去 X 等粗粒度说法；`shared/src/date.cases.ts` 覆盖跨年、闰日 2/29、月末 31 日、整年、同日和已过期情况。
 - 检索透明：博查缺 `BOCHA_API_KEY` 或 `BOCHA_BASE_URL` 时明确报错，不再静默返回空数组；`ReportSearchMeta` 记录是否配置、检索词、时间、结果数和来源链接，展示在报告底部。失败状态由公开接口返回真实原因，并新增 `POST /api/report/:slug/retry`（每分钟 5 次）供报告页“重新生成”。
 - 报告页：桌面端收窄正文宽度、拉开区块间距，去掉靠分割线撑结构的写法；移动端单列、正文不小于 14px、可点区域不小于 44px，长表格改为卡片或横向容器。新增失败与重试状态，不再显示“基础内容”冒充 AI 报告。
@@ -49,7 +70,7 @@
 
 ### 第一波报告 Review 返工（2026-11-12）
 
-- 依据：`docs/archive/2026-11-12-report-wave1-review.md`。复审确认 3 个阻断项与多数重要项属实，本轮按 `B1 → B3 → B2/I3 → I1 → I2 → I4/I5/S1/S3` 顺序修复；I4 中「兼职改写属于 assets」的定位有误，实际在 gap 的简历事实里。
+- 依据：`docs/archive/20261112/2-report-wave1-review.md`。复审确认 3 个阻断项与多数重要项属实，本轮按 `B1 → B3 → B2/I3 → I1 → I2 → I4/I5/S1/S3` 顺序修复；I4 中「兼职改写属于 assets」的定位有误，实际在 gap 的简历事实里。
 - B1 gap 去硬编码：`gapLines()` 只保留程序能算出的事实（第一选择、关键时间窗、目标城市、目标岗位、专业、简历里已有的项、期望薪资、经济约束、英语现状和每周投入），删除「入场线」「城市判断」「下一步」「门槛对照」等固定建议句；gap 模块改为 `paragraphsRequired`，分析和建议由 AI 写在 summary / paragraphs，`ReportBlocks` 渲染 AI 正文。设计文档 6.2 同步口径。
 - B3 数字审计按 item 收紧：`auditNumbers()` 保留全报告白名单，同时对 `scorecard` 每个 item 建立自己的数字集合；item 文本里的数字必须属于该项数据（`N 分` 必须等于该项系统分数），写别的 item 的分数会触发重写，二次仍不通过则整份失败。输出约束同步告知模型。
 - B2/I3 日历差：`calendarSpan()` 改为「先用原字段差得到 totalMonths，再用 `addCalendarMonths()` 从起点加完整月、截断月末，最后用 UTC 日差算 `days`」。这样 `2024-01-31→2024-03-01` 返回 1 个月 1 天而不是 -1 天，同时保留现有 `describeDistance()` 的粗粒度结果。`date.cases.ts` 新增日历日粒度用例、修正误标的“未来日期”用例，并把 `check:dates` 接入 `npm run verify`。
@@ -61,7 +82,7 @@
 
 ### 复审遗留项 R1–R4（2026-11-12）
 
-- 依据：`docs/archive/2026-11-12-report-wave1-review2.md`。复审确认原报告 3 个阻断项已关闭；本轮修掉其列出的 1 项重要残余（R1）和 3 项建议（R2–R4）。
+- 依据：`docs/archive/20261112/4-report-wave1-review2.md`。复审确认原报告 3 个阻断项已关闭；本轮修掉其列出的 1 项重要残余（R1）和 3 项建议（R2–R4）。
 - R1 scorecard summary 审计：`contentTexts()` 给模块 summary 加 `moduleSummary` 标记；`auditNumbers()` 收集该模块所有 item 的合法分数，scorecard 的 summary（页面「可提升空间」正文）里出现的 `N 分` 必须命中其中一项，不再能靠全报告白名单把别的项分数写进去。「0—10 分」「满分 10 分」「10 分制」等量纲说明仍放行。
 - R3 item 审计收紧范围：取消「item 文本里的所有数字都必须属于该项数据」的宽泛白名单——它会把模块计数当成分数放行 `得分 8`，又会误伤 `CET-4` 这类合法写法；现在只识别分数表达（`N 分`、`得分 N`、`N/10`）并与该项 score 比对，其余数字继续交给全报告白名单。
 - R2 提示文案：报告已 ready 且检索未配置时，第一条提示改为「配置修复后，新建报告即可重新检索」，不再和「报告已经生成」同时出现两句矛盾的话。
