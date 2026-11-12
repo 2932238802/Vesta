@@ -14,6 +14,7 @@
    - 为什么要这样做 → `docs/development-history.md` 最近两轮
 3. 先跑一遍基线，确认开工前是绿的：`npm run typecheck`（要改前端再加 `npm run build`）。
 4. 用 todo 写下计划：改哪些文件、对应文档哪一节、怎么验证。
+5. 本地环境变量已经配好（AI 在 WSL 全局 `~/.profile`，项目变量在仓库 `.env`），见文末「附：本地环境变量」——别重复配、别提交、别打印 key。
 
 ## 1. 文档优先（硬性）
 
@@ -73,3 +74,25 @@
 - 在服务器上直接改文件、`chmod` 仓库文件后不处理（只差文件模式的「脏」也会让 `update.sh` 的 L1 停下）。
 - 删除或重写 `docs/` 里已确认的需求记录。
 - 为了让检查通过而改 `scripts/check-docs.mjs` 的判定逻辑——要改先说明理由。
+
+## 附：本地环境变量（2026-11-12 已配好，别重复配、别提交）
+
+本地 dev 的变量**不在仓库里**，分两层：
+
+| 层 | 位置 | 内容 |
+| --- | --- | --- |
+| 全局（所有项目共用） | WSL `~/.profile` 的 `ai-gateway-dev` 块 | `AI_BASE_URL`（one-api 网关 `http://one-api.server22.jz/v1`）、`AI_MODEL`、`AI_API_KEY` |
+| 项目（只 Vesta） | 仓库 `.env`（600，已被 `.gitignore` 忽略） | `ADMIN_USER=admin`/`ADMIN_PASSWORD=admin`、`AUTH_SECRET`、`CONTACT_KEY`、`DATA_DIR`、`BOCHA_API_KEY`/`BOCHA_BASE_URL` |
+
+- **AI 模型不是随便写的**：以网关实际返回为准，先查
+
+  ```bash
+  curl -s -H "Authorization: Bearer $AI_API_KEY" "$AI_BASE_URL/models"
+  ```
+
+  当时该网关**没有 `deepseek-chat`**，本地用 `deepseek-v4-flash`（还有 `deepseek-v4-pro`、`kimi-k3`、`glm-5.3` 等）。写死 `deepseek-chat` 会拿到 `503 No available channel`。
+- 判断变量是否生效：看 `server/src/env.ts` 导出的 `config`（`npx tsx -e "import {config} from './server/src/env.ts'; console.log(config.deepseekModel)"`），别猜。
+- 改完 `~/.profile` 后，已开的终端和已启动的 `npm run dev` 不会自动生效，必须重开终端或重启 dev server。
+- **不要 `cat .env` 或打印 key**（会进会话记录/日志）；不要提交 `.env`、不要把 key 写进代码或文档。
+- 生产变量由 systemd drop-in 注入，和本地 `.env` 无关；本地这份不要拷到服务器。
+
