@@ -684,6 +684,7 @@ function buildModuleSpecs(input: {
   const specs: ModuleSpec[] = []
   const answersView = serializeDoc(survey, answers)
   const deadline = deadlineFact(survey, answers)
+  const targetCity = resolveTargetCity(survey, answers)
 
   for (const block of base.blocks) {
     if (block.type === 'scorecard') {
@@ -739,7 +740,8 @@ function buildModuleSpecs(input: {
         anyFields: ['what', 'entry', 'salary', 'fit'],
         data: {
           directionCount: block.directions.length,
-          relatedJobCount: block.relatedJobs.length
+          relatedJobCount: block.relatedJobs.length,
+          targetCity
         },
         items: block.directions.map((direction) => ({
           key: direction.key,
@@ -761,7 +763,8 @@ function buildModuleSpecs(input: {
         anyFields: [],
         data: {
           lines: block.lines,
-          jobs: block.jobs.map(jobSpec)
+          jobs: block.jobs.map(jobSpec),
+          targetCity
         },
         items: []
       })
@@ -778,10 +781,8 @@ function buildModuleSpecs(input: {
           node: {
             node: deadline.node,
             windowText: deadline.windowText,
-            distance: deadline.distance,
             targetDate: deadline.targetDate
           },
-          hoursLine: block.subtitle,
           phaseCount: block.phases.length
         },
         items: block.phases.map((phase) => ({
@@ -849,10 +850,7 @@ function buildModuleSpecs(input: {
       data: {
         node: deadline.node,
         windowText: deadline.windowText,
-        months: deadline.months,
-        distance: deadline.distance,
-        targetDate: deadline.targetDate,
-        text: deadline.text
+        targetDate: deadline.targetDate
       },
       items: []
     },
@@ -1011,6 +1009,96 @@ function crossModuleIssues(content: DocAiContent, specs: ModuleSpec[]): string[]
       }
     }
   }
+  return issues
+}
+
+interface RepetitionContext {
+  /** 系统给出的粗粒度时间距离，如「三年」「5 个月」 */
+  distance: string
+  /** Q8 选项原文，如「新一线（杭州、成都、武汉、西安等）」 */
+  cityLabel: string
+  /** resolveTargetCity() 落到检索词里的具体城市，可能为空 */
+  city: string
+}
+
+/** 取「新一线（杭州、成都、武汉、西安等）」括号里的城市清单。 */
+function cityListInLabel(labelText: string): string {
+  const inner = /[（(]([^）)]+)[）)]/.exec(labelText)?.[1]?.replace(/\s+/g, '') ?? ''
+  return inner.length >= 4 ? inner : ''
+}
+
+/**
+ * 全报告去重：时间距离、目标城市档位串、「缺一段经历」整句这类同一事实，
+ * 系统已经给了固定次数，AI 正文多写就判重复，先反馈重写，不写进报告。
+ */
+export function repetitionIssues(content: DocAiContent, ctx: RepetitionContext): string[] {
+  const issues: string[] = []
+  const seen = new Set<string>()
+  const distancePattern =
+    /(?:还有|距离)[^。；\n]{0,16}?约?\s*(?:[一二两三四五六七八九十半]+|\d+)\s*(?:个)?(?:年|月)/g
+  const missingPattern = /缺一段[^。；\n]{0,24}/g
+
+  const cityLabel = ctx.cityLabel.replace(/\s+/g, '')
+  const cityList = cityListInLabel(cityLabel)
+  // 只有 Q8 选的是「新一线」「北上广深」「家乡（…）」这类档位写法时才拦；北京、杭州这种具体城市不必拦。
+  const checkCityLabel =
+    Boolean(cityLabel) &&
+    cityLabel !== ctx.city &&
+    (/[（(]/.test(cityLabel) || /新一线|北上广深|等/.test(cityLabel))
+  const cityTarget = ctx.city || '本次未限定城市'
+
+  let missingCount = 0
+  const distanceWhere = new Set<string>()
+  const distanceText = ctx.distance.replace(/\s+/g, '')
+  for (const { where, text } of contentTexts(content)) {
+    if (!text.trim()) continue
+    const flat = text.replace(/\s+/g, '')
+    for (const match of text.matchAll(distancePattern)) {
+      distanceWhere.add(where)
+      const key = `distance:${match[0]}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      issues.push(
+        `${where} 重复了系统已经给出的时间距离「${match[0]}」；整份报告只在 gap 的「关键时间窗」和路线图副标题各写一次，正文和标题不要再写`
+      )
+    }
+    // 「大约三年」「三年后」这类没有「还有 / 距离」前缀的写法同样算重复。
+    if (
+      distanceText &&
+      !distanceWhere.has(where) &&
+      (flat.includes(`约${distanceText}`) || flat.includes(`${distanceText}后`))
+    ) {
+      distanceWhere.add(where)
+      issues.push(
+        `${where} 重复了系统已经给出的时间距离「${ctx.distance}」；整份报告只在 gap 的「关键时间窗」和路线图副标题各写一次，正文和标题不要再写`
+      )
+    }
+    if (checkCityLabel) {
+      if ((flat.includes(cityLabel) || (cityList && flat.includes(cityList))) && !seen.has(`city:${where}`)) {
+        seen.add(`city:${where}`)
+        issues.push(
+          `${where} 回抄了问卷 Q8 的目标城市选项原文；目标城市统一写系统给的具体城市「${cityTarget}」，不要带整串档位说明`
+        )
+      }
+    }
+    missingCount += [...text.matchAll(missingPattern)].length
+  }
+
+  if (missingCount > 1) {
+    issues.push(
+      `「缺一段和目标方向对得上的经历」这类整句出现了 ${missingCount} 处；整份报告最多保留一处，岗位卡只写这条原文的具体要求`
+    )
+  }
+
+  if (ctx.distance) {
+    for (const module of content.modules) {
+      const where = `模块 ${module.key} 标题`
+      if (module.title && module.title.includes(ctx.distance) && !distanceWhere.has(where)) {
+        issues.push(`${where} 重复了时间距离「${ctx.distance}」；标题不要复述系统已给的时间`)
+      }
+    }
+  }
+
   return issues
 }
 
@@ -1253,6 +1341,11 @@ function outputContract(): string {
 - jobSpecs 里 fallback 为 true 的原文是主检索不足时的补位结果，只能参考要求结构，不能用来统计「几条原文」或门槛数量；stale 为 true 的过期原文同理，不能当成当前投递门槛。
 - 原文没有写薪资时不要写「薪资以原文为准」之类的话，也不要补一个薪资数字；没有就略过薪资。
 - 时间只使用系统给出的粗粒度表达；不要写「547 天」「24 个月」「2 年」这种数字加时间单位。
+- 整份报告的时间距离只由系统给出两处：gap 的「关键时间窗」和 roadmap 副标题。conclusion、模块标题和正文都不要再写「还有约 X」「距离 X」或「X 年后」；deadline 模块只讲这个节点的准备含义。
+- 目标城市统一写 moduleSpecs 给出的具体城市（gap.data.targetCity.city）；不要回抄问卷 Q8 选项原文，也不要带「新一线（杭州、成都、武汉、西安等）」这类整串档位说明。
+- 英语块不要再重复每周投入和总时长（roadmap 副标题已经给过一次），只写怎么补、怎么验证。
+- 「简历上缺一段和目标方向对得上的经历」这类整句整份报告最多出现一次；岗位卡只写这条原文的具体要求，不要复述整句。
+- 过期原文的说明由块副标题统一给出；模块正文和标题不要逐条重复「这是某年的公告」。
 - roadmap 的 label 只写阶段名（如「方向确认」「实践积累」），不要重复系统给的时间窗，也不要写月份数字。`
 }
 
@@ -1304,6 +1397,12 @@ export async function generateDocContent(input: {
   }
   const base = buildDocReport(baseInput, jobs)
   const specs = buildModuleSpecs({ base, survey, answers, scores, jobs })
+  const answersView = serializeDoc(survey, answers)
+  const repetitionContext: RepetitionContext = {
+    distance: deadline.distance,
+    cityLabel: typeof answersView.q8_city === 'string' ? answersView.q8_city : '',
+    city: resolveTargetCity(survey, answers).city
+  }
   const planPeriods = specs.flatMap((spec) =>
     spec.items
       .map((item) => item.data.period)
@@ -1356,11 +1455,13 @@ ${searchSummary}
   for (let pass = 0; pass < 2; pass += 1) {
     const problems = contentProblems(content, specs)
     const consistencyIssues = crossModuleIssues(content, specs)
+    const repetitions = repetitionIssues(content, repetitionContext)
     const textIssues = findTextIssues(content, planPeriods)
     const numberIssues = auditNumbers(content, allowedNumbers, specs)
     if (
       problems.length === 0 &&
       consistencyIssues.length === 0 &&
+      repetitions.length === 0 &&
       textIssues.length === 0 &&
       numberIssues.length === 0
     ) {
@@ -1376,6 +1477,9 @@ ${searchSummary}
       if (consistencyIssues.length > 0) {
         throw new Error(`AI 报告前后矛盾：${consistencyIssues[0]}`)
       }
+      if (repetitions.length > 0) {
+        throw new Error(`AI 报告重复：${repetitions[0]}`)
+      }
       throw new Error(`AI 报告审校未通过：${textIssues[0]}`)
     }
 
@@ -1383,6 +1487,7 @@ ${searchSummary}
       '你上一次输出的报告有以下问题，需要修正：',
       ...problems.slice(0, 10).map((item) => `- ${item}`),
       ...consistencyIssues.slice(0, 6).map((item) => `- ${item}`),
+      ...repetitions.slice(0, 6).map((item) => `- ${item}`),
       ...textIssues.slice(0, 10).map((item) => `- ${item}`),
       ...numberIssues.slice(0, 10).map((item) => `- ${item}`),
       '请保留已经正确的分析，补全所有缺失模块和字段，并重新输出完整 JSON。',

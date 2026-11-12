@@ -4,6 +4,18 @@
 
 ## 本轮（2026-11-12）
 
+### 报告重复冗余修复（2026-11-12）
+
+- 依据：`docs/archive/20261112/11-报告重复冗余-修复方案.md` v1.0。基线报告 `/r/gDJT5DqM9-X9IVfxtrYs2vr6N3M`（答卷「312」）：内容不算错，但「离秋招还有约三年」出现 6 次、英语总时长 2 次、目标城市整串 5+ 次、「缺一段经历」3 次、过期提示逐卡刷。原则是去重放在生成/校验阶段，不在渲染层正则删段落，也不为省字数删检索记录。
+- 时间距离收口（`shared/src/doc.ts`）：`roadmapBlock()` 的标题从「X 怎么走」改为「节点怎么走」，不再复述距离；只保留 `gap` 的「关键时间窗」和 `roadmap` 副标题两处距离表达。
+- 英语时长收口（`shared/src/doc.ts` + `server/src/ai/doc-generate.ts`）：`gapLines()` 删除「按你现在的英语投入」整行（连同只服务它的 `weeklyHours()` / `WEEKLY_HOURS`）；`buildModuleSpecs()` 的 roadmap 数据不再把 `hoursLine` 喂给 AI，roadmap 副标题保留唯一一次总时长，AI 重复写会被数字审计拦下。
+- 城市收口（`shared/src/doc.ts`）：`gapLines()` 的「目标城市」改用 `resolveTargetCity()` 落到的具体城市，落不到时写「本次未限定城市」，不再回抄 Q8 档位串；`buildModuleSpecs()` 把 `targetCity` 放进 gap / jobmap 的 `data`，让 AI 有具体城市可写。
+- 过期提示收口（`shared/src/doc.ts`）：删除 `jobMatch()` 给每条过期卡塞的 `missing`「时效：这是某年的公告」；改由 `jobMapBlock()` / `gapBlock()` 的块副标题统一提示一次「有过期原文，只作要求结构参考」，卡片只保留前端已有的「信息较早」标签。
+- 「缺一段经历」句（`shared/src/doc.ts`）：删除 `jobMatch()` 在所有具体缺口都对上时补的通用句（原「相关实习：简历上还缺一段和目标方向对得上的经历」）；岗位卡只保留由招聘原文真实要求推出的「你还缺」项，没有具体缺口就不写，整句最多留在 scorecard 或 gap 一处。
+- 生成约束与校验（`server/src/ai/doc-generate.ts`）：`outputContract()` 补时间距离、目标城市、英语时长、缺经历整句、过期提示五条约束；`deadline` / `roadmap` 的 spec 数据删掉 `distance` / `text` / `hoursLine`，避免 AI 直接抄；新增 `repetitionIssues()`，扫描 AI 正文里的 `还有约 X` / `距离 X`、Q8 选项原文、模块标题里的时间距离和「缺一段经历」整句，先反馈重写一次，仍在则整份报告失败（`AI 报告重复：…`）；总时长不再下发给 AI，重复写会被原有数字审计拦下。
+- 文档同步：`docs/规划自测问卷-设计文档.md` 6.2 新增「全报告去重」、6.3 补展示位置；`docs/README.md`「报告生成」补校验范围。
+- 边界：旧报告按既定产品规定不重新生成、不 retry；本轮只保证新生成的报告不重复。未跑完整 AI 报告端到端生成（避免额外 AI 费用），验证到类型检查和构建；上线后建议用新答卷走查一次。
+
 ### 报告模块间矛盾修复（2026-11-12）
 
 - 依据：`docs/archive/20261112/10-报告模块间矛盾-修复方案.md` v1.0。基线报告 `/r/gDJT5DqM9-X9IVfxtrYs2vr6N3M`（答卷「312」）：事实层（分数、时间、检索记录）可信，问题是同一件事被不同模块按不同数据源各说一遍。
@@ -13,6 +25,7 @@
 - 生成约束与校验（`server/src/ai/doc-generate.ts`）：`outputContract()` 补三条机器约束（gap 不能下「只有一项」整体结论、有 stale 原文参与时 `entry` 必须带「仅看要求结构，不能当投递入口」、`facts` 提示专业写法不一致时 `fit` 必须写明）；新增 `crossModuleIssues()`，在原有模块完整性 / 文本 / 数字审计之外做跨模块检查，问题先反馈给 AI 重写一次，仍在则整份报告失败（`AI 报告前后矛盾：…`），不把矛盾文本写进报告。前端不做文字游戏。
 - 文档同步：`docs/规划自测问卷-设计文档.md` 6.2 补 jobmap / gap 口径和跨模块一致性一条；`docs/README.md`「报告生成」补校验范围。
 - 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）。
+- 审计（2026-11-12）：代码与跨模块校验已核对到位。**报告是一次性快照，生成后作为后续咨询的依据，旧报告永不重新生成**；因此旧报告里的矛盾不追溯。结果侧不硬卡：方向卡可选字段（`what` / `entry` / `salary` / `fit`）缺失时照常出报告，跨模块校验只在字段存在且与事实矛盾时要求重写。
 
 ### 博查检索时效与岗位块修复（2026-11-12）
 
@@ -25,7 +38,16 @@
 - 薪资兜底：`server/src/ai/doc-generate.ts` 删除 `'薪资以原文为准'` 占位符，`salaryOf()` 抓不到就留空，前端 `v-if="direction.salary"` 自动隐藏；报告底部来源文案改为按原文实际字段生成（有薪资才写「薪资」）。
 - 重复渲染：删除 `web/src/components/ReportBlocks.vue` 中方向卡下方重复的 `direction.facts` 脚注（事实仍进 `moduleSpecs` 供 AI 写 `entry`），同步删除 `.direction-mix` 样式。
 - 正则假阳性：`directionFacts()` 的「接受应届/经验不限」改为原文命中 `经验不限|在校|应届` 且不含 `\d+-\d+年` / `\d+年以上`，避免标题带「应届毕业生求职」但要求 2—3 年经验的原文被算成接受应届。
-- 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）。另用临时脚本（`DATA_DIR` 指向 `/tmp`，不写仓库、不提交）以「计算机科学与技术、Q8 新一线、Q4 学校在杭州」调用真实 `searchJobs()`：城市落为杭州（`basis: school`），实际检索词为「杭州 Java开发 / 前端开发 / 软件测试 / 数据分析 2026 应届 招聘」；返回岗位日期集中在 2025-12 至 2026-05，多条带 13-26K、20-40K 等薪资，本次未触发 fallback。另用本地构造的 `JobCard` 验证：过期原文和 fallback 原文都不进 `facts`，「应届毕业生求职」但要求 2-3 年经验的原文不再被算成接受应届。未跑完整 AI 报告生成，避免额外 AI 费用；上线后仍建议用同一份答卷重试一次做最终走查。
+- 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）。另用临时脚本（`DATA_DIR` 指向 `/tmp`，不写仓库、不提交）以「计算机科学与技术、Q8 新一线、Q4 学校在杭州」调用真实 `searchJobs()`：城市落为杭州（`basis: school`），实际检索词为「杭州 Java开发 / 前端开发 / 软件测试 / 数据分析 2026 应届 招聘」；返回岗位日期集中在 2025-12 至 2026-05，多条带 13-26K、20-40K 等薪资，本次未触发 fallback。另用本地构造的 `JobCard` 验证：过期原文和 fallback 原文都不进 `facts`，「应届毕业生求职」但要求 2-3 年经验的原文不再被算成接受应届。未跑完整 AI 报告生成，避免额外 AI 费用；上线后建议用**新提交**的答卷做一次最终走查（旧报告不重新生成，见下条审计结论）。
+
+### 文档 9 审计结论（2026-11-12）
+
+- 审计对象：`docs/archive/20261112/9-博查检索时效与岗位块-问题与修复方案.md`，对照提交 `3b4423d` / `0cc5be5` 与本地库 `data/vesta.db`。
+- 代码链路已全部修完：P0（一年时间窗、`oneMonth` 补位 + `fallback` 标记、删除薪资占位符、过期/补位不进统计）、P1（城市落地、应届正则修正、日期双证据）、P2（删除重复 facts 脚注、来源文案按字段生成）均已落地；`docs/README.md` 与上一小节已同步。
+- 旧报告 `gDJT5DqM9-X9IVfxtrYs2vr6N3M`（答卷 312）不会变好：`ai_status = 'ready'`，`POST /api/report/:slug/retry` 返回 409；库内 `jobs[].salary` 与方向卡 AI `salary` 仍是「薪资以原文为准」，`entry` 仍是 2018—2024 原文的统计；渲染层 `cleanStoredSalary()` / `applySystemModules()` 不过滤占位符，也不标注全过期方向。
+- **产品规定：旧报告永不重新生成**（不 retry、不用新答卷回填旧报告）。后续 Agent 不要建议 retry 或重生成旧报告；要处理旧报告只能改展示层。
+- 本轮按用户决定「先只记录结论」，不改展示层。后续若要修旧报告，推荐（仅渲染层、不改库、不重生成）：`cleanStoredSalary()` 过滤「薪资以原文为准」；jobmap 方向展示的原文全部 `stale` 时给 `entry` 加「原文均较早，仅作要求结构参考」前缀。
+- 本轮未做真机端到端验收（完整 AI 报告生成）；上一小节的验收只到 `searchJobs()` + 手工构造 JobCard。
 
 ### 问卷分组：Q27 拆出独立「未来画面」（2026-11-12）
 

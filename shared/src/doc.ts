@@ -17,7 +17,6 @@ import {
   addCalendarMonths,
   describeDistance,
   isOlderThanMonths,
-  toCalendarDate
 } from './date'
 
 /** 报告里出现的主流就业城市；只用于从自由文本里识别城市，不限制 Q8 的选项。 */
@@ -267,7 +266,6 @@ export interface DeadlineFact {
   distance: string
   /** 目标日期，YYYY-MM-DD；无法计算时为空 */
   targetDate: string
-  text: string
 }
 
 export function deadlineFact(survey: Survey, answers: Answers): DeadlineFact {
@@ -314,13 +312,6 @@ export function deadlineFact(survey: Survey, answers: Answers): DeadlineFact {
     months = monthsToStage(3, grade, 3)
   }
 
-  const tail =
-    grade === 1
-      ? '现在动手，后面每一步都会从容一点。'
-      : grade === 4
-        ? '时间已经很紧，优先把能落地的先落地。'
-        : '这一两年是你补信息差最便宜的时候。'
-
   const now = new Date()
   const target = addCalendarMonths(now, Math.max(0, months))
   const targetDate = target
@@ -334,8 +325,7 @@ export function deadlineFact(survey: Survey, answers: Answers): DeadlineFact {
     windowText,
     months,
     distance,
-    targetDate,
-    text: `你离 ${node}（${windowText}）还有约 ${distance}。${tail}`
+    targetDate
   }
 }
 
@@ -396,13 +386,6 @@ export interface DocReportInput {
   slug: string
   createdAt: string
   claimed: boolean
-}
-
-const WEEKLY_HOURS = [1.5, 5, 10.5, 17.5]
-
-function weeklyHours(survey: Survey, answers: Answers): number {
-  const at = index(survey, answers, 'q20')
-  return WEEKLY_HOURS[at] ?? 0
 }
 
 /** 简历盘点：只列答卷里已经有的经历、技能和方向，不把系统判断写成事实。 */
@@ -564,9 +547,6 @@ function jobMatch(
   const skills = labels(survey, answers, 'q10')
   const english = label(survey, answers, 'q17')
   const expectation = label(survey, answers, 'q27')
-  const postedAt = job.date ? toCalendarDate(job.date) : null
-  // 超过约 18 个月的公告只能对照要求结构，不能当作“你现在符合”。
-  const stale = Boolean(job.date && isOlderThanMonths(job.date, 18))
 
   // 学历/院校层次：原文点名 985/211/双一流 时，不能只按“本科”算符合。
   const eliteRequired = /985|211|双一流|重点院校|知名院校/.test(req)
@@ -735,19 +715,7 @@ function jobMatch(
       }`
     )
   }
-  if (!missing.length) {
-    missing.push(
-      practice.includes('有 1–3 段')
-        ? '匹配度：要求基本对上，下一步把每条要求写进简历里的具体经历'
-        : '相关实习：简历上还缺一段和目标方向对得上的经历'
-    )
-  }
-
-  if (stale) {
-    missing.unshift(
-      `时效：这是 ${postedAt?.year ?? ''} 年的公告，只用来看要求结构，不要当现在的投递入口`
-    )
-  }
+  // 没有具体缺口时不补通用句：卡片只写这条原文真实要求的对应项，避免每张卡复述同一句话。
 
   return { meets: meets.slice(0, 3), missing: missing.slice(0, 3) }
 }
@@ -887,9 +855,13 @@ function jobMapBlock(
   if (!grouped.length && !relatedJobs.length) return null
 
   const targetCity = resolveTargetCity(survey, answers)
+  // 过期原文的提示只在块副标题出现一次，卡片不再逐条复述。
+  const hasStale =
+    grouped.some((direction) => direction.jobs.some(isStaleJob)) ||
+    relatedJobs.some(isStaleJob)
   const subtitle = `先看方向，再看门槛；经验值区间和招聘原文一起看，具体以原文为准${
     targetCity.note ? `；${targetCity.note}` : ''
-  }`
+  }${hasStale ? '；标了「信息较早」的原文只作要求结构参考，不当投递入口' : ''}`
 
   return {
     type: 'jobmap',
@@ -947,7 +919,7 @@ function roadmapBlock(survey: Survey, answers: Answers, scores: DocScores): Repo
 
   return {
     type: 'roadmap',
-    title: `${node.distance}怎么走`,
+    title: `${node.node}怎么走`,
     subtitle: hoursLine,
     phases,
     note: ''
@@ -969,13 +941,11 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
   ]
 
   if (first === '就业') {
-    // 具体城市由方向卡的副标题说明检索依据；这里只在完全落不到城市时明确标注。
+    // 目标城市写成 resolveTargetCity() 落到的具体城市；Q8 的档位串只作检索依据，不回抄。
     const cityValue =
       !city || city.includes('还没想好')
         ? '还没想好'
-        : targetCity.basis === 'none'
-          ? `${city}（本次未限定城市）`
-          : city
+        : targetCity.city || targetCity.note
     lines.push({ label: '目标城市', value: cityValue })
     lines.push({ label: '目标岗位', value: role || '还没写清楚' })
     if (!role && major) lines.push({ label: '你的专业', value: major })
@@ -990,15 +960,6 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
     }
   } else if (first === '考研') {
     lines.push({ label: '目标专业', value: major || '还没填' })
-  }
-
-  const hours = weeklyHours(survey, answers)
-  if (hours > 0) {
-    const total = Math.round(node.months * 4.33 * hours)
-    lines.push({
-      label: '按你现在的英语投入',
-      value: `每周约 ${hours} 小时，到 ${node.node} 约 ${total} 小时（只算英语）`
-    })
   }
 
   const english = computeDocScores(survey, answers).english
@@ -1023,10 +984,13 @@ function scorecardBlock(survey: Survey, answers: Answers): ReportBlock {
 }
 
 function gapBlock(survey: Survey, answers: Answers, jobs: JobCard[] = []): ReportBlock {
+  const hasStale = jobs.some(isStaleJob)
   return {
     type: 'gap',
     title: '和目标之间还差多少',
-    subtitle: '门槛是经验值区间，以目标单位最新公告或招聘原文为准',
+    subtitle:
+      '门槛是经验值区间，以目标单位最新公告或招聘原文为准' +
+      (hasStale ? '；标了「信息较早」的原文只作要求结构参考，不当投递入口' : ''),
     lines: gapLines(survey, answers),
     paragraphs: [],
     note: '',
