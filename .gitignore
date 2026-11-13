@@ -28,6 +28,9 @@ node_modules/
 dist/
 data/
 .env
+
+# 一次性脚本 / 调试产物，禁止入库
+_scratch/
 .env.local
 *.log
 .DS_Store

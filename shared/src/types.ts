@@ -422,6 +422,8 @@ export type ReportBlock =
     }
   | {
       type: 'section'
+      /** 可选：对应 moduleSpecs 的 key，渲染时按 key 取 AI 模块，不硬编码 english */
+      key?: string
       title: string
       paragraphs: string[]
     }

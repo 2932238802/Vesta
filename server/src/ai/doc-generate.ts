@@ -102,7 +102,8 @@ export async function generateDocContent(input: {
   const repetitionContext: RepetitionContext = {
     distance: deadline.distance,
     cityLabel: typeof answersView.q8_city === 'string' ? answersView.q8_city : '',
-    city: resolveTargetCity(survey, answers).city
+    city: resolveTargetCity(survey, answers).city,
+    englishWeeklyHours: scores.english.weeklyHours
   }
   const planPeriods = specs.flatMap((spec) =>
     spec.items

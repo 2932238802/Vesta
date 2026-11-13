@@ -29,6 +29,8 @@ export interface ModuleSpec {
   allFields: string[]
   /** 每个 item 至少要填其中几个字段之一 */
   anyFields: string[]
+  /** 给模型的标题主题提示，避免标题随机漂移 */
+  titleHint?: string
   data: Record<string, unknown>
   items: ModuleItemSpec[]
 }
@@ -183,15 +185,35 @@ export function buildModuleSpecs(input: {
         }))
       })
     } else if (block.type === 'section') {
+      const english = scores.english
+      const needNote = english.pathNeeds
+        ? '目标路径本身对英语有要求，需要把英语当成真实差距'
+        : english.preparing
+          ? '目标路径没有直接要求英语，但本人已经在准备四六级或明确看重英语'
+          : '目标路径和本人准备情况都没有指向英语，不要主动把英语写成核心差距'
       specs.push({
-        key: 'english',
+        key: block.key ?? 'english',
         kind: 'english',
         summaryRequired: false,
         paragraphsRequired: true,
         textRequired: false,
         allFields: [],
         anyFields: [],
-        data: { ...scores.english },
+        titleHint: '英语这块怎么补',
+        data: {
+          ...english,
+          needNote,
+          speakingNote: english.speaking
+            ? `Q22 现状：${english.speaking}。这是现状，不是目标，不能据此写「口语可以不练 / 不追求流利」`
+            : '本次没有 Q22 口语现状（可能按闸门规则跳过）',
+          listeningWeak: english.weakPart.includes('听力'),
+          reasonNote: english.reasons.length
+            ? `Q24 原因多选（${english.reasons.join('、')}），写原因时要逐条对应，不能压成单一原因`
+            : '本次没有 Q24 原因（可能按规则跳过）',
+          skippedDetailNote: english.skippedDetail
+            ? 'Q20 低于闸门分数，Q22 / Q23 / Q25 / Q26 / Q27 按规则跳过，不是学员没答，报告里要说明这一点'
+            : ''
+        },
         items: []
       })
     }
@@ -258,6 +280,7 @@ export function moduleSpecsForPrompt(specs: ModuleSpec[]): unknown[] {
     kind: spec.kind,
     summaryRequired: spec.summaryRequired,
     paragraphsRequired: spec.paragraphsRequired,
+    titleHint: spec.titleHint,
     fields: spec.items.some((item) => item.data)
       ? { all: spec.allFields, any: spec.anyFields, textRequired: spec.textRequired }
       : undefined,
@@ -288,7 +311,12 @@ export function outputContract(): string {
 - 时间只使用系统给出的粗粒度表达；不要写「547 天」「24 个月」「2 年」这种数字加时间单位。
 - 整份报告的时间距离只由系统给出两处：gap 的「关键时间窗」和 roadmap 副标题。conclusion、模块标题和正文都不要再写「还有约 X」「距离 X」或「X 年后」；deadline 模块只讲这个节点的准备含义。
 - 目标城市统一写 moduleSpecs 给出的具体城市（gap.data.targetCity.city）；不要回抄问卷 Q9 选项原文，也不要带「新一线（杭州、成都、武汉、西安等）」这类整串档位说明。
-- 英语块不要再重复每周投入和总时长（roadmap 副标题已经给过一次），只写怎么补、怎么验证。
+- 英语块不要复述问卷的每周投入和总时长（如「每周 5 小时」「总共 17.5 小时」；roadmap 副标题已经给过一次），只写怎么补、怎么验证；「每周末做一套真题」这类练习节奏可以写。
+- 英语块的听力和口语要并列写，不能写「先补听力，再补口语」「口语不追求流利」「等流利了再练」，也不要写「不追求口语流利」「口语先放一放」「口语以后再说」这类反向语序或换词；只有 moduleSpecs 材料明确给出先后时才写顺序。
+- Q24 是原因多选：moduleSpecs 的 english.data.reasons / reasonNote 里有几项就逐条对应几项，不能压成单一原因，也不能补写学生没选的原因。
+- 英语块可以给验证建议（同一套真题隔一段时间重做、复述录音回听），但要写成建议；可以点一句大学课堂的一般局限，不评价具体学校或老师。
+- 模块带 titleHint 时，标题围绕这个主题写，不要起成与内容无关的标题。
+- 同一段里把「考研」和「听力考试」写在一起（如「初试考听力」「听力计入总分」）时，必须写明是复试或雅思/托福类考试；考研初试不考听力，不能把「听力弱」直接写成初试要考。单纯说「考研和听力都重要」不算。
 - 「简历上缺一段和目标方向对得上的经历」这类整句整份报告最多出现一次；岗位卡只写这条原文的具体要求，不要复述整句。
 - 过期原文的说明由块副标题统一给出；模块正文和标题不要逐条重复「这是某年的公告」。
 - roadmap 的 label 只写阶段名（如「方向确认」「实践积累」），不要重复系统给的时间窗，也不要写月份数字。`

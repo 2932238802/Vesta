@@ -1,6 +1,6 @@
 # 后台「分数」在 doc 模式是映射值 · 修复方案
 
-> 版本：v1.1（2026-11-13）　状态：**已实施（产品版本 v1.65）**
+> 版本：v1.1（2026-11-13）　状态：**已实施并提交（产品版本 v1.65，commit dfd14a8）**
 > 一句话：doc 模式没有真实总分，提交时把优先级 A/B/C 映射成 82/60/25 写进了 `submissions.total`，后台却把它当「分数」展示，报告里反而没有这个数。
 > 实施记录见文末第七节。
 
@@ -51,7 +51,7 @@
    - 详情：doc 模式隐藏「总分 / 100」，只留「优先级 A 档」；
    - 概览 `recent` 不动（本来只显示 `tier`）。
 4. **CSV**：doc 行「总分」留空（表头保留，避免不同模式混在一份导出里列错位）；全为 legacy 时行为不变。
-5. **历史数据（可选，需确认后再做）**：一次性脚本把 doc 类答卷的 `total` 置 0。判定方式：`submissions.survey_id → surveys.data → reportMode === 'doc'`。写之前用 `VACUUM INTO` 备份。不执行也不影响界面（界面已按模式隐藏），只是接口和 CSV 里还留着 82/60/25。
+5. **历史数据（可选，需确认后再做）**：一次性脚本把 doc 类答卷的 `total` 置 0。判定方式：`submissions.survey_id → surveys.data → reportMode === 'doc'`。写之前用 `VACUUM INTO` 备份。不执行也不影响界面（界面已按模式隐藏）；列表 / 详情接口对历史 doc 答卷仍会返回原 `total`（82/60/25），CSV 已按模式对 doc 行留空。
 
 ## 四、需要改动的位置和文件
 
@@ -137,5 +137,5 @@ function reportModeMap(): Map<string, 'doc' | 'ai'> {
 - 读接口：新增 `server/src/routes/admin/shared.ts` 的 `surveyReportModes()` / `reportModeOf()`（一次请求内按 `surveys.data.reportMode` 建 Map）；`roster.ts`、`submissions.ts` 列表与详情每条都带 `reportMode`。
 - CSV：`submissions.ts` doc 行「总分」留空，表头保留；legacy 行不变。
 - 前端：`web/src/views/admin/Submissions.vue` 按模式显示列名与数值——全为 doc 时列名「优先级」，混合时「优先级 / 分数」，doc 行只显示 `tier`；`SubmissionDetail.vue` doc 模式隐藏「总分 / 100」，标题改「优先级」。
-- 未做：历史数据回填（把 doc 类答卷 `total` 置 0）。这是独立数据操作，需要先 `VACUUM INTO` 备份并单独确认；不执行也不影响界面。
+- 未做：历史数据回填（把 doc 类答卷 `total` 置 0）。这是独立数据操作，需要先 `VACUUM INTO` 备份并单独确认；不执行也不影响界面（CSV 已按模式留空，列表 / 详情接口仍返回原 `total`）。
 - 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）。

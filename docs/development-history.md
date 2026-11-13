@@ -4,6 +4,28 @@
 
 ## 本轮（2026-11-13）
 
+### 英语块校验误伤与漏拦订正（2026-11-13，产品版本 v1.68）
+
+- 依据：`docs/archive/20261113/6-英语块校验-review报告.md`。复核 v1.67 校验层发现 3 处残留：考研 + 听力按同段共现误伤、口语 / 英语时长正则覆盖不全或偏严、第 5 篇分析稿题号过期。
+- 考研 × 听力（`server/src/ai/doc-audit.ts` `crossModuleIssues`）：触发条件从「考研 + 听力共现」收紧为「确实写了考试语义（初试 / 复试 / 考试 / 科目 / 要考 / 加试 / 计入 / 占 N 分）且听力被写成要考 / 计入 / 占分」；保留复试 / 雅思托福 / 不考等白名单。`考研和听力是两件要一起抓的事`、`如果走考研，听力要早点练` 不再误拦；`考研初试考听力`、`听力计入总分` 仍拦。第 5 篇原问题句 `听力这一层……英语又是考研里绕不开的一门` 没有断言考试考听力，按收紧后的规则放行（review 复现表的旧期望与新规则冲突，以 review 第五节最终样例「考研 + 听力但没提考试 → 放行」为准）。
+- 口语表述（`doc-audit.ts` `findTextIssues`）：新增 `hasLoweredSpeakingTarget()`，覆盖反向语序（`不追求口语流利`）、换词（`放一放 / 缓一缓 / 靠后 / 以后再说`）和跨行写法（匹配前把换行压成空格）；带否定的正确表述（`口语不能往后放` / `不能把口语往后放`）通过前置否定词放行。同步补 `shared/src/doc-skill.ts` 与 `outputContract()` 的提示文案。
+- 英语块时长（`doc-audit.ts` `repetitionIssues`）：从「出现每周 / 小时即判重复」改为只拦复述问卷的每周投入 / 总时长（`每周 X 小时`、`总共 / 合计 X 小时`、问卷 `weeklyHours` 的档位值）；`每周末做一套真题`、`每天 1 小时听力` 这类练习节奏放行。`RepetitionContext` 增加 `englishWeeklyHours`，由 `doc-generate.ts` 从 `scores.english.weeklyHours` 传入。
+- 文档：`docs/规划自测问卷-设计文档.md` 升 v1.5，§6.2 同步收紧后的考研 × 听力口径、口语反向语序 / 跨行覆盖和英语时长的「只拦复述」口径；`docs/archive/20261113/5-英语块表述核对与生成约束.md` 的题号按重排后的 Q1–Q28 全面订正（review 只点到 `weeklyHours` 的 Q25 → Q26，核对时发现全文仍是重排前编号，一并改为 Q20 / Q22 / Q23 / Q24 / Q25 / Q26 / Q27）。
+- 回归用例：新增 `server/src/ai/doc-audit.cases.ts`（考研 × 听力 10 组、口语 12 组、英语时长 8 组、模块 / 数字边界 2 组），新增 `npm run check:audit` 并接入 `npm run verify`；`docs/README.md` 的验证说明与已发布版本同步到 v1.68。
+- 验证：`npm run check:audit` 通过；`npm run verify` 全绿（check:docs / check:dates / check:audit / typecheck / build）。未调用 AI、未重新生成旧报告。
+- 边界：不改问卷、不改数据模型、不改渲染层；旧报告不回填、不重新生成。
+
+### 英语块表述约束与生成校验（2026-11-13，产品版本 v1.67）
+
+- 依据：`docs/archive/20261113/5-英语块表述核对与生成约束.md`。2026-11-12 生成的英语师范报告在英语块写了「先听力，再口语」「口语不追求流利」，答卷里没有依据；「你写的原因是没人教方法」把多选原因压成单因。核对确认：这些表述能通过当时的 `findTextIssues`，英语块也没有专属写作规则。
+- Skill：`shared/src/doc-skill.ts` 的 `english` 规则扩写——听说并列都要补、不得替学生降低口语目标、顺序只在材料支持时写、原因按 Q24 多选逐条写、验证方法只能作为建议、可点一句大学课堂的一般局限、英语块不写每周投入和总时长。
+- 校验：`server/src/ai/doc-audit.ts` 的 `findTextIssues` 新增「英语不重要」「口语不追求 / 不用管 / 不重要 / 往后放」「先听力再口语」拦截；`repetitionIssues` 对 `english` 模块出现「每周 / 小时」判重复；`crossModuleIssues` 对同段「考研 + 听力……考」要求写明复试或雅思/托福（初试不考听力）。
+- 数据：`server/src/ai/doc-prompts.ts` 的英语 spec 增加 `needNote / speakingNote / listeningWeak / reasonNote / skippedDetailNote`，消费此前只算不用的 `skippedDetail`；英语 spec 增加 `titleHint`。
+- 渲染：`section` 块新增可选 `key`（`shared/src/types.ts`），`englishSection()` 写 `key: 'english'`，`applySystemModules()` 按 key 取模块，不再硬编码 `english`；`buildModuleSpecs()` 也用 `block.key ?? 'english'`。
+- 文档：`docs/规划自测问卷-设计文档.md` 升 v1.4，§6.2 补英语写作约束、跨模块考研听力检查和英语块「每周 / 小时」去重硬校验；`docs/archive/20261113/README.md` 第 5 项状态同步为已修复。
+- 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）。另用 `tsx` 直接调用审计函数做了回归样例（不调用 AI、不花费用）：坏表述原句被拦、改写稿能通过；未跑真实 AI 端到端生成。
+- 边界：不改问卷、不改数据模型、不重新生成旧报告；P2 的脱敏答卷 fixture 回放（需 AI 调用）未做，留作后续。
+
 ### 问卷题目独立与题号重排（2026-11-13，产品版本 v1.66）
 
 - 依据：`docs/archive/20261113/4-问卷题目独立与题号重排-开发文档.md` v1.1。用户要求 Q5a「想做什么行业、什么岗位」不再跟随 Q5 显示，独立成第 6 题，题号连续重排为 Q1–Q28；仍可跳过。
@@ -40,6 +62,12 @@
 - 文档同步：`docs/README.md`「检索可追溯」改为按检索当年年份拼「YYYY 届」，版本约定推进到 v1.63。
 - 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）；补做检索链路与旧报告兼容核对（stub 掉 fetch，不实际外呼）：同一专业按 Q3「大一」「大四」分别调用 `searchJobs()`，四类检索词都拼成 `2026 届`、`searchYear = 2026`；把旧报告存储 meta 改成 `cohortYear: 2028` 后，新代码渲染的「检索记录」仍显示「检索词按 2028 届拼写」，无 `undefined`。未跑完整 AI 报告端到端生成（避免 AI 费用）。
 - 边界：不改检索时间窗、补位策略、`fallback` 与 18 个月过期判断；旧报告不重新生成。
+
+### 文档状态同步与 `_scratch` 清理（2026-11-13）
+
+- 提交状态：v1.63 / v1.64 在 `8207668`，v1.65 / v1.66 在 `dfd14a8`，均已推送到 `origin/main`；`docs/archive/20261113/README.md` 的状态表、上线说明与收尾建议同步为实际提交状态，删除过期的「全部未提交 / 索引 untracked」表述。
+- 文档订正：`docs/规划自测问卷-设计文档.md` §6.2 的 `assets` 题号由旧编号 Q10 / Q11 / Q16 改为新编号 Q12 / Q13 / Q18；第 2 号方案里「CSV 仍保留 doc 总分」的过期描述改为「CSV 已按模式留空，接口仍返回历史 `total`」。
+- 仓库卫生：`8207668` 误带入的 `_scratch/mem-patch.py` 已从工作区 / 索引删除，`.gitignore` 增加 `_scratch/`，一次性脚本不再入库；旧提交历史不改写。
 
 ## 本轮（2026-11-12）
 

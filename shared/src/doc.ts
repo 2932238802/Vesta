@@ -1056,6 +1056,7 @@ function checklistBlock(survey: Survey, answers: Answers): ReportBlock {
 function englishSection(): ReportBlock {
   return {
     type: 'section',
+    key: 'english',
     title: '英语这块',
     paragraphs: []
   }
@@ -1294,7 +1295,7 @@ function applySystemModules(base: ReportPayload, content: DocAiContent): ReportB
         if (ai.fields?.detail) item.detail = ai.fields.detail
       }
     } else if (block.type === 'section') {
-      const module = modules.get('english')
+      const module = modules.get(block.key ?? 'english')
       if (!module) continue
       if (module.title) block.title = module.title
       if (module.paragraphs.length) block.paragraphs = module.paragraphs

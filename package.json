@@ -15,7 +15,8 @@
     "typecheck": "npm --workspace server run typecheck && npm --workspace web run typecheck",
     "check:docs": "node scripts/check-docs.mjs",
     "check:dates": "tsx shared/src/date.cases.ts",
-    "verify": "npm run check:docs && npm run check:dates && npm run typecheck && npm run build",
+    "check:audit": "tsx server/src/ai/doc-audit.cases.ts",
+    "verify": "npm run check:docs && npm run check:dates && npm run check:audit && npm run typecheck && npm run build",
     "start": "npm --workspace server run start",
     "update": "bash update.sh"
   },

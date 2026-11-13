@@ -121,6 +121,21 @@ export function crossModuleIssues(content: DocAiContent, specs: ModuleSpec[]): s
       }
     }
   }
+
+  // 考研初试不考英语听力：只有同段确实写了「考试考听力 / 听力计入占分」，
+  // 且没有限定为复试或雅思/托福时才判错；单纯「考研」和「听力」共现不算。
+  for (const { where, text } of contentTexts(content)) {
+    if (!/考研/.test(text) || !/听力/.test(text)) continue
+    const examSemantics = /初试|复试|考试|科目|要考|加试|计入|占[^。；]{0,4}分/.test(text)
+    const listeningTested =
+      /考[^。；]{0,4}听力/.test(text) ||
+      /听力[^。；]{0,8}(?:计入|计分|算分|占[^。；]{0,4}分)/.test(text)
+    if (!examSemantics || !listeningTested) continue
+    if (/复试|雅思|托福|不考|不用考|无需|不需要/.test(text)) continue
+    issues.push(
+      `${where} 把「考研」和「听力考试」直接写在一起；考研初试不考听力，必须说明是复试或雅思/托福类考试`
+    )
+  }
   return issues
 }
 
@@ -131,6 +146,8 @@ export interface RepetitionContext {
   cityLabel: string
   /** resolveTargetCity() 落到检索词里的具体城市，可能为空 */
   city: string
+  /** 问卷 Q26 换算出的英语每周投入（小时）；0 表示按闸门跳过或没答 */
+  englishWeeklyHours?: number
 }
 
 /** 取「新一线（杭州、成都、武汉、西安等）」括号里的城市清单。 */
@@ -162,9 +179,29 @@ export function repetitionIssues(content: DocAiContent, ctx: RepetitionContext):
   let missingCount = 0
   const distanceWhere = new Set<string>()
   const distanceText = ctx.distance.replace(/\s+/g, '')
-  for (const { where, text } of contentTexts(content)) {
+  for (const { where, text, moduleKey } of contentTexts(content)) {
     if (!text.trim()) continue
     const flat = text.replace(/\s+/g, '')
+    // 英语块的每周投入和总时长只放在 roadmap 副标题；只拦复述问卷数字，
+    // 「每周末做一套真题」「每天 1 小时听力」这类练习节奏不算重复。
+    if (moduleKey === 'english') {
+      const weeklyHours = ctx.englishWeeklyHours ?? 0
+      const hoursValue = String(weeklyHours).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const repeatsWeeklyHours =
+        /(?:每周|每星期|一周)[^。；\n]{0,12}?(?:\d+(?:\.\d+)?|[一二两三四五六七八九十半]+)个?小时/.test(
+          flat
+        ) ||
+        /(?:总时长|总共|一共|合计)[^。；\n]{0,10}?(?:\d+(?:\.\d+)?|[一二两三四五六七八九十半]+)个?小时/.test(
+          flat
+        ) ||
+        (weeklyHours > 0 &&
+          new RegExp(`(?:^|[^\\d.])${hoursValue}个?小时`).test(flat))
+      if (repeatsWeeklyHours) {
+        issues.push(
+          `${where} 复述了问卷的英语每周投入 / 总时长；英语块只写怎么补、怎么验证，具体时长只在路线图副标题出现一次（「每周末做一套真题」这类练习节奏不算）`
+        )
+      }
+    }
     for (const match of text.matchAll(distancePattern)) {
       distanceWhere.add(where)
       const key = `distance:${match[0]}`
@@ -261,6 +298,31 @@ function contentTexts(content: DocAiContent): ContentText[] {
   return texts
 }
 
+/** 「口语不重要 / 往后放」这类降目标表述；带否定的正确表述（「口语不能往后放」）不算。 */
+const LOWERED_SPEAKING_KEYWORD = /(不追求|不用管|不重要|往后放|放一放|缓一缓|靠后|以后再说)/g
+const SPEAKING_ORDER = /先[^。；]{0,4}?听力[^。；]{0,6}?再[^。；]{0,4}?口语/
+const NEGATION_BEFORE_KEYWORD =
+  /(不能|不要|不可|不宜|不该|不用|无需|没有必要|没必要|不必|不是|并非|没那么|不见得|千万别|别把|别再|别老|别只|别光)/
+
+function hasLoweredSpeakingTarget(text: string): boolean {
+  // 换行压成空格，避免「先听力\n再口语」这类跨行写法逃逸。
+  const flat = text.replace(/\s+/g, ' ')
+  for (const match of flat.matchAll(LOWERED_SPEAKING_KEYWORD)) {
+    const index = match.index ?? 0
+    const before = flat.slice(Math.max(0, index - 8), index)
+    const near = flat.slice(Math.max(0, index - 8), index + match[0].length + 8)
+    if (!near.includes('口语')) continue
+    if (NEGATION_BEFORE_KEYWORD.test(before)) continue
+    return true
+  }
+  const order = SPEAKING_ORDER.exec(flat)
+  if (order) {
+    const before = flat.slice(Math.max(0, order.index - 8), order.index)
+    if (!NEGATION_BEFORE_KEYWORD.test(before)) return true
+  }
+  return false
+}
+
 /** 规则层先挡明显问题，AI 再修一次；问题还在就失败，不把坏文本写进报告。 */
 export function findTextIssues(content: DocAiContent, planPeriods: string[] = []): string[] {
   const issues: string[] = []
@@ -294,8 +356,13 @@ export function findTextIssues(content: DocAiContent, planPeriods: string[] = []
     if (/(报班|报课|学费|名额|不学就来不及|不过级就没戏|不必依赖付费课程|不用报班)/.test(text)) {
       issues.push(`${where} 出现禁用词`)
     }
-    if (/没有硬性门槛|保持阅读和表达就够了|英语不是(重点|主线)/.test(text)) {
+    if (/没有硬性门槛|保持阅读和表达就够了|英语不是(重点|主线)|英语(其实)?不重要/.test(text)) {
       issues.push(`${where} 出现没有材料支撑的英语弱化判断`)
+    }
+    if (hasLoweredSpeakingTarget(text)) {
+      issues.push(
+        `${where} 出现替学生降低口语目标或没有材料支撑的英语补强顺序；听力和口语要并列写，口语不能往后放`
+      )
     }
     if (/(天坑|野鸡|垃圾专业|最差专业)/.test(text)) {
       issues.push(`${where} 出现贬低专业的说法`)
