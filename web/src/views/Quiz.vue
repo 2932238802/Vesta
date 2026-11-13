@@ -562,7 +562,7 @@ function trackExit() {
   const questionId = current.value?.id ?? visible.value[0]?.id
   if (!questionId) return
   exitTracked = true
-  track(token, 'quiz_exit', { questionId, step: step.value, answered, total: 27 })
+  track(token, 'quiz_exit', { questionId, step: step.value, answered, total: visible.value.length })
 }
 
 function onLeave() {

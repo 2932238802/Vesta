@@ -256,7 +256,7 @@
               </th>
               <th>学员</th>
               <th>阶段</th>
-              <th>分数</th>
+              <th>{{ scoreColumnLabel }}</th>
               <th>领取 / 联系</th>
               <th>时间</th>
               <th class="actions-col">操作</th>
@@ -308,7 +308,7 @@
               <td>
                 <template v-if="row.submissionId">
                   <span class="chip accent">{{ row.tier }}</span>
-                  <span class="num">{{ row.total }}</span>
+                  <span v-if="row.reportMode !== 'doc'" class="num">{{ row.total }}</span>
                 </template>
                 <span v-else class="quiet small">—</span>
               </td>
@@ -606,6 +606,16 @@ const dateSummary = computed(() => {
 const showDateTones = computed(
   () => dateOptions.value.length > 1 && selectedDates.value.size !== 1
 )
+
+// doc 模式没有数字总分，只展示 A/B/C 优先级；legacy 问卷仍显示真实分数。
+// 名单可能混有不同问卷，按实际提交行决定列名。
+const scoreColumnLabel = computed(() => {
+  const submitted = roster.value.filter((row) => row.submissionId)
+  const hasDoc = submitted.some((row) => row.reportMode === 'doc')
+  const hasLegacy = submitted.some((row) => row.reportMode !== 'doc')
+  if (hasDoc && hasLegacy) return '优先级 / 分数'
+  return hasDoc ? '优先级' : '分数'
+})
 
 const emptyText = computed(() => {
   if (selectedDates.value.size) return '所选日期里没有符合条件的记录'

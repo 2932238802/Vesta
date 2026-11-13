@@ -175,13 +175,11 @@ publicRouter.post(
     }
 
     const answers = validation.answers as Answers
+    // doc 模式没有数字总分：只写优先级 A/B/C，total 固定 0。
+    // 不再把 A/B/C 映射成 82/60/25 冒充测评分数，后台按 reportMode 只展示优先级。
     const scores: ScoreResult =
       survey.reportMode === 'doc'
-        ? (() => {
-            const priority = docPriority(survey, answers)
-            const total = priority === 'A' ? 82 : priority === 'B' ? 60 : 25
-            return { total, tier: priority, dimensions: [], detail: {} }
-          })()
+        ? { total: 0, tier: docPriority(survey, answers), dimensions: [], detail: {} }
         : computeScores(survey, answers)
 
     const timingInput = (req.body?.timing ?? {}) as Record<string, unknown>

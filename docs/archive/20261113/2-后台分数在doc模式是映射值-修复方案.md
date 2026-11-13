@@ -1,7 +1,8 @@
 # 后台「分数」在 doc 模式是映射值 · 修复方案
 
-> 版本：v1.0（2026-11-13）　状态：**待实施**
+> 版本：v1.1（2026-11-13）　状态：**已实施（产品版本 v1.65）**
 > 一句话：doc 模式没有真实总分，提交时把优先级 A/B/C 映射成 82/60/25 写进了 `submissions.total`，后台却把它当「分数」展示，报告里反而没有这个数。
+> 实施记录见文末第七节。
 
 ---
 
@@ -127,3 +128,14 @@ function reportModeMap(): Map<string, 'doc' | 'ai'> {
 - 不把 `tier` 改成数字：A/B/C 是产品口径，报告和后台都用它。
 - 不重新生成旧报告；报告本身没有数字总分，与本问题无关。
 - 历史回填是**独立的数据操作**，需要先备份并单独确认，不包含在代码改动里。
+
+---
+
+## 七、实施记录（2026-11-13，产品版本 v1.65）
+
+- 写入端：`server/src/routes/public.ts:177-183` doc 模式 `total` 固定写 `0`，`tier` 仍写 `docPriority()` 的 A/B/C；legacy 分支继续 `computeScores()`。
+- 读接口：新增 `server/src/routes/admin/shared.ts` 的 `surveyReportModes()` / `reportModeOf()`（一次请求内按 `surveys.data.reportMode` 建 Map）；`roster.ts`、`submissions.ts` 列表与详情每条都带 `reportMode`。
+- CSV：`submissions.ts` doc 行「总分」留空，表头保留；legacy 行不变。
+- 前端：`web/src/views/admin/Submissions.vue` 按模式显示列名与数值——全为 doc 时列名「优先级」，混合时「优先级 / 分数」，doc 行只显示 `tier`；`SubmissionDetail.vue` doc 模式隐藏「总分 / 100」，标题改「优先级」。
+- 未做：历史数据回填（把 doc 类答卷 `total` 置 0）。这是独立数据操作，需要先 `VACUUM INTO` 备份并单独确认；不执行也不影响界面。
+- 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）。

@@ -19,7 +19,7 @@ import {
   isOlderThanMonths,
 } from './date'
 
-/** 报告里出现的主流就业城市；只用于从自由文本里识别城市，不限制 Q8 的选项。 */
+/** 报告里出现的主流就业城市；只用于从自由文本里识别城市，不限制 Q9 的选项。 */
 export const MAJOR_CITIES = [
   '北京', '上海', '广州', '深圳', '杭州', '成都', '武汉', '西安', '南京', '苏州',
   '重庆', '天津', '长沙', '郑州', '青岛', '厦门', '合肥', '宁波', '东莞', '佛山',
@@ -44,7 +44,7 @@ export interface TargetCity {
 }
 
 /**
- * 把 Q8 的档位（如「新一线」「北上广深」）落到具体城市。
+ * 把 Q9 的档位（如「新一线」「北上广深」）落到具体城市。
  * 只做检索用，不改问卷答案本身；抓不到具体城市时不加城市，并在报告里写明。
  */
 export function resolveTargetCity(survey: Survey, answers: Answers): TargetCity {
@@ -415,7 +415,7 @@ function assetsBlock(survey: Survey, answers: Answers): ReportBlock | null {
     items.push({
       key: 'practice',
       name: practice,
-      source: 'Q9 实习实践',
+      source: 'Q12 实习实践',
       text: ''
     })
   }
@@ -426,7 +426,7 @@ function assetsBlock(survey: Survey, answers: Answers): ReportBlock | null {
       items.push({
         key: `skill-${index}`,
         name: item,
-        source: 'Q10 能力储备',
+        source: 'Q13 能力储备',
         text: ''
       })
     })
@@ -435,7 +435,7 @@ function assetsBlock(survey: Survey, answers: Answers): ReportBlock | null {
     items.push({
       key: 'family',
       name: family,
-      source: 'Q15 家庭支持',
+      source: 'Q18 家庭支持',
       text: ''
     })
   }
@@ -728,7 +728,7 @@ function jobMatch(
     }
   }
 
-  // 薪资：只判断和 Q27 期望有没有重叠，不做“给得起/给不起”的结论。
+  // 薪资：只判断和 Q10 期望有没有重叠，不做“给得起/给不起”的结论。
   const expected = salaryRangeNumbers(expectation)
   const offered = salaryRangeNumbers(job.salary)
   if (expected && offered) {
@@ -972,7 +972,7 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
   ]
 
   if (first === '就业') {
-    // 目标城市写成 resolveTargetCity() 落到的具体城市；Q8 的档位串只作检索依据，不回抄。
+    // 目标城市写成 resolveTargetCity() 落到的具体城市；Q9 的档位串只作检索依据，不回抄。
     const cityValue =
       !city || city.includes('还没想好')
         ? '还没想好'

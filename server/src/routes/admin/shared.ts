@@ -1,4 +1,31 @@
-import { now } from '../../db'
+import { db, now } from '../../db'
+
+export type ReportMode = 'doc' | 'ai'
+
+/**
+ * 一次请求内建答卷模式的缓存：surveys 表很小，按 survey_id 判断这份答卷是不是 doc 模式。
+ * 答卷写库时只存了 survey_id，报告模式在问卷的 data 里。
+ */
+export function surveyReportModes(): Map<string, ReportMode> {
+  const rows = db.prepare('SELECT id, data FROM surveys').all() as { id: string; data: string }[]
+  const map = new Map<string, ReportMode>()
+  for (const row of rows) {
+    let mode: ReportMode = 'ai'
+    try {
+      const survey = JSON.parse(row.data) as { reportMode?: string }
+      if (survey.reportMode === 'doc') mode = 'doc'
+    } catch {
+      // 问卷数据损坏时按 legacy 处理，不影响答卷本身
+    }
+    map.set(row.id, mode)
+  }
+  return map
+}
+
+export function reportModeOf(map: Map<string, ReportMode>, surveyId: string | null | undefined): ReportMode {
+  if (!surveyId) return 'ai'
+  return map.get(surveyId) ?? 'ai'
+}
 
 export interface InviteRow {
   id: string
@@ -51,6 +78,7 @@ export interface RosterRow {
   submitted_at: string | null
   expires_at: string | null
   submission_id: string | null
+  survey_id: string | null
   slug: string | null
   total: number | null
   tier: string | null

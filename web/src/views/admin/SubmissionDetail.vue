@@ -30,10 +30,10 @@
       <div class="grid">
         <section class="card panel score-panel">
           <header class="panel-head">
-            <h2>分数</h2>
+            <h2>{{ detail.reportMode === 'doc' ? '优先级' : '分数' }}</h2>
             <span class="chip accent">{{ detail.tier }} 档</span>
           </header>
-          <div class="total">
+          <div v-if="detail.reportMode !== 'doc'" class="total">
             <span class="total-value">{{ detail.total }}</span>
             <span class="total-label">总分 / 100</span>
           </div>

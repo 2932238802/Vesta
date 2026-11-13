@@ -6,7 +6,7 @@ import { noStore } from '../../auth'
 import { db, getActiveSurvey, getSurvey, recordEvent } from '../../db'
 import { regenerateReport } from '../../ai/generate'
 import { clampString, decryptText, parseJson, toCsv } from '../../util'
-import { CONTACT_STATUSES } from './shared'
+import { CONTACT_STATUSES, reportModeOf, surveyReportModes } from './shared'
 import type { InviteRow, SubmissionRow } from './shared'
 
 export const submissionsRouter = Router()
@@ -70,7 +70,7 @@ submissionsRouter.get('/submissions/export.csv', (req, res) => {
         row.note,
         row.channel,
         row.created_at,
-        row.total,
+        survey.reportMode === 'doc' ? '' : row.total,
         row.tier,
         row.wechat_enc ? decryptText(row.wechat_enc) : '',
         parseJson<string[]>(row.slots, []).join(' / '),
@@ -98,7 +98,7 @@ submissionsRouter.get('/submissions', (req, res) => {
   const contactStatus = clampString(req.query.contactStatus, 20)
   const rows = db
     .prepare(
-      `SELECT s.id, s.slug, s.total, s.tier, s.contact_status, s.created_at, s.claimed_at,
+      `SELECT s.id, s.slug, s.survey_id, s.total, s.tier, s.contact_status, s.created_at, s.claimed_at,
               s.slots, i.name, i.note, i.channel
        FROM submissions s JOIN invites i ON i.id = s.invite_id
        WHERE (? = '' OR i.name LIKE ? OR i.note LIKE ? OR i.channel LIKE ?)
@@ -110,6 +110,8 @@ submissionsRouter.get('/submissions', (req, res) => {
     unknown
   >[]
 
+  const reportModes = surveyReportModes()
+
   res.json({
     submissions: rows.map((row) => ({
       id: row.id,
@@ -118,6 +120,7 @@ submissionsRouter.get('/submissions', (req, res) => {
       channel: row.channel,
       total: row.total,
       tier: row.tier,
+      reportMode: reportModeOf(reportModes, row.survey_id as string),
       claimed: Boolean(row.claimed_at),
       slots: parseJson<string[]>(row.slots, []),
       contactStatus: row.contact_status,
@@ -152,6 +155,7 @@ submissionsRouter.get('/submissions/:id', (req, res) => {
     reportPath: `/r/${row.slug}`,
     total: row.total,
     tier: row.tier,
+    reportMode: reportModeOf(surveyReportModes(), row.survey_id),
     scores,
     answers: survey.questions.map((question) => ({
       id: question.id,

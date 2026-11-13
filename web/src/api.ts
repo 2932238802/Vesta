@@ -846,6 +846,7 @@ export interface AdminSubmissionSummary {
   channel: string
   total: number
   tier: string
+  reportMode: 'doc' | 'ai'
   claimed: boolean
   slots: string[]
   contactStatus: string
@@ -880,6 +881,7 @@ export interface AdminRosterRow {
   expiresAt: string | null
   total: number | null
   tier: string | null
+  reportMode: 'doc' | 'ai' | null
   claimed: boolean
   slots: string[]
   contactStatus: string | null
@@ -929,6 +931,7 @@ export interface AdminSubmissionDetail {
   reportPath: string
   total: number
   tier: string
+  reportMode: 'doc' | 'ai'
   scores: {
     total: number
     tier: string

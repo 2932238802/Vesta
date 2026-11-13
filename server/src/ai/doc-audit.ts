@@ -127,7 +127,7 @@ export function crossModuleIssues(content: DocAiContent, specs: ModuleSpec[]): s
 export interface RepetitionContext {
   /** 系统给出的粗粒度时间距离，如「三年」「5 个月」 */
   distance: string
-  /** Q8 选项原文，如「新一线（杭州、成都、武汉、西安等）」 */
+  /** Q9 选项原文，如「新一线（杭州、成都、武汉、西安等）」 */
   cityLabel: string
   /** resolveTargetCity() 落到检索词里的具体城市，可能为空 */
   city: string
@@ -152,7 +152,7 @@ export function repetitionIssues(content: DocAiContent, ctx: RepetitionContext):
 
   const cityLabel = ctx.cityLabel.replace(/\s+/g, '')
   const cityList = cityListInLabel(cityLabel)
-  // 只有 Q8 选的是「新一线」「北上广深」「家乡（…）」这类档位写法时才拦；北京、杭州这种具体城市不必拦。
+  // 只有 Q9 选的是「新一线」「北上广深」「家乡（…）」这类档位写法时才拦；北京、杭州这种具体城市不必拦。
   const checkCityLabel =
     Boolean(cityLabel) &&
     cityLabel !== ctx.city &&
@@ -189,7 +189,7 @@ export function repetitionIssues(content: DocAiContent, ctx: RepetitionContext):
       if ((flat.includes(cityLabel) || (cityList && flat.includes(cityList))) && !seen.has(`city:${where}`)) {
         seen.add(`city:${where}`)
         issues.push(
-          `${where} 回抄了问卷 Q8 的目标城市选项原文；目标城市统一写系统给的具体城市「${cityTarget}」，不要带整串档位说明`
+          `${where} 回抄了问卷 Q9 的目标城市选项原文；目标城市统一写系统给的具体城市「${cityTarget}」，不要带整串档位说明`
         )
       }
     }

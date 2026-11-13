@@ -86,18 +86,17 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q5a',
-      code: 'Q5a',
+      code: 'Q6',
       groupId: 'p1',
       title: '想做什么行业、什么岗位',
       hint: '可跳过',
       type: 'text',
       required: false,
-      placeholder: '例如：跨境电商运营、小学英语老师',
-      showIf: { question: 'q5', when: ['q5_2', 'q5_3'] }
+      placeholder: '例如：跨境电商运营、小学英语老师'
     },
     {
       id: 'q6',
-      code: 'Q6',
+      code: 'Q7',
       groupId: 'p1',
       title: '毕业后的第一选择',
       type: 'single',
@@ -114,7 +113,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q7',
-      code: 'Q7',
+      code: 'Q8',
       groupId: 'p1',
       title: '现在在准备什么',
       type: 'multi',
@@ -133,7 +132,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q8',
-      code: 'Q8',
+      code: 'Q9',
       groupId: 'p1',
       title: '想去哪个城市工作',
       type: 'single',
@@ -148,7 +147,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q27',
-      code: 'Q9',
+      code: 'Q10',
       groupId: 'p1',
       title: '你的理想薪资',
       hint: '第一份工作的月薪，只用于报告里的对照，不计分',
@@ -164,7 +163,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q28',
-      code: 'Q10',
+      code: 'Q11',
       groupId: 'p1',
       title: '我眼中的自己',
       hint: '写几个词就行。可以参考：要强的、自信的、阳光的、敏感的、容易受别人影响、内向的、焦虑的、想努力但坚持不住、迷茫的',
@@ -174,7 +173,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q9',
-      code: 'Q11',
+      code: 'Q12',
       groupId: 'p2',
       title: '实习实践',
       type: 'single',
@@ -188,7 +187,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q10',
-      code: 'Q12',
+      code: 'Q13',
       groupId: 'p2',
       title: '能力储备',
       type: 'multi',
@@ -203,7 +202,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q11',
-      code: 'Q13',
+      code: 'Q14',
       groupId: 'p2',
       title: '方向清晰度',
       type: 'single',
@@ -217,7 +216,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q12',
-      code: 'Q14',
+      code: 'Q15',
       groupId: 'p2',
       title: '环境氛围',
       type: 'single',
@@ -231,7 +230,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q13',
-      code: 'Q15',
+      code: 'Q16',
       groupId: 'p2',
       title: '执行力',
       type: 'single',
@@ -245,7 +244,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q14',
-      code: 'Q16',
+      code: 'Q17',
       groupId: 'p3',
       title: '回到高中：你高中阶段更接近哪种情况？',
       hint: '这里问的是高中，因为大学考试成绩受老师给分、考试形式影响太大，看不出学习方法。',
@@ -260,7 +259,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q15',
-      code: 'Q17',
+      code: 'Q18',
       groupId: 'p3',
       title: '家庭能提供的支持',
       type: 'single',
@@ -275,7 +274,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q16',
-      code: 'Q18',
+      code: 'Q19',
       groupId: 'p3',
       title: '信息差',
       type: 'single',
@@ -351,7 +350,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q24',
-      code: 'Q19',
+      code: 'Q20',
       groupId: 'p4',
       title: '你觉得英语对你未来有多重要',
       hint: '0 到 10 分，越靠右越重要',
@@ -361,7 +360,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q17',
-      code: 'Q20',
+      code: 'Q21',
       groupId: 'p4',
       title: '英语现在的情况',
       type: 'single',
@@ -374,7 +373,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q22',
-      code: 'Q21',
+      code: 'Q22',
       groupId: 'p4',
       title: '你的口语和听力',
       type: 'single',
@@ -389,7 +388,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q18',
-      code: 'Q22',
+      code: 'Q23',
       groupId: 'p4',
       title: '上次四级哪部分丢分最多',
       type: 'multi',
@@ -408,7 +407,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q25',
-      code: 'Q23',
+      code: 'Q24',
       groupId: 'p4',
       title: '你觉得英语学不好最主要的原因是',
       type: 'multi',
@@ -427,7 +426,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q19',
-      code: 'Q24',
+      code: 'Q25',
       groupId: 'p4',
       title: '你现在怎么学英语',
       type: 'multi',
@@ -444,7 +443,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q20',
-      code: 'Q25',
+      code: 'Q26',
       groupId: 'p4',
       title: '一周花多少时间在英语上',
       type: 'single',
@@ -459,7 +458,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q21',
-      code: 'Q26',
+      code: 'Q27',
       groupId: 'p4',
       title: '背单词的情况',
       type: 'multi',
@@ -474,7 +473,7 @@ export const defaultSurvey: Survey = {
     },
     {
       id: 'q26',
-      code: 'Q27',
+      code: 'Q28',
       groupId: 'p5',
       title: '五年后，你希望自己是什么样',
       hint: '一句话也行，想到什么写什么',

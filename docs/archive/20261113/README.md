@@ -11,9 +11,10 @@
 | # | 文件 | 问题 | 类型 | 状态 | 产品版本 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | [1-仪表盘每组完成恒为0-修复方案.md](./1-仪表盘每组完成恒为0-修复方案.md) | 后台概览漏斗「完成第 X 组」计数与百分比恒为 0 | Bug 修复 | **已修复**（代码已实现，工作区未提交） | v1.64 |
-| 2 | [2-后台分数在doc模式是映射值-修复方案.md](./2-后台分数在doc模式是映射值-修复方案.md) | doc 模式没有真实总分，后台却把 A/B/C 映射成 82/60/25 当「分数」展示 | Bug 修复 | **待实施**（方案已定，代码未动） | — |
+| 2 | [2-后台分数在doc模式是映射值-修复方案.md](./2-后台分数在doc模式是映射值-修复方案.md) | doc 模式没有真实总分，后台却把 A/B/C 映射成 82/60/25 当「分数」展示 | Bug 修复 | **已修复**（代码已实现，工作区未提交） | v1.65 |
 | 3 | [3-检索届别改用当前年份-修复方案.md](./3-检索届别改用当前年份-修复方案.md) | 检索词届别按填表人年级推算毕业年份，常搜到未来届别 | 需求变更 | **已修复**（代码已实现，工作区未提交） | v1.63 |
-| 4 | [4-问卷题目独立与题号重排-开发文档.md](./4-问卷题目独立与题号重排-开发文档.md) | Q5a 不再跟随 Q5 显示，独立为第 6 题，题号重排为连续 Q1–Q28 | 需求变更 | **待确认，未实施**（只出方案） | 目标 v1.65 |
+| 4 | [4-问卷题目独立与题号重排-开发文档.md](./4-问卷题目独立与题号重排-开发文档.md) | Q5a 不再跟随 Q5 显示，独立为第 6 题，题号重排为连续 Q1–Q28 | 需求变更 | **已修复**（代码已实现，工作区未提交） | v1.66 |
+| 5 | [5-英语块表述核对与生成约束.md](./5-英语块表述核对与生成约束.md) | 报告英语块「先听力再口语」「口语不追求流利」等表述越界，缺生成约束 | 内容校对 + 优化建议 | **待确认**（分析稿，未改代码） | — |
 
 状态口径：**已修复** = 代码改动已在仓库工作区落地且方案文档记了验证；**待实施** = 方案已写、代码没动；**待确认** = 连产品口径都还没最终确认。
 
@@ -30,17 +31,16 @@
 - **验证**：`docs/development-history.md` 记 `npm run verify` 全绿 + 本地走查（答完 p1 只出现 1 次 `group_complete`、回退再前进不重复、`GET /api/admin/overview` 的 `p1.completed = 1`）。
 - **文档小问题（已订正）**：方案 §七 原写「产品版本 v1.63」，与文件头 v1.64、`development-history.md` 不一致，已按 v1.64 改正。
 
-### 2. 后台「分数」在 doc 模式是映射值 —— 待实施
+### 2. 后台「分数」在 doc 模式是映射值 —— 已修复（v1.65）
 
-- **问题**：doc 模式没有真实总分，提交时按 `docPriority()` 把 A/B/C 映射成 82/60/25 写进 `submissions.total`（`server/src/routes/public.ts:181-182`），后台名单、答卷详情、CSV 却把它当「分数」展示，和报告页（没有数字总分）对不上。
-- **当前代码仍是旧行为**（逐处核对过）：
-  - `server/src/routes/public.ts:181-182`：`total = priority === 'A' ? 82 : priority === 'B' ? 60 : 25`；
-  - `server/src/routes/admin/roster.ts:103-104`：每行直接返回 `total` / `tier`，没有 `reportMode`；
-  - `server/src/routes/admin/submissions.ts`：CSV 表头「总分」+ `row.total`（:43、:73）；列表（:119）、详情（:153）也返回 `total`，均无 `reportMode`；
-  - `web/src/views/admin/Submissions.vue:259`（表头「分数」）+ `:308-314`（显示 `tier` + 数字）；
-  - `web/src/views/admin/SubmissionDetail.vue:33-38`（「分数 / 82 / 总分 / 100」）。
-- **待做**（方案第三节）：写入端 doc 模式 `total` 写 0；三个读接口带出 `reportMode`；前端 doc 模式只显示 A/B/C（列名改「优先级」）；CSV doc 行「总分」留空。
-- **待确认**：历史数据回填（把 doc 类答卷 `total` 置 0）是独立数据操作，方案标为「可选」，执行前需备份并单独确认。
+- **问题**：doc 模式没有真实总分，提交时按 `docPriority()` 把 A/B/C 映射成 82/60/25 写进 `submissions.total`，后台名单、答卷详情、CSV 却把它当「分数」展示，和报告页（没有数字总分）对不上。
+- **修复**：
+  - 写入：`server/src/routes/public.ts:177-183` doc 模式 `total` 写 `0`，`tier` 仍写 A/B/C；legacy 继续 `computeScores()`。
+  - 读接口：`server/src/routes/admin/shared.ts` 新增 `surveyReportModes()` / `reportModeOf()`；`roster.ts`、`submissions.ts` 列表与详情每条都带 `reportMode`。
+  - CSV：`submissions.ts` doc 行「总分」留空，表头保留；legacy 行不变。
+  - 前端：`Submissions.vue` doc 行只显示 `tier`，列名按名单实际模式显示「优先级」或「优先级 / 分数」；`SubmissionDetail.vue` doc 模式隐藏「总分 / 100」，标题改「优先级」。
+- **未做**：历史数据回填（把 doc 类答卷 `total` 置 0）。属独立数据操作，需先备份并单独确认；不执行也不影响界面。
+- **验证**：`npm run verify` 全绿。
 
 ### 3. 检索届别改用当前年份 —— 已修复（v1.63）
 
@@ -53,23 +53,35 @@
   - 旧报告兼容：把一份旧报告的存储 meta 改成 `cohortYear: 2028`（模拟旧字段），新代码渲染出的「检索记录」副标题仍为「检索词按 2028 届拼写」，没有 `undefined`。
   - 仍未跑完整 AI 报告端到端生成（避免 AI 费用）。
 
-### 4. 问卷题目独立与题号重排 —— 待确认，未实施
+### 4. 问卷题目独立与题号重排 —— 已修复（v1.66）
 
 - **需求**（用户 2026-11-13 口头）：Q5a「想做什么行业、什么岗位」不再由 Q5 决定显隐，独立成第 6 题；题号连续重排 Q1–Q28；仍可跳过。
-- **当前代码仍是旧形态**：`shared/src/survey.ts:88-96` 的 `q5a` 仍带 `showIf: { question: 'q5', when: ['q5_2','q5_3'] }`；`code` 仍是 `Q1–Q27` 外加 `Q5a`；`server/src/db/migrations.ts` 里没有方案 §5.6 的 `patchQ5aIndependent()` 补丁。
-- **未实施原因**：文档状态为「待确认，未实施」，方案第十节还有 3 个待确认项（定制问卷是否统一重排编号、报告 source 文案里的历史题号是否顺手纠正、`Quiz.vue` 的 `total: 27` 是否改动态）。
-- **版本提示**：方案文件写「对应产品版本 v1.63」，但 v1.63 / v1.64 已被占，按 `docs/README.md`「版本约定」落地时应从 **v1.65** 起算。
-- **工作量提示**：`shared/src/survey.ts` + 设计文档升 v1.3 + `docScore.ts` / `doc.ts` 文案 + `migrations.ts` 补丁 + `check:docs` 必须同步改完（`code` 一变，设计文档校验就会失败）。
+- **实现**：
+  - `shared/src/survey.ts`：删除 `q5a` 的 `showIf`；28 个 `code` 按数组顺序重排为 Q1–Q28（`id` 不动）。
+  - `server/src/db/migrations.ts`：新增 `patchQ5aIndependent()`，customized 问卷只去显示条件、不重排编号；非定制问卷由 `surveyShape()` 差异整份对齐新默认结构。
+  - `shared/src/docScore.ts` / `doc.ts` / `server/src/ai/doc-prompts.ts` / `doc-audit.ts`：来源与提示文案里的题号同步到新编号。
+  - `web/src/views/Quiz.vue`：`quiz_exit` 的 `total` 由写死 27 改为 `visible.value.length`。
+  - `docs/规划自测问卷-设计文档.md` 升 v1.3，题号、分组、跳题、报告规则、验收清单同步。
+- **兼容**：答卷按 `id` 存，历史答卷零迁移；草稿 `step` 下标不变；已生成报告不重新生成。
+- **验证**：`npm run verify` 全绿。
+
+### 5. 英语块表述与生成约束 —— 待确认（分析稿，未改代码）
+
+- **问题**：报告 `lBAurLimYGtCyfZ-UNhTQJN9e_A` 的英语块写了「补的顺序是先听力，再口语」「口语不追求流利」，答卷里没有依据；「你写的原因是没人教方法」把 Q23 多选压成了单因。生成侧英语块只有一句 Skill 约束，`findTextIssues` 也没拦这些表述。
+- **产出**：逐句核对表、可直接替换的三段改写稿、3 条改动说明，以及代码链路 / 问题 / 优化建议。
+- **状态**：代码改动未实施，待确认。
 
 ---
 
 ## 三、仓库与上线状态（2026-11-13 核对）
 
-- v1.63、v1.64 的代码改动**还在工作区，未提交**（`git status` 显示 9 个文件 modified：`docs/README.md`、`docs/development-history.md`、`docs/archive/20261113/1-…md`（§七 版本号订正 v1.63→v1.64）、`docs/archive/20261113/3-…md`、`server/src/ai/doc-generate.ts`、`server/src/ai/doc-search.ts`、`shared/src/doc.ts`、`shared/src/types.ts`、`web/src/views/Quiz.vue`）。
+- v1.63、v1.64、v1.65、v1.66 的代码与文档改动**都还在工作区，未提交**；`git status` 会看到 `docs/README.md`、`docs/development-history.md`、`docs/规划自测问卷-设计文档.md`、本目录方案、`shared/src/*`、`server/src/*`、`web/src/*` 等文件。
 - 本索引文件 `docs/archive/20261113/README.md` 本身也还未提交（untracked），提交时要一起带上。
-- 因此线上行为仍是修复前：漏斗「完成第 X 组」还是 0、检索词还是按年级推算的届别。**要让这两项生效，需要先提交，再在服务器执行 `bash update.sh`（L1 要求工作区干净）。**
+- 因此线上行为仍是修复前：漏斗「完成第 X 组」还是 0、检索词还是按年级推算的届别、doc 答卷后台仍显示 82/60/25、问卷仍是 Q5a + Q1–Q27。**要让这四项生效，需要先提交，再在服务器执行 `bash update.sh`（L1 要求工作区干净）。**
+- 上线前注意：v1.66 会改动问卷结构。非定制问卷启动时整份对齐新默认结构；定制问卷只自动去掉 Q5a 的 `showIf`、编号保持不变。该迁移对定制问卷不可逆，执行前先按 `VACUUM INTO` 备份 `data/vesta.db`。
 - 工作区另有未跟踪的 `_scratch/`（一次性脚本目录），按仓库规矩收尾时清理，不要提交。
 - v1.64 的走查证据：独立临时 `DATA_DIR` + 浏览器实测——答完 p1 只上报 1 次、回退再前进不重复、`GET /api/admin/overview` 返回 `p1.completed = 1`；临时 dev server 已停止，未写入 `data/`。
+- v1.65 / v1.66 本轮只跑了 `npm run verify`（check:docs / check:dates / typecheck / build），未做完整浏览器走查；上线前建议按各方案第五节手工过一遍后台名单、答卷详情、CSV 和问卷 Q6。
 
 ---
 
@@ -80,7 +92,7 @@
 grep -rn "group_complete" web/src
 
 # 2：doc 模式是否还在造 82/60/25；后台是否带 reportMode
-grep -n "priority === 'A'" server/src/routes/public.ts
+grep -n "total: 0" server/src/routes/public.ts
 grep -rn "reportMode" server/src/routes/admin web/src/views/admin
 
 # 3：是否还有 cohortYear 推算
@@ -88,6 +100,7 @@ grep -rn "cohortYear" shared server
 
 # 4：q5a 是否已独立、题号是否已重排
 grep -n "q5a" shared/src/survey.ts
+grep -n "showIf" shared/src/survey.ts
 grep -n "code: 'Q" shared/src/survey.ts
 ```
 
@@ -101,8 +114,8 @@ sqlite3 data/vesta.db "select json_extract(payload,'$.groupId') g, count(distinc
 
 ---
 
-## 五、建议处理顺序
+## 五、收尾建议
 
-1. **先提交 v1.63 + v1.64**（已实现未提交，最容易漏；不提交等于没上线）。
-2. **再做 #2**（改动面小、5 个文件左右、用户能直接看出后台和报告对不上，优先级高）；历史数据回填单独确认后再跑。
-3. **最后 #4**（改动面大、会动问卷口径和题号，必须先让用户确认方案第十节的 3 个待确认项再动手）。
+1. **提交 v1.63–v1.66**（都已实现未提交；不提交等于没上线）。建议一个需求一个 commit。
+2. **上线前备份数据库并手工走查**：`VACUUM INTO` 备份 `data/vesta.db`；重点看后台名单/答卷详情/CSV 的 doc 模式展示、问卷 Q6 是否不再依赖 Q5、题号是否连续 Q1–Q28。
+3. **可选**：历史 doc 答卷 `total` 回填为 0（独立数据操作，需先备份并单独确认；不做也不影响界面）。

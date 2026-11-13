@@ -4,6 +4,25 @@
 
 ## 本轮（2026-11-13）
 
+### 问卷题目独立与题号重排（2026-11-13，产品版本 v1.66）
+
+- 依据：`docs/archive/20261113/4-问卷题目独立与题号重排-开发文档.md` v1.1。用户要求 Q5a「想做什么行业、什么岗位」不再跟随 Q5 显示，独立成第 6 题，题号连续重排为 Q1–Q28；仍可跳过。
+- 问卷：`shared/src/survey.ts` 删除 `q5a.showIf`；28 个 `code` 按当前数组顺序重排为 Q1–Q28（`id` 不动，答卷按 `id` 存，历史数据零迁移）。
+- 迁移：`server/src/db/migrations.ts` 新增 `patchQ5aIndependent()`，customized 问卷只自动去掉显示条件、不强行重排编号（运营可能已用旧编号沟通）；非定制问卷启动时由 `surveyShape()` 差异整份对齐新默认结构。该迁移对定制问卷不可逆，上线前先 `VACUUM INTO` 备份。
+- 文案：`shared/src/docScore.ts`、`shared/src/doc.ts` 的分数来源、`server/src/ai/doc-prompts.ts` 与 `doc-audit.ts` 的提示文案同步改到新编号。
+- 埋点：`web/src/views/Quiz.vue` 的 `quiz_exit.total` 由写死 27 改为 `visible.value.length`。
+- 文档：`docs/规划自测问卷-设计文档.md` 升 v1.3，题目、分组、跳题、报告规则与验收清单同步。
+- 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）。未做完整浏览器走查。
+
+### 后台 doc 模式不再展示映射分数（2026-11-13，产品版本 v1.65）
+
+- 依据：`docs/archive/20261113/2-后台分数在doc模式是映射值-修复方案.md` v1.1。doc 模式没有数字总分，提交时却把优先级 A/B/C 映射成 82/60/25 写进 `submissions.total`，后台名单、答卷详情和 CSV 当成「分数」展示，和报告页对不上。
+- 写入：`server/src/routes/public.ts` doc 模式 `total` 固定写 `0`，`tier` 仍写 `docPriority()` 的 A/B/C；legacy 继续 `computeScores()`。
+- 读接口：`server/src/routes/admin/shared.ts` 新增 `surveyReportModes()` / `reportModeOf()`；`roster.ts`、`submissions.ts` 列表与详情每条带 `reportMode`。
+- 展示：`Submissions.vue` doc 行只显示 `tier`，列名按实际模式显示「优先级」或「优先级 / 分数」；`SubmissionDetail.vue` doc 模式隐藏「总分 / 100」，标题改「优先级」；CSV doc 行「总分」留空（表头保留，避免混排错列）。
+- 边界：不改表结构；历史 doc 答卷的 `total` 不自动回填（独立数据操作，需备份并单独确认，不影响界面）。
+- 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）。
+
 ### 仪表盘「每组完成」恒为 0 修复（2026-11-13，产品版本 v1.64）
 
 - 依据：`docs/archive/20261113/1-仪表盘每组完成恒为0-修复方案.md` v1.1。后台概览按 `events` 表里 `type = 'group_complete'` 的记录聚合每组完成人数（`server/src/routes/admin/overview.ts:30-39`），服务端事件白名单也允许该类型（`server/src/routes/public.ts:546`），但 `web/src` 从未上报过，导致漏斗里「完成第 X 组」恒为 0。

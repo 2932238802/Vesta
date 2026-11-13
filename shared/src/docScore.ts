@@ -265,7 +265,7 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
       score: cityScore(survey, answers),
       note: '目标城市的机会密度 + 行业岗位写得清不清楚；非一线/新一线城市按 6 分封顶',
       benchmark: '常规入场线 6.0—8.0',
-      source: 'Q8 城市 + Q5a 岗位'
+      source: 'Q9 城市 + Q6 岗位'
     },
     {
       key: 'family',
@@ -273,7 +273,7 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
       score: pick(optionIndex(survey, answers, 'q15'), FAMILY, 5),
       note: '家里能托住多少，改不了，但要说清楚',
       benchmark: '背景项，不设门槛',
-      source: 'Q15 家庭支持'
+      source: 'Q18 家庭支持'
     },
     {
       key: 'practice',
@@ -281,7 +281,7 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
       score: pick(optionIndex(survey, answers, 'q9'), PRACTICE, 2),
       note: '能写进简历的校外实习和校内实践',
       benchmark: '常规入场线 6.0—8.5',
-      source: 'Q9 实习实践'
+      source: 'Q12 实习实践'
     },
     {
       key: 'skill',
@@ -289,7 +289,7 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
       score: skillScore(survey, answers),
       note: '底层能力、垂直技能、证书的累计',
       benchmark: '常规入场线 7.0—9.0',
-      source: 'Q10 能力储备'
+      source: 'Q13 能力储备'
     }
   ]
 
@@ -299,28 +299,28 @@ export function computeDocScores(survey: Survey, answers: Answers): DocScores {
       label: '方法与习惯',
       score: methodScore(survey, answers),
       note: '高中到现在的学习效率，以及背单词和学英语的方式',
-      source: 'Q14 高中状态 + Q21 背单词 + Q19 怎么学'
+      source: 'Q17 高中状态 + Q27 背单词 + Q25 怎么学'
     },
     {
       key: 'info',
       label: '信息差',
       score: pick(optionIndex(survey, answers, 'q16'), INFO, 4),
       note: '对目标门槛、时间节点、报名规则的掌握程度',
-      source: 'Q16 信息差'
+      source: 'Q19 信息差'
     },
     {
       key: 'execution',
       label: '执行力',
       score: pick(optionIndex(survey, answers, 'q13'), EXECUTION, 4),
       note: '定了目标之后能不能落地、能坚持多久',
-      source: 'Q13 执行力'
+      source: 'Q16 执行力'
     },
     {
       key: 'environment',
       label: '环境氛围',
       score: pick(optionIndex(survey, answers, 'q12'), ENVIRONMENT, 4),
       note: '身边的人在做什么，对你是带动还是消耗',
-      source: 'Q12 环境氛围'
+      source: 'Q15 环境氛围'
     }
   ]
 

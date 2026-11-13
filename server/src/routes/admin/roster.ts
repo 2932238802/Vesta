@@ -2,7 +2,7 @@ import { Router, raw } from 'express'
 import { noStore } from '../../auth'
 import { db, newId, now } from '../../db'
 import { clampString, parseJson } from '../../util'
-import { ROSTER_CATEGORIES, localDateKey, rosterCategoryMatches, rosterStage } from './shared'
+import { ROSTER_CATEGORIES, localDateKey, reportModeOf, rosterCategoryMatches, rosterStage, surveyReportModes } from './shared'
 import type { RosterRow } from './shared'
 
 export const rosterRouter = Router()
@@ -25,7 +25,7 @@ rosterRouter.get('/roster', (req, res) => {
       `SELECT i.id AS invite_id, i.token, i.name, i.note, i.channel,
               i.created_at AS invite_created_at, i.opened_at, i.submitted_at, i.expires_at,
               i.group_id, g.name AS group_name,
-              s.id AS submission_id, s.slug, s.total, s.tier, s.claimed_at, s.slots,
+              s.id AS submission_id, s.survey_id, s.slug, s.total, s.tier, s.claimed_at, s.slots,
               s.contact_status, s.created_at AS submission_created_at
        FROM invites i
        LEFT JOIN submissions s ON s.invite_id = i.id
@@ -39,6 +39,8 @@ rosterRouter.get('/roster', (req, res) => {
     stage: rosterStage(row),
     date: localDateKey(row.invite_created_at)
   }))
+
+  const reportModes = surveyReportModes()
 
   const dateCounts = new Map<string, number>()
   for (const item of prepared) {
@@ -102,6 +104,7 @@ rosterRouter.get('/roster', (req, res) => {
         expiresAt: row.expires_at,
         total: row.total,
         tier: row.tier,
+        reportMode: row.submission_id ? reportModeOf(reportModes, row.survey_id) : null,
         claimed: Boolean(row.claimed_at),
         slots: parseJson<string[]>(row.slots, []),
         contactStatus: row.contact_status,

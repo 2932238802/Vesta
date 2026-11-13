@@ -203,6 +203,14 @@ function patchQ25SkipWhenSpeakingWell(questions: Survey['questions']): boolean {
   return true
 }
 
+/** Q5a 独立成题：去掉「仅当 Q5 选不想/没想清楚才显示」的条件。 */
+function patchQ5aIndependent(questions: Survey['questions']): boolean {
+  const q5a = questions.find((q) => q.id === 'q5a')
+  if (!q5a || !q5a.showIf) return false
+  delete q5a.showIf
+  return true
+}
+
 /** Q9「你的理想薪资」补回城市题后面（历史问卷里有这道选择题，改版时漏掉了）。 */
 function patchQ27Salary(questions: Survey['questions']): boolean {
   if (questions.some((q) => q.id === 'q27')) return false
@@ -255,6 +263,7 @@ function upgradeSurvey(survey: Survey): { survey: Survey; changed: boolean } {
       patchQ25Multi(patched) ||
       patchQ22Order(patched) ||
       patchQ25SkipWhenSpeakingWell(patched) ||
+      patchQ5aIndependent(patched) ||
       patchQ27Salary(patched) ||
       patchQ28Self(patched)
     return changed
