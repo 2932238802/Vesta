@@ -1,9 +1,11 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import compression from 'compression'
 import express from 'express'
 import type { NextFunction, Request, Response } from 'express'
 import { config } from './env'
+import { pruneEvents } from './db/events'
 import { log } from './log'
 import { adminRouter } from './routes/admin/index'
 import { publicRouter } from './routes/public'
@@ -91,6 +93,24 @@ app.use((req, res, next) => {
   next()
 })
 
+// 文本响应（HTML / JS / CSS / JSON）默认 gzip。必须挂在静态资源和所有路由之前。
+// 已压缩格式（图片 / zip / docx / pdf）不再压一遍；事件流不能缓冲。
+if (config.compress) {
+  app.use(
+    compression({
+      threshold: 1024,
+      level: 6,
+      filter: (req, res) => {
+        const type = String(res.getHeader('Content-Type') ?? '')
+        if (/^(image|audio|video)\//i.test(type)) return false
+        if (/zip|gzip|br|docx|pdf|octet-stream/i.test(type)) return false
+        if (type.startsWith('text/event-stream')) return false
+        return compression.filter(req, res)
+      }
+    })
+  )
+}
+
 app.use(express.json({ limit: '4mb' }))
 
 app.use('/api/admin', adminRouter)
@@ -159,7 +179,29 @@ const server = app.listen(config.port, () => {
     dataDir: config.dataDir,
     logLevel: config.logLevel
   })
+  pruneEventLogs()
+  // 单进程部署，不需要文件锁；unref 让定时器不阻止进程退出。
+  setInterval(pruneEventLogs, 24 * 60 * 60 * 1000).unref()
 })
+
+function pruneEventLogs(): void {
+  try {
+    const result = pruneEvents({
+      retentionDays: config.eventRetentionDays,
+      operationalRetentionDays: config.eventOperationalRetentionDays
+    })
+    if (result.business || result.operational) {
+      log.info('events.pruned', {
+        business: result.business,
+        operational: result.operational,
+        retentionDays: config.eventRetentionDays,
+        operationalRetentionDays: config.eventOperationalRetentionDays
+      })
+    }
+  } catch (error) {
+    log.error('events.prune_failed', { err: error })
+  }
+}
 
 server.on('error', (error: NodeJS.ErrnoException) => {
   log.error('server.start_failed', {

@@ -39,13 +39,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-
-export interface RowMenuItem {
-  key: string
-  label: string
-  danger?: boolean
-  disabled?: boolean
-}
+import type { RowMenuItem } from './row-menu'
 
 const props = withDefaults(defineProps<{ items: RowMenuItem[]; label?: string }>(), {
   label: '更多'

@@ -27,6 +27,11 @@ function read(name: string): string | undefined {
   return value && value.trim() ? value.trim() : undefined
 }
 
+function readDays(name: string, fallback: number): number {
+  const value = Number(read(name))
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback
+}
+
 const adminUser = read('ADMIN_USER') ?? ''
 const adminPassword = read('ADMIN_PASSWORD') ?? ''
 
@@ -53,6 +58,8 @@ if (isProd && authSecret.length < 24) {
 export const config = {
   isProd,
   logLevel,
+  // 文本响应默认 gzip。只有当前面已经有 Nginx/网关负责压缩、想省 Node CPU 时才设 COMPRESS=off。
+  compress: read('COMPRESS') !== 'off',
   // 仅显式 development 环境可用；npm start / 生产环境都不会开放免密登录。
   devGuestLogin: process.env.NODE_ENV === 'development' && read('DEV_GUEST_LOGIN') !== 'false',
   rootDir,
@@ -77,5 +84,8 @@ export const config = {
   deepseekModel: read('AI_MODEL') ?? read('DEEPSEEK_MODEL') ?? 'deepseek-chat',
   bochaApiKey: read('BOCHA_API_KEY'),
   bochaBaseUrl: read('BOCHA_BASE_URL') ?? '',
-  aiTimeoutMs: Number(read('AI_TIMEOUT_MS') ?? 240_000)
+  aiTimeoutMs: Number(read('AI_TIMEOUT_MS') ?? 240_000),
+  // 原始事件保留期；漏斗事实 event_facts 永久保留，不受影响。
+  eventRetentionDays: readDays('EVENT_RETENTION_DAYS', 180),
+  eventOperationalRetentionDays: readDays('EVENT_OPERATIONAL_RETENTION_DAYS', 365)
 }

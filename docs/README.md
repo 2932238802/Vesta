@@ -6,12 +6,36 @@ Vesta 是一套面向大学在读学生的问卷、报告与咨询辅助系统�
 
 - 产品版本基线 **v1.60**（2026-11-12 起算）。
 - 每完成一轮需求递增一个小版本：**v1.61、v1.62……**（两位数小版本，不进位到 v2）。
-- 已完成：v1.61 管理员界面交互优化、v1.62 前端拆包与巨型文件拆分、v1.63 检索届别改用当前年份、v1.64 仪表盘「每组完成」修复、v1.65 后台 doc 模式不再展示映射分数、v1.66 问卷题号重排、v1.67 英语块表述约束与生成校验、v1.68 英语块校验误伤与漏拦订正、v1.69 日志系统完善；后续从 **v1.70** 继续递增。
+- 已完成：v1.61 管理员界面交互优化、v1.62 前端拆包与巨型文件拆分、v1.63 检索届别改用当前年份、v1.64 仪表盘「每组完成」修复、v1.65 后台 doc 模式不再展示映射分数、v1.66 问卷题号重排、v1.67 英语块表述约束与生成校验、v1.68 英语块校验误伤与漏拦订正、v1.69 日志系统完善、v1.70 版本号同步与工程元数据规范、v1.71 文件规模约束与首批拆分、v1.72 文本响应 gzip 压缩、v1.73 events 保留与漏斗事实汇总、v1.74 学员名单按期次自动分组；后续从 **v1.75** 继续递增。
+- 根 `package.json` 的 `version` 是版本号的唯一事实源：产品 `v1.<n>` ↔ `1.<n>.0`（`major` 恒为 `1`、`patch` 恒为 `0`，当前为 `1.74.0`）。「已完成」这行写入当前最高版本后，`package.json` 必须与之相等；本轮已升版本、文档还没写完时最多领先 1 个版本。不一致时 `npm run check:version` 会让 `npm run verify` 失败。
+- `server/package.json`、`web/package.json` 是 workspace 成员，保持 `private` 且不带 `version`，避免三处版本号打架。
 - `docs/archive/` 里单个方案的「v1.0 / v1.1」是方案文档自身版本，与产品版本分开编号；每轮改动对应的产品版本号要写进 `development-history.md`。
+
+## 版本记录
+
+| 产品版本 | 日期 | commit | 内容摘要 |
+| --- | --- | --- | --- |
+| v1.60 | 2026-11-12 | — | 版本基线（此前需求未按产品小版本编号） |
+| v1.61 | 2026-11-12 | — | 管理员界面交互优化（实现散落在当日多个 UI 提交，未单独确认 commit） |
+| v1.62 | 2026-11-12 | `71bd1e7` | 前端拆包与巨型文件拆分 |
+| v1.63 | 2026-11-13 | `8207668` | 检索届别改用当前年份 |
+| v1.64 | 2026-11-13 | `8207668` | 仪表盘「每组完成」修复 |
+| v1.65 | 2026-11-13 | `dfd14a8` | 后台 doc 模式不再展示映射分数 |
+| v1.66 | 2026-11-13 | `dfd14a8` | 问卷题目独立与题号重排（Q1–Q28） |
+| v1.67 | 2026-11-13 | `d8fa36c` | 英语块表述约束与生成校验 |
+| v1.68 | 2026-11-13 | `d8fa36c` | 英语块校验误伤与漏拦订正（新增 `check:audit`） |
+| v1.69 | 2026-11-13 | `a8d7b84` | 日志系统完善（`reqId`、结构化日志、health 增强） |
+| v1.70 | 2026-11-13 | 待提交 | 版本号同步与工程元数据规范（`check:version`、`engines`、`.node-version`、部署元数据写入） |
+| v1.71 | 2026-11-13 | 待提交 | 文件规模约束与首批拆分（`check:size`、`web/src/api/`、`Submissions.vue`） |
+| v1.72 | 2026-11-13 | 待提交 | 文本响应 gzip 压缩（Node `compression` + Nginx 模板）；`client_max_body_size` 调到 25m |
+| v1.73 | 2026-11-13 | 待提交 | `events` 保留与清理：`event_facts` 漏斗汇总、180/365 天保留期、`check-events` |
+| v1.74 | 2026-11-13 | 待提交 | 学员名单按咨询期次自动分组（周三起算），移除自定义分组与日期筛选 |
+
+（只回填能确认 commit 的版本；`—` 表示基线之前没有单独提交。）
 
 ## 技术栈
 
-- 运行时：Node.js 24+
+- 运行时：Node.js 24+（`node:sqlite` 需要；仓库根 `.node-version` 与 `package.json` 的 `engines` 已声明）
 - 后端：Express + SQLite（`node:sqlite`）+ TypeScript / tsx
 - 前端：Vue 3 + Vue Router + Vite
 - 数据：单文件 SQLite，默认 `data/vesta.db`
@@ -24,7 +48,7 @@ server/src/        Express 服务、数据库、鉴权、AI 生成
 shared/src/        问卷、报告、咨询目的树等共享类型与算法
 web/src/           Vue 管理后台、问卷、报告页面
 deploy/            systemd、Nginx、安装与备份脚本
-scripts/           一次性导入与维护脚本
+scripts/           一次性导入与维护脚本；check-size.mjs + file-size-baseline.json 负责文件规模约束，check-version.mjs 负责版本号一致性，check-events.mjs 核对 events 与 event_facts
 docs/              架构、运行、历史、问卷口径与 Agent 交接文档
 docs/archive/      已作废的历史方案（只存档，不要照着实现）
 data/              本地数据库与备份（不提交 Git）
@@ -100,7 +124,7 @@ bash update.sh
 - **L2 依赖**：对比拉取前后的 `package-lock.json`/`package.json` 哈希；有变化时执行 `npm ci`，并用 `npm ls --depth=0` 检查 missing/invalid。
 - **L3 构建**：构建前移走旧 `web/dist`，构建后断言所有产物晚于本次构建开始；构建失败会恢复上一版 `dist`，不会带着旧产物重启。
 - **L4 进程**：重启后读取 systemd `ExecMainStartTimestampMonotonic` / PM2 `pm_uptime` / Docker `StartedAt`，断言进程启动时间晚于构建完成。
-- **L5 对外**：`/api/health` 返回 200 且时间戳晚于本次重启；再校验首页引用了本次构建的 JS 指纹。
+- **L5 对外**：`/api/health` 返回 200 且时间戳晚于本次重启；再校验首页引用了本次构建的 JS 指纹。重启前脚本会把本次 `HEAD` 写入 `data/deploy-info.json`（`commit` / `deployedAt` / `productVersion`），`/api/health` 的 `commit` 因此能返回真实短 SHA，L5 从「没有版本字段就降级」变成「版本与 HEAD 强一致」。
 
 如果本次拉取更新了 `update.sh` 本身，脚本会用新脚本重新执行（`--resumed` 防止循环）。脚本也会用 `flock` 防止并发执行。
 
@@ -118,8 +142,9 @@ bash update.sh --mode=systemd  # 覆盖 DEPLOY_MODE
 说明：
 
 - `DEPLOY_MODE=none` 只构建、不重启，无法完成 L4/L5 校验，因此脚本会在构建后明确失败退出；需要验证运行版本时请改用 `systemd` / `pm2` / `docker`。
-- 当前 `/api/health` 返回 `{ ok, time, db, uptimeSec, commit, appVersion }`。`commit` / `appVersion` 从 `data/deploy-info.json` 读取（第 9 篇落地后由 `update.sh` 写入）；没有这个文件时两者为空串，L5 仍走“HTTP 200 + 重启后时间戳 + 前端构建指纹”的降级校验。
+- 当前 `/api/health` 返回 `{ ok, time, db, uptimeSec, commit, appVersion }`。`commit` / `appVersion` 从 `data/deploy-info.json` 读取（`update.sh` 重启前覆盖写入；文件不存在时两者为空串，L5 仍走“HTTP 200 + 重启后时间戳 + 前端构建指纹”的降级校验）。`appVersion` 故意不叫 `version`：L5 会把 `version` 当作 commit 比对，semver 会直接导致部署失败。
 - 服务器上如果还是很久以前的 `update.sh`（不认识上述参数、也不会自动拉取），先手动执行一次 `git pull`；之后日常只需 `bash update.sh`。
+- 文本响应（HTML / JS / CSS / JSON）默认由 Node 层 gzip（`compression`，阈值 1 KB，已压缩格式自动跳过）；`deploy/nginx.conf` 也同步开启了 gzip，两层同开是安全的。若前面已有网关负责压缩，可设 `COMPRESS=off` 省 Node CPU。
 - 失败时脚本会打印失败阶段、日志命令、数据库备份路径和回滚命令；健康检查失败还会自动带出最近 60 行服务日志。
 
 ## 常用环境变量
@@ -134,6 +159,9 @@ bash update.sh --mode=systemd  # 覆盖 DEPLOY_MODE
 | `CONTACT_KEY` | 联系方式加密密钥，必须长期保存 |
 | `PUBLIC_BASE_URL` | 对外链接前缀，如 `https://example.com` |
 | `TRUST_PROXY` | 位于反向代理后时设为 `true` |
+| `COMPRESS` | 设为 `off` 关闭 Node 层 gzip；默认开启，只有前面已有网关压缩时才关 |
+| `EVENT_RETENTION_DAYS` | 业务埋点（`quiz_*` / `group_complete` 等）保留天数，默认 `180` |
+| `EVENT_OPERATIONAL_RETENTION_DAYS` | 运维事件（`ai_report_*` / `submission_deleted`）保留天数，默认 `365` |
 | `SESSION_TTL` | 登录有效期秒数，默认 30 天 |
 | `AI_API_KEY` | AI 报告与咨询稿生成密钥；也兼容旧的 `DEEPSEEK_API_KEY` |
 | `AI_BASE_URL` | OpenAI 兼容接口地址；也兼容 `DEEPSEEK_BASE_URL`。未配置时启动会明确 warning，AI 功能不可用 |
@@ -177,6 +205,8 @@ node deploy/backup.mjs data/vesta.db data/backups/vesta-YYYYMMDD-HHMMSS.db
 `update.sh` 会自动执行同样的备份，并只保留最近 14 份。恢复前先停止服务，再整体替换数据库文件。
 
 `search_cache` 只存博查检索结果（检索词 → 结果 JSON，7 天有效，写入时顺手清理过期行）。它和其他表一样进备份；直接清空也不影响问卷、答卷和报告，只是下一次检索会重新付费。
+
+`events` 是问卷漏斗的原始埋点，会按时间自动清理：业务埋点默认保留 **180 天**（`EVENT_RETENTION_DAYS`），`ai_report_*` / `submission_deleted` 等运维事件默认保留 **365 天**（`EVENT_OPERATIONAL_RETENTION_DAYS`）。后台概览的漏斗数字不读原始事件，而是读永久保留的汇总表 `event_facts`；清理前后数字不变。启动时清理一次，之后每 24 小时一次，每批 5000 行，不做 `VACUUM`。
 
 ## 咨询稿导入
 
@@ -226,6 +256,8 @@ npx tsx scripts/import-collections-docx.ts zxg --write
 - 咨询：写咨询稿、咨询树、收藏栏。
 - 简历：简历收集。
 
+学员名单按咨询期次自动分组：一期 = 周三 00:00 → 下周二 23:59:59（固定 Asia/Shanghai），归期看邀请链接创建时间；顶部只保留期次 chip（全部 / 本期 / 上期 / 更早），不再有自定义分组和日期筛选。导出 CSV 跟随当前期次与状态。
+
 公开页面：
 
 - `/i/:token`：邀请页与问卷入口。
@@ -235,12 +267,15 @@ npx tsx scripts/import-collections-docx.ts zxg --write
 ## 常用验证
 
 ```bash
-npx tsx shared/src/date.cases.ts        # 日历时间距离用例
+npm run check:dates                     # 日历时间距离 + 咨询期次用例
 npx tsx server/src/ai/doc-audit.cases.ts # 报告文本审计用例（考研 × 听力 / 口语 / 英语时长）
-npm run verify                          # check:docs + check:dates + check:audit + typecheck + build
+npm run check:size                      # 文件规模检查（基线只减不增，新文件 ≤400 行）
+npm run check:version                   # 版本号一致性（package.json ↔ docs/README.md「已完成」）
+node scripts/check-events.mjs           # events 与 event_facts 漏斗事实一致性（只读，手动跑）
+npm run verify                          # check:docs + check:size + check:version + check:dates + check:audit + typecheck + build
 ```
 
-修改后端后至少执行 `typecheck`；修改前端后还要执行 `build`。当前没有统一的自动化测试套件，验收以类型检查、构建、时间用例、报告文本审计用例和实际页面走查为准。
+修改后端后至少执行 `typecheck`；修改前端后还要执行 `build`。当前没有统一的自动化测试套件，验收以类型检查、构建、时间用例、报告文本审计、文件规模检查、版本号一致性和实际页面走查为准。
 
 ## 运行与排障
 

@@ -1,0 +1,260 @@
+
+.submissions-page .cycle-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding-bottom: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.submissions-page .cycle-bar::-webkit-scrollbar {
+  display: none;
+}
+.submissions-page .cycle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.submissions-page .cycle-chip:hover {
+  border-color: var(--ink-3);
+}
+.submissions-page .cycle-chip.current:not(.on) {
+  border-color: rgba(47, 93, 70, 0.35);
+  color: var(--accent);
+}
+.submissions-page .cycle-chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.submissions-page .cycle-chip b {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.submissions-page .cycle-chip.on b {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.submissions-page .category-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.submissions-page .category-tabs::-webkit-scrollbar {
+  display: none;
+}
+.submissions-page .category-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.submissions-page .category-tab:hover {
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.025);
+}
+.submissions-page .category-tab.on {
+  color: var(--accent);
+  border-color: rgba(47, 93, 70, 0.2);
+  background: rgba(47, 93, 70, 0.07);
+}
+.submissions-page .category-tab b {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.055);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 18px;
+  text-align: center;
+}
+.submissions-page .category-tab.on b {
+  background: rgba(47, 93, 70, 0.12);
+}
+
+.submissions-page .toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.submissions-page .selection-bar {
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  margin-bottom: 12px;
+}
+.submissions-page .selection-bar strong {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+@media (min-width: 901px) {
+.submissions-page .list-toolbar,
+.submissions-page .selection-bar {
+    position: sticky;
+    top: 0;
+    z-index: 18;
+  }
+.submissions-page .list-toolbar {
+    margin: -8px 0 6px;
+    padding: 8px 0;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+  }
+.submissions-page .selection-bar {
+    margin: -8px 0 12px;
+  }
+}
+.submissions-page .search {
+  max-width: 300px;
+  height: 40px;
+  font-size: 13.5px;
+  padding: 0 14px;
+}
+.submissions-page .export-btn {
+  flex: 0 0 auto;
+}
+.submissions-page .spacer {
+  flex: 1;
+}
+.submissions-page .table-card {
+  overflow: hidden;
+}
+.submissions-page .table-scroll {
+  overflow: auto;
+}
+/* 窄屏时让表格横向滚动，而不是把姓名 / 时间列挤成竖排。 */
+.submissions-page .roster-table {
+  min-width: 720px;
+}
+
+@media (min-width: 901px) {
+.submissions-page .table-scroll {
+    max-height: calc(100vh - 230px);
+  }
+.submissions-page .roster-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface);
+    box-shadow: inset 0 -1px 0 var(--line);
+  }
+}
+.submissions-page .name {
+  font-size: 13.5px;
+}
+.submissions-page .note {
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.submissions-page .channel {
+  font-size: 11px;
+}
+.submissions-page .num {
+  margin-left: 6px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.submissions-page .slots {
+  margin-top: 4px;
+  max-width: 190px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.submissions-page .status-select {
+  width: 112px;
+  height: 32px;
+  font-size: 11.5px;
+  padding: 0 8px;
+}
+.submissions-page .date-stack {
+  display: grid;
+  gap: 2px;
+  min-width: 92px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.submissions-page .date-stack span {
+  display: inline-block;
+  width: 28px;
+  color: var(--ink-3);
+}
+.submissions-page .row-link {
+  cursor: pointer;
+}
+.submissions-page .roster-table tbody tr.row-link:focus-visible {
+  outline: 2px solid rgba(47, 93, 70, 0.55);
+  outline-offset: -2px;
+}
+.submissions-page .actions-col {
+  width: 64px;
+  text-align: right;
+}
+.submissions-page .selection-bar .danger-btn {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+.submissions-page .select-col {
+  width: 34px;
+  padding-right: 0 !important;
+}
+.submissions-page .select-col input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.submissions-page .roster-table tbody tr.picked td {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.submissions-page .roster-table tbody tr td {
+  transition: background 0.15s ease;
+}
+.submissions-page .empty-action {
+  margin-top: 16px;
+}
+
+@media (max-width: 760px) {
+.submissions-page .toolbar {
+    flex-wrap: wrap;
+  }
+.submissions-page .search {
+    max-width: none;
+    flex: 1;
+    min-width: 160px;
+  }
+.submissions-page .spacer {
+    display: none;
+  }
+}

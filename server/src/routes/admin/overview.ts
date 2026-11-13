@@ -2,6 +2,7 @@ import { Router } from 'express'
 import type { Answers } from '../../../../shared/src/types'
 import { noStore } from '../../auth'
 import { db, getActiveSurvey } from '../../db'
+import { countCompletedGroups, countStarted, exitDropoff } from '../../db/events'
 import { parseJson } from '../../util'
 
 export const overviewRouter = Router()
@@ -27,44 +28,15 @@ overviewRouter.get('/overview', (req, res) => {
 
   const survey = getActiveSurvey()
 
-  const groupEvents = db
-    .prepare("SELECT invite_id, payload FROM events WHERE type = 'group_complete'")
-    .all() as { invite_id: string; payload: string }[]
-  const groupById = new Map<string, Set<string>>()
-  for (const event of groupEvents) {
-    const payload = parseJson<{ groupId?: string }>(event.payload, {})
-    if (!payload.groupId) continue
-    if (!groupById.has(payload.groupId)) groupById.set(payload.groupId, new Set())
-    groupById.get(payload.groupId)!.add(event.invite_id)
-  }
-
-  const startedEvents = db
-    .prepare("SELECT COUNT(DISTINCT invite_id) AS count FROM events WHERE type = 'quiz_start'")
-    .get() as { count: number }
-
-  // 每题流失：只看最终没有提交的人，记录他们最后停在哪道题。
-  const exitEvents = db
-    .prepare("SELECT invite_id, payload FROM events WHERE type = 'quiz_exit' ORDER BY id")
-    .all() as { invite_id: string; payload: string }[]
+  // 漏斗三项统一读 event_facts（O(邀请数)），原始 events 只作为可清理的明细。
+  const groupById = countCompletedGroups()
+  const startedCount = countStarted()
   const submittedInviteIds = new Set(
     (
       db.prepare('SELECT invite_id FROM submissions').all() as { invite_id: string }[]
     ).map((row) => row.invite_id)
   )
-  const lastExit = new Map<string, { questionId: string; step: number }>()
-  for (const event of exitEvents) {
-    if (!event.invite_id || submittedInviteIds.has(event.invite_id)) continue
-    const payload = parseJson<{ questionId?: string; step?: number }>(event.payload, {})
-    if (typeof payload.questionId !== 'string' || !payload.questionId) continue
-    lastExit.set(event.invite_id, {
-      questionId: payload.questionId,
-      step: typeof payload.step === 'number' ? payload.step : 0
-    })
-  }
-  const dropoff = new Map<string, number>()
-  for (const exit of lastExit.values()) {
-    dropoff.set(exit.questionId, (dropoff.get(exit.questionId) ?? 0) + 1)
-  }
+  const dropoff = exitDropoff(submittedInviteIds)
 
   const submissions = db
     .prepare('SELECT answers, timing, created_at, total, tier FROM submissions')
@@ -94,7 +66,7 @@ overviewRouter.get('/overview', (req, res) => {
   }
 
   const total = submissions.length || 1
-  const startedTotal = startedEvents.count || 1
+  const startedTotal = startedCount || 1
   const questions = survey.questions.map((question) => {
     const bucket = dwell.get(question.id)
     const dropoffCount = dropoff.get(question.id) ?? 0
@@ -142,12 +114,12 @@ overviewRouter.get('/overview', (req, res) => {
       completion: invitesCount ? Math.round((submittedCount / invitesCount) * 100) : 0
     },
     funnel: {
-      started: startedEvents.count,
+      started: startedCount,
       groups: survey.groups.map((group) => ({
         id: group.id,
         code: group.code,
         title: group.title,
-        completed: groupById.get(group.id)?.size ?? 0
+        completed: groupById.get(group.id) ?? 0
       }))
     },
     daily: days,

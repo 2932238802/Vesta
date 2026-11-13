@@ -4,6 +4,62 @@
 
 ## 本轮（2026-11-13）
 
+### 学员名单按期次自动分组（2026-11-13，产品版本 v1.74）
+
+- 依据：`docs/archive/20261113/12-学员名单按期次自动分组-开发文档.md` v1.0。在野一周一期带学员，「管理分组 + 勾选 + 移到分组」和「可涂色日期筛选」两套语义重叠的交互太重；本期把自定义分组与日期筛选整块移除。
+- 口径：一期 = 周三 00:00 → 下周二 23:59:59（固定 Asia/Shanghai）；归期只看 `invites.created_at`，学员晚几天提交不跳期；期次 chip 只写日期区间（`11/11–11/17`），不引入「第 N 期」。
+- 算法：新增 `shared/src/cycle.ts`（`cycleStartKey` / `cycleRange` / `cycleLabel` / `currentCycleKey`）与 `shared/src/cycle.cases.ts`（15 组边界 + 区间 / 文案 / 无效输入）；`npm run check:dates` 现在同时跑时间距离与期次用例。
+- 接口：`GET /api/admin/roster` 只认 `q` / `category` / `week`（`YYYY-MM-DD` 或 `all`），返回 `roster` / `counts` / `weeks` / `currentWeek`，每行带 `week`；`weeks` 按 q 过滤后的全部记录聚合、倒序、本期永远在列。删除 7 个分组 / 日期写接口（`groups`、`assign`、`dates`），保留 `batch-delete`。CSV 导出支持 `week` + `category`。
+- 前端：新增 `RosterCycleBar.vue`（全部 + 期次 chip，本期/上期前缀，横向滚动并自动把本期滚进可视区）；`Submissions.vue` 删掉 `RosterGroupBar` / `RosterGroupPanel` / `RosterDateFilter`；工具栏选中后只留「取消选择 / 批量删除」；表格删掉分组标签、日期底色和日期圆点；空状态改期次口径，本期搜不到时给「在全部期次里搜」。390px 下表格改为横向滚动（`min-width: 720px`），不挤竖排文字。
+- 数据：`roster_groups` / `roster_hidden_dates` / `invites.group_id` 原样保留、不再读写；无数据库变更、无迁移、无需备份改库。旧链接 `?group=` / `?dates=` 直接忽略、清出 URL，并回到「全部期次」。
+- 验证：`npm run verify` 全绿。临时 `DATA_DIR` + 8819 端口造 4 条邀请（10/29、11/10、11/11、11/12）+ 1 份答卷，API 实测：本期 2 人、上期 1 人、10/28 期 1 人，`weeks` 倒序且本期标记正确，CSV 只导出当前期次。Playwright 走查：默认选中「本期」、chip 文案「全部 4 / 本期 11/11–11/17 2 / 上期 11/04–11/10 1 / 10/28–11/03 1」；切上期表格与 tab 计数同步；本期搜上期学员出现「在全部期次里搜」，点击后命中；勾选后无「移到分组」；旧链接不报错且按全部期次显示、URL 被清理；390px 无页面横向溢出、期次条可横向滚动、表格可横向滚动；控制台仅有生产环境登录页请求 `/api/admin/dev-login` 的既有 404。
+- 未做 / 已知：`GET /roster` 仍一次取 1000 行再内存过滤，超量老期次可能缺记录；周二提前建下一期链接会算进上一期（按口径实现，二期再说）；旧自定义分组数据不可见但可回滚。
+
+### events 保留与漏斗事实汇总（2026-11-13，产品版本 v1.73）
+
+- 依据：`docs/archive/20261113/11-events表保留与清理-开发文档.md` v1.0。`events` 只增不删，后台概览每次全表读 `group_complete` / `quiz_exit`；但漏斗数字依赖历史事件，不能直接删。
+- 汇总表：新增 `event_facts`（`invite_id, kind, key, at` 主键 + 内部 `seq`），永久保留；`start` 只记首次、`group` 按 groupId 去重、`exit` 每题留最后一次。`seq` 存原始事件 id，用于同一毫秒内多条 exit 的先后判定（旧逻辑按 id 取最后一条）。
+- 写入：`recordEvent()` 返回 `boolean`，原始事件与事实在同一处写入；`POST /api/events` 也走它。原始事件失败记 `events.insert_failed`，事实失败记 `events.fact_failed`，不再静默吞掉事实错误。
+- 回填：`backfillEventFacts()` 随启动迁移执行，SQL `json_extract` 为主、JS 逐行为兜底，`settings.events_facts_backfilled` 标记保证可重复执行。
+- 概览：`overview.ts` 的开始人数 / 每组完成 / 每题流失改读 `event_facts`，输出 JSON 不变，全表 `ORDER BY id` 消失。
+- 清理：业务埋点默认 180 天（`EVENT_RETENTION_DAYS`），`ai_report_*` / `submission_deleted` 默认 365 天（`EVENT_OPERATIONAL_RETENTION_DAYS`）；启动清理一次 + 每 24 小时一次，每批 5000 行，不 VACUUM。
+- 新增 `scripts/check-events.mjs`：只读比较保留窗口内的原始事件与事实（start / group / 最后流失题），不一致退出码 1；不接入 `verify`（需要真实数据库）。
+- 验证：临时 `DATA_DIR` 构造数据，回填前后漏斗完全一致（开始 3 / p1 2 / p2 1 / dropoff a2=1、a3=1）；重复回填行数不变；清理删旧留新（200 天业务、400 天运维删除；300 天运维、100 天业务保留），第二次清理 0 行，事实与漏斗不变；`GET /api/admin/overview` 返回 `started=3 / p1=2 / p2=1`；`check-events` 正反例通过。`npm run verify` 全绿。
+- 未做：真实生产库回填（部署时随启动自动执行）；10 万条合成事件的响应时间基准未单独记录。
+
+### 文本响应 gzip 压缩（2026-11-13，产品版本 v1.72）
+
+- 依据：`docs/archive/20261113/10-gzip压缩-开发文档.md` v1.0。线上 Vesta 在 `:8082` 由 Node 直连（`47.111.175.191:80` 的 Nginx 只管门户页），所以压缩必须做在 Node 层；此前 HTML / JS / CSS / JSON 全是明文。
+- 应用层：`server/src/index.ts` 在安全响应头之后、`express.json()` 与所有路由之前挂 `compression`，`threshold: 1024`、`level: 6`；自定义 `filter` 排除 `image|audio|video/*`、`zip|gzip|br|docx|pdf|octet-stream` 和 `text/event-stream`，其余交给 `compression.filter`。`Vary: Accept-Encoding` 由中间件自动添加。
+- 依赖：`server/package.json` 加 `compression: ~1.7.4`、`@types/compression`。固定 1.7.x 是因为 1.8 会自动协商 Brotli（实测浏览器拿到 `Content-Encoding: br`），与文档「不做 Brotli」的边界冲突；`~` 防止以后 `npm install` 悄悄升到 1.8。
+- 开关：`server/src/env.ts` 增加 `compress: COMPRESS !== 'off'`，写入 `.env.example`；只有前面已有网关压缩时才关。
+- Nginx：`deploy/nginx.conf` 补 `gzip on / gzip_vary / gzip_comp_level 5 / gzip_min_length 1024 / gzip_proxied any / gzip_types`，并把 `client_max_body_size` 从 `1m` 调到 `25m`（简历上传允许 20MB，上反代后 1m 必然 413）。Node 与 Nginx 同开安全，上游已带 `Content-Encoding` 时 Nginx 会跳过。
+- 文档：`docs/README.md` 生产部署补 gzip 说明、环境变量表加 `COMPRESS`、已发布版本与「版本记录」更新；第 10 篇补实施记录。
+- 验证：`npm run typecheck` / `npm run build` / `npm run verify` 全绿。临时 `DATA_DIR` + 8816 端口起生产服务实测：`vendor-vue` JS 107,534 → 41,861 字节（−61%），`index-*.css` 10,633 → 3,276 字节（−69%），响应头 `Content-Encoding: gzip` + `Vary: Accept-Encoding`；`/api/health` 97 字节未压缩；`COMPRESS=off` 时同一资源返回 107,534 字节且无 `Content-Encoding`。Playwright 打开 `/admin/login`：所有 JS/CSS 均以 gzip 下发，页面正常渲染、无脚本报错（仅有的 404 是登录页请求 `/api/admin/dev-login`，生产环境本就不注册该路由，与本次改动无关）。未生成真实报告，报告页「保存图片 / PDF」未走查，留待上线后抽验。
+- 边界：不做 Brotli / 构建期预压缩；不压已压缩格式；不改缓存头、ETag、静态资源路径；不动 `update.sh` 五层校验。
+
+### 版本号同步与工程元数据规范（2026-11-13，产品版本 v1.70）
+
+- 依据：`docs/archive/20261113/9-版本号同步与工程元数据规范-开发文档.md` v1.0。用户要求 `package.json` 等文件的版本及时更新，并固化成日后开发规范。
+- 唯一事实源：根 `package.json` 的 `version`，格式 `1.<minor>.0`（`major` 恒 1、`patch` 恒 0），产品 `v1.<minor>` ↔ `1.<minor>.0`；`server` / `web` 是 workspace 成员，保持 `private` 不带 `version`。本轮实施时文档最高版本已是 v1.71（文件规模约束先落地），故 `package.json` 写 `1.71.0`，本次补齐的是 v1.70 的工程能力。
+- 校验：新增 `scripts/check-version.mjs`——`package.json` 必须匹配 semver 且 `major=1 / patch=0`；`docs/README.md`「已完成」行最大 `v1.<n>` 与 package minor 相等（package 领先 1 个版本给提示，落后或差 2 以上失败）；`development-history.md` 本轮小节最大版本不得大于 README。失败信息点名两处数字。`npm run check:version` 已接入 `npm run verify`。
+- 元数据：根 `package.json` 增加 `engines.node: ">=24.0.0"`；新增 `.node-version`（`24`）；`package-lock.json` 根版本同步为 `1.71.0`；`docs/README.md` 技术栈写明 Node 24+，新增「版本记录」表并回填 v1.60–v1.71。
+- 部署强校验：`update.sh` 在重启前覆盖写 `data/deploy-info.json`（`commit` / `deployedAt` / `productVersion`，路径跟随 `DATA_DIR`）；`/api/health` 的 `commit` / `appVersion` 由 `server/src/deploy-info.ts` 读取该文件。L5 从此能拿 `commit` 与 `git rev-parse --short=12 HEAD` 强比对；文件缺失时仍退回「200 + 时间戳 + 前端指纹」降级校验。`appVersion` 故意不叫 `version`，否则 L5 会把 semver 当 commit 比对。
+- 规范：`AGENTS.md`「交付」新增六步版本动作清单；`docs/agent-rules.md`「文档维护」新增版本号三处同步与 `check:version` 约束。
+- 验证：`npm run verify` 全绿（含新增 `check:version`）；正反例实测（`1.99.0` + 旧 README 必须失败并点名数字，改回通过）；临时 `DATA_DIR` 起服务验证 health 字段与文件缺失时的降级路径。未在真机执行 `bash update.sh`。
+- 边界：不引入 semantic-release / changesets，不自动发版；不给 `server` / `web` 加版本号；不改 `update.sh` 的 L1–L4 逻辑；前端页面不展示版本号。
+
+### 文件规模约束与首批拆分（2026-11-13，产品版本 v1.71）
+
+- 依据：`docs/archive/20261113/8-巨型文件拆分与约束-开发文档.md` v1.1。v1.62 拆过一轮但没有留下可执行约束，随后又出现 18 个 >600 行文件（日志改造后 `public.ts` 也到 613 行），最大 `Submissions.vue` 1591 行。
+- 约束：新增 `scripts/check-size.mjs` + `scripts/file-size-baseline.json`。整文件 600 软线 / 800 硬线；新增文件 400 硬线（用 git 判定未跟踪 / staged-added）；`.vue` 的 template / script / style 块 400 软线 / 600 硬线；基线内只减不增。`npm run check:size` 已接入 `npm run verify`。
+- 拆分 `web/src/api.ts`（959）→ `web/src/api/`：`request.ts`（token / ApiError / request / blob / upload）、`types.ts`（共享类型与后台接口类型）、`admin.ts`、`consult.ts`、`public.ts`；`api.ts` 保留 `{ ...adminApi, ...consultApi, ...publicApi }` 汇总与 re-export，所有 `import { api } from '@/api'` 不变。拆分前后 76 个方法名逐一核对一致。
+- 拆分 `web/src/views/admin/Submissions.vue`（1591 → 176）：`useRoster.ts`（取数 / 筛选 / 日期涂色 / 选择）、`useRosterActions.ts`（分组 CRUD / 行操作 / 批量 / CSV）、`rosterMeta.ts`（阶段与日期标签）、`RosterCategoryTabs.vue`、`RosterGroupBar.vue`、`RosterGroupPanel.vue`、`RosterDateFilter.vue`、`RosterToolbar.vue`、`RosterTable.vue`；样式收进 `submissions/shared.css`，用 `.submissions-page` 根类限定作用域、只在父组件引入一次，避免每个子组件重复打包。
+- 公共类型：`RowMenuItem` 从 `RowMenu.vue` 的 `<script setup>` 抽到 `web/src/components/row-menu.ts`，供 `.ts` composable 引用。
+- 文档：`docs/README.md` 更新已发布版本、`scripts/` 说明和验证命令；`AGENTS.md` / `docs/agent-rules.md` 新增文件规模约束；第 8 篇补实施记录与拆分前后行数表；归档索引第 8 项同步。
+- 验证：`npm run verify` 全绿。临时 `DATA_DIR` + 8801/8802 端口起独立服务，造 4 条邀请（不同日期）+ 1 份答卷，用 Playwright 走查 `/admin/submissions`：4 行、7 个分类、4 个日期块；未填写 3 行；选 1 个日期 1 行、取消恢复 4 行；日期管理面板展开 3 条、收起正常，全选/清空日期正常；新建分组并批量归类成功、行上显示分组标签；搜索「张三」1 行；CSV 下载成功；控制台错误 0；截图样式与拆分前一致。
+- 未做：P0 的 `ResumeCollection.vue`（1482）、`ReportView.vue`（1213）、`shared/src/doc.ts`（1404），以及 P1 / P2 文件；基线保留 18 条，后续继续只减不增。
+
 ### 日志系统完善（2026-11-13，产品版本 v1.69）
 
 - 依据：`docs/archive/20261113/7-日志系统完善-开发文档.md` v1.1。目标：任何一个用户可见的故障，都能用学生姓名 / 答卷 id / 请求 id / 时间在 1 分钟内定位到原因。该文档原计划 v1.68，已被英语块校验 Review 占用，本轮按版本约定顺延为 v1.69。

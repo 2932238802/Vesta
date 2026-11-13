@@ -40,6 +40,8 @@ usage() {
   L3 构建   web/dist 产物全部晚于本次构建开始，失败则恢复上一版 dist
   L4 进程   服务进程启动时间晚于构建完成时间
   L5 对外   /api/health 返回 200；首页引用本次构建的前端指纹
+            重启前会把本次 HEAD 写入 data/deploy-info.json，
+            /api/health 的 commit 据此与 HEAD 强比对（文件缺失时降级）
 
 注意：
   - 脚本会在拉取后检查 update.sh 是否变化；变化时自动用新脚本重新执行。
@@ -219,6 +221,8 @@ esac
 
 PORT="${PORT:-$(env_file_value PORT)}"
 PORT="${PORT:-8787}"
+DATA_DIR="${DATA_DIR:-$(env_file_value DATA_DIR)}"
+DATA_DIR="${DATA_DIR:-data}"
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
   echo "× 当前目录不是 git 仓库：$SCRIPT_DIR" >&2
@@ -568,6 +572,24 @@ case "$MODE" in
     fi
     ;;
 esac
+
+DEPLOY_INFO_FILE="$DATA_DIR/deploy-info.json"
+mkdir -p "$DATA_DIR"
+if ! DEPLOY_INFO_FILE="$DEPLOY_INFO_FILE" HEAD_SHORT="$HEAD_SHORT" node -e '
+const fs = require("fs")
+const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"))
+const payload = {
+  commit: process.env.HEAD_SHORT || "",
+  deployedAt: new Date().toISOString(),
+  productVersion: pkg.version || ""
+}
+const file = process.env.DEPLOY_INFO_FILE
+fs.writeFileSync(file + ".tmp", JSON.stringify(payload, null, 2) + "\n")
+fs.renameSync(file + ".tmp", file)
+'; then
+  fail_stage "L4 进程" "无法写入 $DEPLOY_INFO_FILE，/api/health 将无法证明运行版本"
+fi
+say "已写入部署元数据：$DEPLOY_INFO_FILE（commit $HEAD_SHORT）"
 
 RESTART_REQUEST_MS="$(epoch_ms)"
 RESTART_REQUEST_MONO_US="$(mono_us)"

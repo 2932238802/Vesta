@@ -3,6 +3,7 @@ import { defaultTemplate } from '../../../shared/src/template'
 import type { ReportTemplate, Survey } from '../../../shared/src/types'
 import { db } from './connection'
 import { getSetting, now, setSetting } from './core'
+import { backfillEventFacts } from './events'
 import { clearExpiredAdminSessions, migrateLegacyAdminSession } from './sessions'
 import { migrateReportSkill, migrateReportSkillTemplates } from './skill'
 import { log } from '../log'
@@ -14,6 +15,7 @@ function ensureInviteColumns(): void {
     )
   )
   if (!columns.has('group_id')) {
+    // 历史数据：界面已改为按期次自动分组，这一列只保留存量，不再读写。
     db.exec('ALTER TABLE invites ADD COLUMN group_id TEXT')
   }
 }
@@ -465,6 +467,8 @@ export function runMigrations(): void {
   ensureInviteColumns()
   ensureSubmissionColumns()
   ensureConsultColumns()
+  // 先把历史事件沉淀成漏斗事实，再允许后续按保留期清理原始事件。
+  backfillEventFacts()
   migrateLegacyAdminSession()
   clearExpiredAdminSessions()
   seed()

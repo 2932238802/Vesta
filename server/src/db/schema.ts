@@ -29,6 +29,8 @@ export function initSchema(): void {
   CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token);
   CREATE INDEX IF NOT EXISTS idx_invites_created ON invites(created_at DESC);
 
+  -- 历史数据：界面已改为按咨询期次自动分组，roster_groups / roster_hidden_dates
+  -- 与 invites.group_id 只保留存量，不再读写（见第 12 篇开发文档）。
   CREATE TABLE IF NOT EXISTS roster_groups (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -76,6 +78,19 @@ export function initSchema(): void {
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
+  CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at);
+  CREATE INDEX IF NOT EXISTS idx_events_invite ON events(invite_id);
+
+  -- 漏斗事实：从 events 沉淀出的长期数据，events 按保留期清理后后台数字不变。
+  CREATE TABLE IF NOT EXISTS event_facts (
+    invite_id TEXT NOT NULL,
+    kind      TEXT NOT NULL,              -- 'start' | 'group' | 'exit'
+    key       TEXT NOT NULL DEFAULT '',   -- group=groupId；exit=questionId；start 为空
+    at        TEXT NOT NULL,              -- 首次（start/group）或最后一次（exit）发生时间
+    seq       INTEGER NOT NULL DEFAULT 0, -- 原始事件 id；同一毫秒内的先后用它判定
+    PRIMARY KEY (invite_id, kind, key)
+  );
+  CREATE INDEX IF NOT EXISTS idx_event_facts_kind ON event_facts(kind, key);
 
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,

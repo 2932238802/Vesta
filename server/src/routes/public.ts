@@ -602,10 +602,10 @@ publicRouter.post(
     for (const event of events) {
       const type = typeof event?.type === 'string' ? event.type : ''
       if (!EVENT_TYPES.has(type)) continue
-      const payload = JSON.stringify(event?.payload ?? {}).slice(0, 2000)
-      db.prepare(
-        'INSERT INTO events (invite_id, type, payload, created_at) VALUES (?, ?, ?, ?)'
-      ).run(invite.id, type, payload, now())
+      const payload = event?.payload && typeof event.payload === 'object' ? event.payload : {}
+      const payloadJson = JSON.stringify(event?.payload ?? {}).slice(0, 2000)
+      // 与 recordEvent 走同一处写入，保证「有原始事件就一定有漏斗事实」。
+      recordEvent(invite.id, type, payload, payloadJson)
     }
 
     res.json({ ok: true })

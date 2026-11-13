@@ -2,11 +2,19 @@ import { Router, raw } from 'express'
 import type { Answers, ReportOverrides } from '../../../../shared/src/types'
 import { answerLabel } from '../../../../shared/src/report'
 import { computeScores } from '../../../../shared/src/scoring'
+import { cycleStartKey } from '../../../../shared/src/cycle'
 import { noStore } from '../../auth'
 import { db, getActiveSurvey, getSurvey, recordEvent } from '../../db'
 import { regenerateReport } from '../../ai/generate'
 import { clampString, decryptText, parseJson, toCsv } from '../../util'
-import { CONTACT_STATUSES, reportModeOf, surveyReportModes } from './shared'
+import {
+  CONTACT_STATUSES,
+  ROSTER_CATEGORIES,
+  reportModeOf,
+  rosterCategoryMatches,
+  rosterStage,
+  surveyReportModes
+} from './shared'
 import type { InviteRow, SubmissionRow } from './shared'
 
 export const submissionsRouter = Router()
@@ -14,9 +22,14 @@ export const submissionsRouter = Router()
 submissionsRouter.get('/submissions/export.csv', (req, res) => {
   noStore(res)
   const q = clampString(req.query.q, 80)
-  const rows = db
+  const weekParam = clampString(req.query.week, 20)
+  const week = /^\d{4}-\d{2}-\d{2}$/.test(weekParam) ? weekParam : 'all'
+  const requestedCategory = clampString(req.query.category, 20)
+  const category = ROSTER_CATEGORIES.has(requestedCategory) ? requestedCategory : ''
+  const allRows = db
     .prepare(
-      `SELECT s.*, i.name, i.note, i.channel
+      `SELECT s.*, i.name, i.note, i.channel,
+              i.created_at AS invite_created_at, i.opened_at, i.expires_at
        FROM submissions s JOIN invites i ON i.id = s.invite_id
        WHERE (? = '' OR i.name LIKE ? OR i.note LIKE ? OR i.channel LIKE ?)
        ORDER BY s.created_at DESC`
@@ -25,7 +38,23 @@ submissionsRouter.get('/submissions/export.csv', (req, res) => {
     name: string
     note: string
     channel: string
+    invite_created_at: string
+    opened_at: string | null
+    expires_at: string | null
   })[]
+
+  const rows = allRows.filter((row) => {
+    if (week !== 'all' && cycleStartKey(row.invite_created_at) !== week) return false
+    if (!category || category === 'all') return true
+    const stage = rosterStage({
+      submission_id: row.id,
+      claimed_at: row.claimed_at,
+      contact_status: row.contact_status,
+      expires_at: row.expires_at,
+      opened_at: row.opened_at
+    })
+    return rosterCategoryMatches(category, stage)
+  })
 
   const statusLabel: Record<string, string> = {
     new: '待联系',

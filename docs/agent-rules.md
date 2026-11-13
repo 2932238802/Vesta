@@ -64,6 +64,13 @@
 - 没有自动化测试时，至少完成类型检查、构建和关键页面手工走查。
 - 服务器更新入口是 `bash update.sh`（脚本自己拉取、校验、构建、重启）；生产服务由 systemd / PM2 / Docker 重启，不要用开发脚本替代。
 
+## 文件规模（2026-11-13 定）
+
+- 单个 `.ts` / `.vue` 文件：600 行软线（需要说明理由），800 行硬线（`npm run verify` 失败）；`.vue` 的 template / script / style 各自 400 / 600 行；新增文件硬线 400 行；单个函数 / 箭头函数体 80 行软线、120 行硬线（由评审人工判断，脚本不解析函数）。
+- 现有超大文件用 `scripts/file-size-baseline.json` 过渡：基线内只能下调、不能上调；新文件不建基线，直接按 400 行判。
+- 动一个 >600 行的文件前，先拆目标区域再加功能；>800 行禁止加功能，只能拆。不为凑行数搬运代码，拆分 commit 与功能 commit 分开，拆分验收标准是行为完全不变。
+- `npm run check:size` 已接入 `npm run verify`；调大基线视为违规，评审重点看基线 diff 必须变小。
+
 ## 能力不足时（2026-11-12 定）
 
 - 不熟的库 / 框架 API：先用 **context7 MCP** 查官方文档（`resolve-library-id` → `get-library-docs`），不凭记忆写。
@@ -76,5 +83,6 @@
 
 - 改动涉及架构、认证、数据模型、部署流程或已确认需求时，同步更新 `docs/`。
 - 产品版本从 v1.60 起算，每完成一轮需求递增一个小版本（v1.61、v1.62……）；在 `development-history.md` 对应小节注明产品版本号。方案文档自身的 v1.0 / v1.1 与产品版本分开编号（见 `docs/README.md`「版本约定」）。
+- **版本号三处同步**：根 `package.json` 的 `version` 是唯一事实源，产品 `v1.<minor>` ↔ `1.<minor>.0`（`major` 恒为 1、`patch` 恒为 0）；`docs/README.md` 的「已完成」行与「版本记录」表、`docs/development-history.md` 的本轮小节标题必须同步。`npm run check:version` 已接入 `npm run verify`，不一致会直接失败；不要为了通过去改脚本判定。
 - 用户的新要求如果推翻旧实现，要在 `development-history.md` 记录“何时、改了什么、为什么”，避免后续 Agent 又把旧逻辑加回来。
 - 开发设计文档统一放 `docs/archive/`；同一天的文档收进 `docs/archive/YYYYMMDD/`（如 `docs/archive/20261112/`），文件名按 `1-标题.md`、`2-标题.md` 依次递增。`docs/` 根目录只保留口径文档（`规划自测问卷-设计文档.md`、`consult-system.md`）与 `README.md` / `development-history.md` / `agent-rules.md`。

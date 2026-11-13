@@ -1,8 +1,8 @@
 # `events` 表保留策略与清理 · 开发文档
 
 > 版本：v1.0（2026-11-13）
-> 状态：**待实施**（本文只定方案，代码未动）
-> 对应产品版本：计划 **v1.73**（承接 v1.72 gzip；顺序调整时按 `docs/README.md` 重新编号）
+> 状态：**已实施**（代码在工作区，待提交；产品版本 v1.73）
+> 对应产品版本：**v1.73**（承接 v1.72 gzip）
 > 需求来源：用户 2026-11-13 要求——「`events` 表只增不删的优化」
 
 ---
@@ -199,12 +199,30 @@ ON CONFLICT(invite_id,kind,key) DO UPDATE SET at = excluded.at;
 
 回滚：表结构是纯新增（`CREATE TABLE IF NOT EXISTS`），回滚代码后旧查询仍然能读到未删的 180 天数据；如已删且需要历史，用备份库恢复。**不要**用 `DROP TABLE event_facts` 当回滚手段——先确认概览已切回旧查询。
 
-## 九、待确认
+## 九、待确认（已确认）
 
-1. 保留期 180 天是否合适？（后台是咨询业务，半年内的漏斗数据基本够用；要留一年就配 `EVENT_RETENTION_DAYS=365`）
-2. 是否接受「运维类事件（`ai_report_*`）也按同一保留期清理」？
-3. 概览页是否希望**另外**提供「近 7/30 天」筛选（那是新功能，不在本文范围，先记着）。
+1. **保留期 180 天**（用户 2026-11-13 选定）；要留一年可配 `EVENT_RETENTION_DAYS=365`。
+2. **运维事件单独 365 天**（用户 2026-11-13 选定）：`ai_report_*` / `submission_deleted` 走 `EVENT_OPERATIONAL_RETENTION_DAYS`，业务埋点走 `EVENT_RETENTION_DAYS`。
+3. 「近 7/30 天」筛选不在本次范围。
 
 ## 十、实施记录
 
-（待实施后补：commit、产品版本、回填前后漏斗对比、响应时间对比）
+2026-11-13 实施完成（产品版本 v1.73，代码在工作区，待提交）：
+
+- `server/src/db/schema.ts`：新增 `event_facts` 表（`invite_id, kind, key, at` 主键）与 `idx_events_created` / `idx_events_invite`。
+- **实施偏差**：`event_facts` 增加内部列 `seq`（原始事件 id）。原因是原始事件的 `created_at` 只有毫秒精度，同一毫秒内的多条 `quiz_exit` 靠 `at` 无法还原先后顺序；旧逻辑按 `id` 取最后一条。`seq` 只用于 exit 的先后判定（`ON CONFLICT ... WHERE excluded.seq > event_facts.seq`），不参与对外输出。
+- `server/src/db/events.ts`（新）：`factOfEvent()`、`recordFactFromEvent()`、`countStarted()`、`countCompletedGroups()`、`exitDropoff()`、`backfillEventFacts()`（SQL + JS 兜底、settings 标记可重复执行）、`pruneEvents()`（两档保留期、每批 5000 行、不做 VACUUM）。
+- `server/src/db/core.ts`：`recordEvent()` 返回 `boolean`，插入后用 `lastInsertRowid` 写事实；原始事件失败记 `events.insert_failed`，事实失败记 `events.fact_failed`。
+- `server/src/routes/public.ts`：`POST /api/events` 改为走 `recordEvent()`，payload 仍截断 2000 字，保证有原始事件就同步事实。
+- `server/src/routes/admin/overview.ts`：漏斗三项（开始人数 / 每组完成 / 每题流失）改读 `event_facts`，输出 JSON 结构不变，`ORDER BY id` 全表排序消失。
+- `server/src/db/migrations.ts`：启动时调用 `backfillEventFacts()`。
+- `server/src/index.ts`：启动后清理一次 + 每 24 小时一次（`setInterval(...).unref()`），失败记 `events.prune_failed`。
+- `server/src/env.ts` / `.env.example`：`EVENT_RETENTION_DAYS=180`、`EVENT_OPERATIONAL_RETENTION_DAYS=365`。
+- `scripts/check-events.mjs`：只读核对脚本，比较保留窗口内的原始事件与事实（start / group / 最后流失题），不一致退出码 1。
+- 验证（临时 `DATA_DIR`，未写仓库 `data/`）：
+  - 回填前后漏斗三项完全一致：开始 3、p1 2、p2 1、dropoff `a2=1, a3=1`（旧 JS 逻辑 vs 新 SQL/事实读法）。
+  - 回填连续执行两次，事实行数不变（10 行）。
+  - 清理：200 天前业务事件、400 天前运维事件被删；300 天前运维事件、100 天前业务事件保留；第二次清理 0 行；事实行数与漏斗数字不变。
+  - `GET /api/admin/overview` 实测：`started=3`、`p1=2`、`p2=1`，结构与改前一致。
+  - `scripts/check-events.mjs`：一致库退出 0；手工删掉一条 group 事实后退出 1 并点名。
+- 未做：在真实生产库上回填（部署时随启动自动执行）；10 万条合成事件的响应时间基准未单独记录（本地数据量太小，无参考价值）。

@@ -1,8 +1,8 @@
 # 开启 gzip 压缩 · 开发文档
 
 > 版本：v1.0（2026-11-13）
-> 状态：**待实施**（本文只定方案，代码未动）
-> 对应产品版本：计划 **v1.72**（承接 v1.71 巨型文件拆分；顺序调整时按 `docs/README.md` 重新编号）
+> 状态：**已实施**（代码在工作区，待提交；产品版本 v1.72）
+> 对应产品版本：**v1.72**（承接 v1.71 巨型文件拆分）
 > 需求来源：用户 2026-11-13 要求——「gzip 的实现」
 
 ---
@@ -168,12 +168,25 @@ gzip_types
 - 后台管理页懒加载 chunk 多在 19～26 kB：每个页面再省 60%；
 - 服务器带宽：具体量级待上线后看 Nginx/Node 的访问量，不再拍数字。
 
-## 九、待确认
+## 九、待确认（已确认）
 
 1. ~~线上到底有没有 Nginx？~~ **已确认（2026-11-13 实测）**：`47.111.175.191:80` 是 Nginx 1.28.3 上的「LosAngelous 个人服务控制台」门户页（该页已开 gzip）；**Vesta 本体在 `:8082` 由 Node 直连**，响应里没有 Nginx 痕迹。所以 §3.2 的 Nginx 段现在是**备用**，真正的修复是 §3.1 的 Node 层压缩。
-2. 是否接受新增一个运行时依赖 `compression`？（不接受的替代方案：自己用 `zlib.gzipSync` 写 40 行中间件，但没必要）
-3. `deploy/nginx.conf` 的 `client_max_body_size 1m` 与简历上传 20MB 冲突（`server/src/routes/admin/resumes.ts:80`），要不要**顺手一起改**成 `25m`？建议一起改，否则上了反代之后上传必然 413。
+2. **已确认**：接受新增运行时依赖 `compression`（用户 2026-11-13 选定）。实施时固定为 `~1.7.4`：1.8 会自动协商 Brotli，与本文「不做 Brotli」的边界冲突。
+3. **已确认**：`deploy/nginx.conf` 的 `client_max_body_size` 一并从 `1m` 调到 `25m`，避免上反代后简历上传 413。
 
 ## 十、实施记录
 
-（待实施后补：commit、产品版本、压缩前后实测数据、`update.sh` 结果）
+2026-11-13 实施完成（产品版本 v1.72，代码在工作区，待提交）：
+
+- `server/package.json`：`compression: ~1.7.4`、`@types/compression`（dev）。
+- `server/src/index.ts`：安全响应头之后、`express.json()` 与所有路由之前挂 `compression({ threshold: 1024, level: 6, filter })`；`filter` 排除 `image|audio|video/*`、`zip|gzip|br|docx|pdf|octet-stream`、`text/event-stream`。
+- `server/src/env.ts`：新增 `compress: read('COMPRESS') !== 'off'`；`.env.example` 补注释说明。
+- `deploy/nginx.conf`：补 `gzip on / gzip_vary / gzip_comp_level 5 / gzip_min_length 1024 / gzip_proxied any / gzip_types`，`gzip_static on` 留注释；`client_max_body_size 1m → 25m`。
+- `docs/README.md`：生产部署与常用环境变量补 gzip / `COMPRESS` 说明。
+- 实测（临时 `DATA_DIR`，生产模式，端口 8816）：
+  - `vendor-vue-*.js`：107,534 B（identity）→ 41,861 B（gzip），−61%；`index-*.css`：10,633 B → 3,276 B，−69%；响应头含 `Content-Encoding: gzip`、`Vary: Accept-Encoding`。
+  - `/api/health`：97 B，无 `Content-Encoding`（低于 1 KB 阈值）。
+  - `COMPRESS=off`：同一 JS 返回 107,534 B，无 `Content-Encoding`。
+  - Playwright 打开 `/admin/login`：`index-*.js`、`vendor-vue`、`Login-*.js`、`index-*.css` 均以 gzip 下发，页面正常渲染，无脚本错误；唯一的 404 是 `/api/admin/dev-login`（生产环境不注册该路由，属既有行为，与 gzip 无关）。
+- `npm run typecheck` / `npm run build` / `npm run verify` 全绿。
+- 未做：真实报告页的「保存图片 / 保存 PDF / 领取表单」走查（需要生成报告，避免 AI 费用），留待上线后抽验；真机 `bash update.sh` 未执行。

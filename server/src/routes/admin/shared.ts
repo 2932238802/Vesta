@@ -86,8 +86,15 @@ export interface RosterRow {
   slots: string | null
   contact_status: string | null
   submission_created_at: string | null
-  group_id: string | null
-  group_name: string | null
+}
+
+/** rosterStage 只需要这几列；名单行和 CSV 导出行都能直接传。 */
+export interface RosterStageInput {
+  submission_id: string | null
+  claimed_at: string | null
+  contact_status: string | null
+  expires_at: string | null
+  opened_at: string | null
 }
 
 export type RosterStage =
@@ -114,7 +121,7 @@ export const ROSTER_CATEGORIES = new Set([
   'done'
 ])
 
-export function rosterStage(row: RosterRow): RosterStage {
+export function rosterStage(row: RosterStageInput): RosterStage {
   if (row.submission_id) {
     if (!row.claimed_at) return 'unclaimed'
     if (
@@ -136,13 +143,6 @@ export function rosterCategoryMatches(category: string, stage: RosterStage): boo
     return stage === 'pending' || stage === 'opened' || stage === 'expired'
   }
   return category === stage
-}
-
-export function localDateKey(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const pad = (part: number) => String(part).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
 export function inviteStatus(row: InviteRow, slug: string | null): string {

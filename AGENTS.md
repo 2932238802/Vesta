@@ -33,6 +33,7 @@
 - 生产必须账号密码 + `AUTH_SECRET`；不改 `requireAdmin()` 绕过校验；免密登录只能绑显式 `NODE_ENV=development`。
 - 不提交 `.env`、`data/`、`web/dist/`、`zxg/`；不把真实密码、API Key、联系方式密钥写进代码或文档。
 - 后端业务链路必须用 `server/src/log.ts` 打结构化日志，带 `reqId` / `submissionId` / `runId` 等关联字段；禁止记录密码、密钥、联系方式、完整答卷和完整 AI 正文，不要用 `console.log` 绕过统一日志。
+- 文件规模：动一个 >600 行的文件前先拆目标区域再加功能，>800 行禁止加功能、只能拆；新文件 ≤400 行。不为行数而搬运，拆分 commit 与功能 commit 分开，验收标准是行为完全不变。基线见 `scripts/file-size-baseline.json`，只能下调。
 - 不动用户已经启动的 dev server；端口被占用先说明，征得同意再处理。
 
 ## 3. 交付前验证（必须全绿）
@@ -42,7 +43,8 @@
 | 后端 `server/` | `npm run typecheck` |
 | 前端 `web/` | `npm run typecheck && npm run build` |
 | 文档 / 问卷口径 | `npm run check:docs` |
-| 以上全部 | `npm run verify`（= check:docs + check:dates + typecheck + build） |
+| 版本号 / `package.json` | `npm run check:version` |
+| 以上全部 | `npm run verify`（= check:docs + check:size + check:version + check:dates + check:audit + typecheck + build） |
 
 - 没有自动化测试套件，关键页面必须手工走查：问卷一整套（含跳题）、报告页、后台列表。
 - **没验证过不要写「完成」**；拿不准就说「不确定」，给出已知信息和可选方案。
@@ -68,6 +70,15 @@
 - 提交前 `git status` 确认没有混入 `.env`、`data/`、`zxg/` 和构建产物。
 - 涉及部署的改动：说明是否需要 `bash update.sh`，以及回滚方式。
 - 收尾汇报：做了什么、改了哪些文件、对应文档哪一节、跑了什么验证、还剩什么。
+
+**版本动作清单（需求收尾必须依次做，漏了第 1–3 步 `check:version` 会让 `verify` 失败）：**
+
+1. 升根 `package.json` 的 `version` 为 `1.<minor+1>.0`（同一轮需求内多次提交不重复升版本，补丁并进下一轮）。
+2. `docs/README.md` 的「已完成：…」追加 `v1.<minor+1> <一句话>`，并在「版本记录」表加一行（日期、commit、摘要）。
+3. `docs/development-history.md` 的「本轮（YYYY-MM-DD）」加小节，标题带产品版本，写「改了 / 为什么 / 验证」。
+4. 对应 `docs/archive/YYYYMMDD/N-xxx.md` 顶部状态改为「已实施并提交（产品版本 vX）」，补「实施记录」。
+5. `docs/archive/YYYYMMDD/README.md` 索引表更新状态、版本、证据。
+6. `npm run verify` 全绿后提交。
 
 ## 6. 禁止事项（看到就停）
 
