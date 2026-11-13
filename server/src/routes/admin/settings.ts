@@ -144,7 +144,8 @@ settingsRouter.delete('/skill/templates/:id', (req, res) => {
 
 settingsRouter.put('/skill/active', (req, res) => {
   noStore(res)
-  const id = typeof req.body?.id === 'string' ? req.body.id.trim() : ''
+  const rawId = typeof req.body?.id === 'string' ? req.body.id.trim() : ''
+  const id = rawId.length <= 100 ? rawId : ''
   if (!id || !activateReportSkill(id)) {
     res.status(404).json({ error: '没有找到这个模板' })
     return

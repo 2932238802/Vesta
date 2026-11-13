@@ -1,6 +1,30 @@
-import { db, now } from '../../db'
+import type { Survey } from '../../../../shared/src/types'
+import { db, getActiveSurvey, now } from '../../db'
 
 export type ReportMode = 'doc' | 'ai'
+
+/**
+ * 一次请求内复用问卷数据，避免 CSV 导出按行重复查库 / 解析 JSON。
+ * `active` 只在找不到对应 survey_id 时作为回退，与原来的
+ * `getSurvey(row.survey_id) ?? getActiveSurvey()` 行为一致。
+ */
+export interface SurveyCache {
+  byId: Map<string, Survey>
+  active: Survey
+}
+
+export function surveyCache(): SurveyCache {
+  const rows = db.prepare('SELECT id, data FROM surveys').all() as { id: string; data: string }[]
+  const byId = new Map<string, Survey>()
+  for (const row of rows) {
+    try {
+      byId.set(row.id, JSON.parse(row.data) as Survey)
+    } catch {
+      // 问卷数据损坏时跳过；需要的行会回退到当前问卷。
+    }
+  }
+  return { byId, active: getActiveSurvey() }
+}
 
 /**
  * 一次请求内建答卷模式的缓存：surveys 表很小，按 survey_id 判断这份答卷是不是 doc 模式。
@@ -143,12 +167,6 @@ export function rosterCategoryMatches(category: string, stage: RosterStage): boo
     return stage === 'pending' || stage === 'opened' || stage === 'expired'
   }
   return category === stage
-}
-
-export function inviteStatus(row: InviteRow, slug: string | null): string {
-  if (slug) return 'submitted'
-  if (row.expires_at && row.expires_at <= now()) return 'expired'
-  return row.status
 }
 
 export function invitePath(token: string): string {

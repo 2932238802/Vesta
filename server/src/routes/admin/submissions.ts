@@ -13,6 +13,7 @@ import {
   reportModeOf,
   rosterCategoryMatches,
   rosterStage,
+  surveyCache,
   surveyReportModes
 } from './shared'
 import type { InviteRow, SubmissionRow } from './shared'
@@ -63,6 +64,9 @@ submissionsRouter.get('/submissions/export.csv', (req, res) => {
     done: '已完成'
   }
 
+  // 问卷数据一次读入，导出时按 survey_id 查缓存，避免每行一次查库。
+  const surveys = surveyCache()
+
   const csv = toCsv([
     [
       '姓名',
@@ -82,7 +86,7 @@ submissionsRouter.get('/submissions/export.csv', (req, res) => {
     ],
     ...rows.map((row) => {
       const answers = parseJson<Answers>(row.answers, {})
-      const survey = getSurvey(row.survey_id) ?? getActiveSurvey()
+      const survey = surveys.byId.get(row.survey_id) ?? surveys.active
       const target = Array.isArray(answers.a8)
         ? answers.a8.filter((item): item is string => typeof item === 'string').join(' / ')
         : ''

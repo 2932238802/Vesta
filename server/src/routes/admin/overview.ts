@@ -9,51 +9,52 @@ export const overviewRouter = Router()
 
 overviewRouter.get('/overview', (req, res) => {
   noStore(res)
-  const invitesCount = (
-    db.prepare('SELECT COUNT(*) AS count FROM invites').get() as { count: number }
-  ).count
-  const openedCount = (
-    db
-      .prepare('SELECT COUNT(*) AS count FROM invites WHERE opened_at IS NOT NULL')
-      .get() as { count: number }
-  ).count
-  const submittedCount = (
-    db.prepare('SELECT COUNT(*) AS count FROM submissions').get() as { count: number }
-  ).count
-  const claimedCount = (
-    db
-      .prepare('SELECT COUNT(*) AS count FROM submissions WHERE claimed_at IS NOT NULL')
-      .get() as { count: number }
-  ).count
+  // 计数合并成两次查询：同一张表不再各扫两遍。
+  const inviteStats = db
+    .prepare(
+      `SELECT COUNT(*) AS invites,
+              COALESCE(SUM(CASE WHEN opened_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS opened
+       FROM invites`
+    )
+    .get() as { invites: number; opened: number }
+  const submissionStats = db
+    .prepare(
+      `SELECT COUNT(*) AS submitted,
+              COALESCE(SUM(CASE WHEN claimed_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS claimed
+       FROM submissions`
+    )
+    .get() as { submitted: number; claimed: number }
 
   const survey = getActiveSurvey()
 
   // 漏斗三项统一读 event_facts（O(邀请数)），原始 events 只作为可清理的明细。
   const groupById = countCompletedGroups()
   const startedCount = countStarted()
-  const submittedInviteIds = new Set(
-    (
-      db.prepare('SELECT invite_id FROM submissions').all() as { invite_id: string }[]
-    ).map((row) => row.invite_id)
-  )
-  const dropoff = exitDropoff(submittedInviteIds)
 
+  // 答卷只读一次：流失排除、题目统计和近 14 天分布共用这批数据。
   const submissions = db
-    .prepare('SELECT answers, timing, created_at, total, tier FROM submissions')
-    .all() as { answers: string; timing: string; created_at: string; total: number; tier: string }[]
+    .prepare('SELECT answers, timing, created_at FROM submissions')
+    .all() as {
+    answers: string
+    timing: string
+    created_at: string
+  }[]
+  const dropoff = exitDropoff()
 
   const answered = new Map<string, number>()
   const dwell = new Map<string, { sum: number; count: number }>()
+  const questionIds = new Set(survey.questions.map((question) => question.id))
   for (const submission of submissions) {
     const answers = parseJson<Answers>(submission.answers, {})
-    for (const question of survey.questions) {
-      const value = answers[question.id]
+    // 只遍历答卷里实际存在的答案，不再为每份答卷跑完整份问卷。
+    for (const [id, value] of Object.entries(answers)) {
+      if (!questionIds.has(id)) continue
       const empty =
         value === null ||
         value === undefined ||
         (typeof value === 'string' && value.trim() === '') ||
         (Array.isArray(value) && value.length === 0)
-      if (!empty) answered.set(question.id, (answered.get(question.id) ?? 0) + 1)
+      if (!empty) answered.set(id, (answered.get(id) ?? 0) + 1)
     }
     const timing = parseJson<Record<string, number>>(submission.timing, {})
     for (const [id, ms] of Object.entries(timing)) {
@@ -106,12 +107,14 @@ overviewRouter.get('/overview', (req, res) => {
 
   res.json({
     stats: {
-      invites: invitesCount,
-      opened: openedCount,
-      submitted: submittedCount,
-      claimed: claimedCount,
-      pending: Math.max(invitesCount - submittedCount, 0),
-      completion: invitesCount ? Math.round((submittedCount / invitesCount) * 100) : 0
+      invites: inviteStats.invites,
+      opened: inviteStats.opened,
+      submitted: submissionStats.submitted,
+      claimed: submissionStats.claimed,
+      pending: Math.max(inviteStats.invites - submissionStats.submitted, 0),
+      completion: inviteStats.invites
+        ? Math.round((submissionStats.submitted / inviteStats.invites) * 100)
+        : 0
     },
     funnel: {
       started: startedCount,

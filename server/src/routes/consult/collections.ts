@@ -71,10 +71,16 @@ function rowToCollection(row: CollectionRow): ConsultCollectionItem {
   }
 }
 
-function readCollections(): ConsultCollectionItem[] {
-  const rows = db
-    .prepare('SELECT * FROM consult_collections ORDER BY pinned DESC, updated_at DESC')
-    .all() as unknown as CollectionRow[]
+function readCollections(kind = ''): ConsultCollectionItem[] {
+  const rows = kind
+    ? (db
+        .prepare(
+          'SELECT * FROM consult_collections WHERE kind = ? ORDER BY pinned DESC, updated_at DESC'
+        )
+        .all(kind) as unknown as CollectionRow[])
+    : (db
+        .prepare('SELECT * FROM consult_collections ORDER BY pinned DESC, updated_at DESC')
+        .all() as unknown as CollectionRow[])
   return rows.map(rowToCollection)
 }
 
@@ -182,10 +188,9 @@ function collectionPlainText(items: ConsultCollectionItem[]): string {
 }
 
 collectionsRouter.get('/collections', (req, res) => {
-  const kind = typeof req.query.kind === 'string' ? req.query.kind : ''
-  const query = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : ''
-  let items = readCollections()
-  if (kind) items = items.filter((item) => item.kind === kind)
+  const kind = clampString(req.query.kind, 20)
+  const query = clampString(req.query.q, 80).toLocaleLowerCase()
+  let items = readCollections(kind)
   if (query) {
     items = items.filter((item) =>
       [item.title, item.content, item.source, item.summary, item.url, item.tags.join(' ')]

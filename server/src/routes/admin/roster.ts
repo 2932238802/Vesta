@@ -136,8 +136,11 @@ rosterRouter.post('/roster/batch-delete', (req, res) => {
     ? (req.body.inviteIds as unknown[])
     : []
   const ids: string[] = []
-  for (const id of raw) {
-    if (typeof id !== 'string' || !id || ids.includes(id)) continue
+  for (const rawId of raw) {
+    if (typeof rawId !== 'string') continue
+    const id = rawId.trim()
+    // 邀请 id 很短；超过 100 字符的项直接跳过，避免截断后误删到另一个 id。
+    if (!id || id.length > 100 || ids.includes(id)) continue
     ids.push(id)
     if (ids.length >= 200) break
   }

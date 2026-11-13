@@ -83,21 +83,21 @@ export function countCompletedGroups(): Map<string, number> {
 }
 
 /** 每题流失：只看最终没有提交的人，取每人最后一次 exit 落在哪道题。 */
-export function exitDropoff(submittedInviteIds: Set<string>): Map<string, number> {
+export function exitDropoff(): Map<string, number> {
   const rows = db
-    .prepare("SELECT invite_id, key, seq FROM event_facts WHERE kind = 'exit'")
-    .all() as { invite_id: string; key: string; seq: number }[]
-  const last = new Map<string, { key: string; seq: number }>()
-  for (const row of rows) {
-    if (!row.invite_id || submittedInviteIds.has(row.invite_id)) continue
-    const previous = last.get(row.invite_id)
-    if (!previous || row.seq > previous.seq) last.set(row.invite_id, row)
-  }
-  const dropoff = new Map<string, number>()
-  for (const exit of last.values()) {
-    dropoff.set(exit.key, (dropoff.get(exit.key) ?? 0) + 1)
-  }
-  return dropoff
+    .prepare(
+      `SELECT latest.key AS key, COUNT(*) AS count
+       FROM (
+         SELECT invite_id, key, MAX(seq) AS seq
+         FROM event_facts
+         WHERE kind = 'exit'
+         GROUP BY invite_id
+       ) latest
+       WHERE NOT EXISTS (SELECT 1 FROM submissions s WHERE s.invite_id = latest.invite_id)
+       GROUP BY latest.key`
+    )
+    .all() as { key: string; count: number }[]
+  return new Map(rows.map((row) => [row.key, row.count]))
 }
 
 const BACKFILL_MARKER = 'events_facts_backfilled'

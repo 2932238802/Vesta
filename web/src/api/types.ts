@@ -5,7 +5,6 @@ export type {
   ConsultBeat,
   ConsultBeatKind,
   ConsultContext,
-  ConsultDecisionPath,
   ConsultForest,
   ConsultModuleOption,
   ConsultNode,
@@ -75,24 +74,6 @@ export interface Overview {
     createdAt: string
     reportPath: string
   }[]
-}
-
-export interface AdminInvite {
-  id: string
-  token: string
-  name: string
-  note: string
-  channel: string
-  status: string
-  createdAt: string
-  openedAt: string | null
-  submittedAt: string | null
-  expiresAt: string | null
-  reportSlug: string | null
-  reportPath: string | null
-  total: number | null
-  tier: string | null
-  claimed: boolean
 }
 
 export interface AdminSubmissionSummary {

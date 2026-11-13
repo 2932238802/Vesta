@@ -20,7 +20,13 @@ adminRouter.post(
     noStore(res)
     const username = typeof req.body?.username === 'string' ? req.body.username.trim() : ''
     const password = typeof req.body?.password === 'string' ? req.body.password : ''
-    if (!username || !password || !checkCredentials(username, password)) {
+    if (
+      !username ||
+      !password ||
+      username.length > 100 ||
+      password.length > 256 ||
+      !checkCredentials(username, password)
+    ) {
       res.status(401).json({ error: '账号或密码不对' })
       return
     }

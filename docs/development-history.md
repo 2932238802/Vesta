@@ -4,6 +4,20 @@
 
 ## 本轮（2026-11-13）
 
+### 管理端查询效率、死接口与限长清理（2026-11-13，产品版本 v1.75）
+
+- 依据：`docs/archive/20261113/13-管理端查询效率与死接口清理-开发文档.md` v1.0。目标是把后台概览、名单、答卷、设置等管理端查询里可验证的低效点消掉，同时按「`web/src` 实际调用」清理零消费方的管理端接口，并补齐请求字段 / 查询参数长度上限。
+- 概览（`server/src/routes/admin/overview.ts`）：`invites` / `submissions` 的四个独立 `COUNT(*)` 合并成两次聚合；`submissions` 由两次全表读取合并成一次；题目已答统计从「每份答卷遍历 28 题」改为只遍历答卷里实际存在的答案并过滤当前问卷题号；输出结构与百分比口径不变。
+- 每题流失（`server/src/db/events.ts`）：`exitDropoff()` 从「把 `event_facts` 所有 exit 行读进 Node 再取最后一条」改为 SQL 聚合（按邀请取 `MAX(seq)`，`NOT EXISTS` 排除已提交邀请，再按题 `COUNT`），不再随历史事件增长把明细搬进内存。
+- CSV（`server/src/routes/admin/submissions.ts`）：导出前一次性读取 `surveys` 建缓存，每行只做 Map 查找，消掉每行一次 `getSurvey()` 的 N+1；找不到对应问卷时仍回退当前问卷。
+- 名单（`server/src/routes/admin/roster.ts`）：复核了把 `q` 下推 SQL 的方案，但 SQL 先过滤会改变 `LIMIT 1000` 窗口外老记录的搜索语义，与「前端可见行为不变」冲突，因此**保留**原「先取 1000 行再内存过滤」；只补了批量删除单项 id 的 100 字符上限。
+- 收藏栏（`server/src/routes/consult/collections.ts`）：`kind` 下推 SQL（该列有索引），`q` / `kind` 查询参数补长度上限；`q` 的标题 / 正文 / 来源 / 摘要 / 链接 / 标签包含匹配口径不变。
+- 死接口：删除 `GET /api/admin/invites`（`api.invites` 零调用）与 13 条零消费方的咨询写接口——`PUT /consult/tree`、`POST /consult/trees`、`PUT/DELETE /consult/trees/:id`、`PUT /consult/trees/:id/active`、`PUT /consult/scoring`、`POST /consult/preview`、`POST /consult/import`、`POST /consult/decay`、`POST /consult/templates`、`PUT/DELETE /consult/templates/:id`、`PUT /consult/templates/active`；同步删除 `web/src/api/consult.ts` 的 13 个 client 方法与 `web/src/api/admin.ts` 的 `invites()`，清理 `AdminInvite`、`ConsultDecisionPath` 类型。`GET /consult/collections/bundle` 按 `docs/consult-system.md` 的明确非前端用途保留。
+- 限长：登录账号 / 密码分别 100 / 256 字符（超长仍返回「账号或密码不对」）；邀请 `expiresAt` 40 字符；批量建邀请改为边遍历边去重、满 100 个即停；批量删除超过 100 字符的 inviteId 直接跳过；`PUT /skill/active` 超过 100 字符按空 id 处理；收藏栏查询参数 20 / 80。已有 `clampString`、答卷备注 2000 / 覆盖文本 1500、模板名 40 / 内容 60000、简历 20MB 接收 + 10MB 业务上限均复核后保留。
+- 鉴权与路由顺序：`/login`、`/dev-login` 仍在 `requireAdmin()` 之前；剩余管理接口仍统一鉴权；`/submissions/export.csv` 仍在 `:id` 前。被删路由在带令牌时返回 404，不带令牌仍先返回 401。
+- 验证：`npm run verify` 全绿；`npm run check:size` 通过（147 个文件、18 条基线，未上调）。临时 `DATA_DIR`（1400 邀请 / 900 答卷 / 200 条流失事实）+ 8893/8894 端口对比改前（HEAD worktree）与改后：`overview`、`roster`（全部 / 搜索 / 指定期次）、`submissions`、`export.csv`、`survey` 响应逐字节一致；CSV 导出约 0.078–0.093s → 0.010–0.013s。`skill` / `consult` 仅因 worktree 未加载 `.env` 的 `searchConfigured` 与首次种子树 `updatedAt` 不同，结构与业务数据一致。Playwright 走查概览（已提交 900）、学员名单（本期 71 / 全部 1000 / 搜索「学员014」1 行）、答卷详情（28 题），控制台零错误。未调用真实 AI、未重新生成旧报告、未写仓库 `data/`。
+- 未做 / 已知：名单仍保留 `LIMIT 1000`，超过 1000 条时更早期次的名单和搜索仍可能缺记录（v1.74 已记录，本轮不改语义）；`collections/bundle` 保留但生成流程仍未接入；被删咨询接口的内部 helper（`writeTree`、`importPaths` 等）暂留，后续可随咨询模块整体清理。
+
 ### 学员名单按期次自动分组（2026-11-13，产品版本 v1.74）
 
 - 依据：`docs/archive/20261113/12-学员名单按期次自动分组-开发文档.md` v1.0。在野一周一期带学员，「管理分组 + 勾选 + 移到分组」和「可涂色日期筛选」两套语义重叠的交互太重；本期把自定义分组与日期筛选整块移除。

@@ -2,64 +2,9 @@ import { Router } from 'express'
 import { noStore } from '../../auth'
 import { db, getActiveSurvey, newId, now } from '../../db'
 import { clampString, randomToken } from '../../util'
-import { invitePath, inviteStatus } from './shared'
-import type { InviteRow } from './shared'
+import { invitePath } from './shared'
 
 export const invitesRouter = Router()
-
-invitesRouter.get('/invites', (req, res) => {
-  noStore(res)
-  const q = clampString(req.query.q, 80)
-  const status = clampString(req.query.status, 20)
-  const from = clampString(req.query.from, 40)
-  const to = clampString(req.query.to, 40)
-  const rows = db
-    .prepare(
-      `SELECT i.*, s.slug, s.total, s.tier, s.claimed_at
-       FROM invites i LEFT JOIN submissions s ON s.invite_id = i.id
-       WHERE (? = '' OR i.name LIKE ? OR i.note LIKE ? OR i.channel LIKE ?)
-         AND (? = '' OR i.created_at >= ?)
-         AND (? = '' OR i.created_at < ?)
-       ORDER BY i.created_at DESC LIMIT 300`
-    )
-    .all(
-      q,
-      `%${q}%`,
-      `%${q}%`,
-      `%${q}%`,
-      from,
-      from,
-      to,
-      to
-    ) as unknown as (InviteRow & {
-    slug: string | null
-    total: number | null
-    tier: string | null
-    claimed_at: string | null
-  })[]
-
-  const invites = rows
-    .map((row) => ({
-      id: row.id,
-      token: row.token,
-      name: row.name,
-      note: row.note,
-      channel: row.channel,
-      status: inviteStatus(row, row.slug),
-      createdAt: row.created_at,
-      openedAt: row.opened_at,
-      submittedAt: row.submitted_at,
-      expiresAt: row.expires_at,
-      reportSlug: row.slug,
-      reportPath: row.slug ? `/r/${row.slug}` : null,
-      total: row.total,
-      tier: row.tier,
-      claimed: Boolean(row.claimed_at)
-    }))
-    .filter((row) => !status || row.status === status)
-
-  res.json({ invites })
-})
 
 invitesRouter.post('/invites', (req, res) => {
   noStore(res)
@@ -70,14 +15,17 @@ invitesRouter.post('/invites', (req, res) => {
     : typeof body.name === 'string'
       ? [body.name]
       : []
-  const names = [
-    ...new Set(
-      nameList
-        .filter((name): name is string => typeof name === 'string')
-        .map((name) => name.trim().slice(0, 40))
-        .filter(Boolean)
-    )
-  ].slice(0, 100)
+  // 边遍历边去重，凑满 100 个立即停止；超大数组不再先完整建 Set。
+  const names: string[] = []
+  const seenNames = new Set<string>()
+  for (const value of nameList) {
+    if (typeof value !== 'string') continue
+    const name = value.trim().slice(0, 40)
+    if (!name || seenNames.has(name)) continue
+    seenNames.add(name)
+    names.push(name)
+    if (names.length >= 100) break
+  }
 
   if (names.length === 0) {
     res.status(400).json({ error: '至少填一个姓名' })
@@ -87,8 +35,9 @@ invitesRouter.post('/invites', (req, res) => {
   const note = clampString(body.note, 200)
   const channel = clampString(body.channel, 40)
   let expiresAt: string | null = null
-  if (typeof body.expiresAt === 'string' && body.expiresAt.trim()) {
-    const date = new Date(body.expiresAt)
+  const expiresInput = clampString(body.expiresAt, 40)
+  if (expiresInput) {
+    const date = new Date(expiresInput)
     if (Number.isNaN(date.getTime()) || date.getTime() <= Date.now()) {
       res.status(400).json({ error: '过期时间需要晚于现在' })
       return

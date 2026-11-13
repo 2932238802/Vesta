@@ -1,5 +1,4 @@
 import type {
-  AdminInvite,
   AdminReportSkillTemplate,
   AdminRosterRow,
   AdminRosterWeek,
@@ -53,17 +52,6 @@ export const adminApi = {
   },
   overview() {
     return request<Overview>('/api/admin/overview', { auth: true })
-  },
-  invites(params: { q?: string; status?: string; from?: string; to?: string } = {}) {
-    return request<{ invites: AdminInvite[] }>(
-      `/api/admin/invites${query({
-        q: params.q,
-        status: params.status,
-        from: params.from,
-        to: params.to
-      })}`,
-      { auth: true }
-    )
   },
   createInvites(body: {
     names?: string[]

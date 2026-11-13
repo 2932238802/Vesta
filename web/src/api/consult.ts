@@ -3,7 +3,6 @@ import type {
   ConsultCollectionInput,
   ConsultCollectionItem,
   ConsultContext,
-  ConsultDecisionPath,
   ConsultForest,
   ConsultOutcome,
   ConsultPurposePayload,
@@ -101,110 +100,6 @@ export const consultApi = {
   deleteConsultCollection(id: string) {
     return request<{ ok: true }>(`/api/admin/consult/collections/${encodeURIComponent(id)}`, {
       method: 'DELETE',
-      auth: true
-    })
-  },
-  saveConsultTree(tree: ConsultTree) {
-    return request<{ tree: ConsultTree; trees: ConsultTree[]; forest: ConsultForest }>(
-      '/api/admin/consult/tree',
-      {
-        method: 'PUT',
-        body: { tree },
-        auth: true
-      }
-    )
-  },
-  createConsultTree(name: string) {
-    return request<{ tree: ConsultTree; trees: ConsultTree[]; forest: ConsultForest }>(
-      '/api/admin/consult/trees',
-      {
-        method: 'POST',
-        body: { name },
-        auth: true
-      }
-    )
-  },
-  renameConsultTree(id: string, name: string) {
-    return request<{ tree: ConsultTree; trees: ConsultTree[]; forest: ConsultForest }>(
-      `/api/admin/consult/trees/${encodeURIComponent(id)}`,
-      { method: 'PUT', body: { name }, auth: true }
-    )
-  },
-  activateConsultTree(id: string) {
-    return request<{ tree: ConsultTree; trees: ConsultTree[]; forest: ConsultForest }>(
-      `/api/admin/consult/trees/${encodeURIComponent(id)}/active`,
-      { method: 'PUT', auth: true }
-    )
-  },
-  deleteConsultTree(id: string) {
-    return request<{ tree: ConsultTree; trees: ConsultTree[]; forest: ConsultForest }>(
-      `/api/admin/consult/trees/${encodeURIComponent(id)}`,
-      { method: 'DELETE', auth: true }
-    )
-  },
-  saveConsultScoring(scoring: ConsultScoringConfig) {
-    return request<{ scoring: ConsultScoringConfig }>('/api/admin/consult/scoring', {
-      method: 'PUT',
-      body: scoring,
-      auth: true
-    })
-  },
-  previewConsult(context: ConsultContext) {
-    return request<{ decision: ConsultDecisionPath }>('/api/admin/consult/preview', {
-      method: 'POST',
-      body: { context },
-      auth: true
-    })
-  },
-  importConsult(body: { text: string; treeId?: string; newTreeName?: string }) {
-    return request<{
-      tree: ConsultTree
-      trees: ConsultTree[]
-      forest: ConsultForest
-      imported: number
-      answers: number
-    }>('/api/admin/consult/import', {
-      method: 'POST',
-      body,
-      auth: true
-    })
-  },
-  decayConsult(factor: number) {
-    return request<{
-      tree: ConsultTree
-      trees: ConsultTree[]
-      forest: ConsultForest
-      factor: number
-    }>('/api/admin/consult/decay', {
-      method: 'POST',
-      body: { factor },
-      auth: true
-    })
-  },
-  createConsultTemplate(body: { name: string; sourceId?: string }) {
-    return request<{ template: ConsultTemplate }>('/api/admin/consult/templates', {
-      method: 'POST',
-      body,
-      auth: true
-    })
-  },
-  updateConsultTemplate(id: string, template: ConsultTemplate) {
-    return request<{ template: ConsultTemplate }>(`/api/admin/consult/templates/${id}`, {
-      method: 'PUT',
-      body: { template },
-      auth: true
-    })
-  },
-  deleteConsultTemplate(id: string) {
-    return request<{ ok: true }>(`/api/admin/consult/templates/${id}`, {
-      method: 'DELETE',
-      auth: true
-    })
-  },
-  activateConsultTemplate(id: string) {
-    return request<{ activeTemplateId: string }>('/api/admin/consult/templates/active', {
-      method: 'PUT',
-      body: { id },
       auth: true
     })
   },
