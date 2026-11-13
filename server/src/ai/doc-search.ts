@@ -7,7 +7,6 @@ import type {
 } from '../../../shared/src/types'
 import {
   cityInText,
-  cohortYear,
   friendlySearchError,
   MAJOR_CITIES,
   resolveTargetCity
@@ -319,13 +318,13 @@ function buildSearchSpecs(input: {
   role: string
   directions: JobDirection[]
   useDirections: boolean
-  cohort: number
+  year: number
 }): QuerySpec[] {
   const place = input.city ? `${input.city} ` : ''
-  // 用学生自己的毕业届别，不用系统当前年：否则大一新生会被搜成今年的应届。
+  // 年份固定取检索当年（2026 年搜「2026 届」），不按年级推算毕业届别。
   const fresh = (keyword: string, key?: string): QuerySpec => ({
     key,
-    query: `${place}${keyword} ${input.cohort} 届 招聘`.trim(),
+    query: `${place}${keyword} ${input.year} 届 招聘`.trim(),
     freshness: 'oneYear'
   })
   const specs: QuerySpec[] = []
@@ -373,7 +372,8 @@ export async function searchJobs(
   }
 
   const city = resolveTargetCity(survey, answers).city
-  const cohort = cohortYear(survey, answers)
+  // 届别年份直接用检索当年，不从 Q3 年级推算：问卷信息不足，产品也不需要。
+  const searchYear = new Date().getFullYear()
   const explicitRole = String(answers.q5a ?? '').trim()
   const major = String(answers.q2 ?? '').trim()
   // 学生没写具体岗位时，用专业方向去搜；不要把「专业+相关岗位」当岗位名。
@@ -395,7 +395,7 @@ export async function searchJobs(
 
   const directions = jobDirections(major)
   const useDirections = directions.length > 0 && !explicitRole
-  const primarySpecs = buildSearchSpecs({ city, role, directions, useDirections, cohort })
+  const primarySpecs = buildSearchSpecs({ city, role, directions, useDirections, year: searchYear })
 
   const byUrl = new Map<string, { item: SearchResult; directionKey?: string; fallback: boolean }>()
   const allErrors: string[] = []
@@ -491,12 +491,12 @@ export async function searchJobs(
   if (usable.length < 3 || missingDirections.length > 0) {
     const supplementSpecs: QuerySpec[] = missingDirections.slice(0, 2).map((direction) => ({
       key: direction.key,
-      query: `${city ? `${city} ` : ''}${direction.query} ${cohort} 届 招聘`.trim(),
+      query: `${city ? `${city} ` : ''}${direction.query} ${searchYear} 届 招聘`.trim(),
       freshness: 'oneYear'
     }))
     if (usable.length < 3) {
       supplementSpecs.push({
-        query: `${city ? `${city} ` : ''}${role} ${cohort} 届 招聘`.trim(),
+        query: `${city ? `${city} ` : ''}${role} ${searchYear} 届 招聘`.trim(),
         freshness: 'oneYear'
       })
     }
@@ -525,7 +525,7 @@ export async function searchJobs(
   // 还没有任何可用原文时，才退回普通网页检索；只接受像具体招聘的结果。
   if (ranked.length === 0) {
     const fallbackSpec: QuerySpec = {
-      query: `${city ? `${city} ` : ''}${role} ${cohort} 届 校园招聘`.trim(),
+      query: `${city ? `${city} ` : ''}${role} ${searchYear} 届 校园招聘`.trim(),
       freshness: 'oneYear',
       fallback: true
     }
@@ -613,7 +613,7 @@ export async function searchJobs(
       resultCount: allUrls.size,
       searchedAt,
       sources,
-      cohortYear: cohort
+      searchYear
     }
   }
 }

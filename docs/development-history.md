@@ -2,6 +2,26 @@
 
 本文档记录已经确认或完成的需求，帮助后续 Agent 理解“为什么这样做”。代码与文档冲突时，以 `docs/` 文档为准修正代码，并同步更新本文档（见 `agent-rules.md` 的「文档优先」）。
 
+## 本轮（2026-11-13）
+
+### 仪表盘「每组完成」恒为 0 修复（2026-11-13，产品版本 v1.64）
+
+- 依据：`docs/archive/20261113/1-仪表盘每组完成恒为0-修复方案.md` v1.1。后台概览按 `events` 表里 `type = 'group_complete'` 的记录聚合每组完成人数（`server/src/routes/admin/overview.ts:30-39`），服务端事件白名单也允许该类型（`server/src/routes/public.ts:546`），但 `web/src` 从未上报过，导致漏斗里「完成第 X 组」恒为 0。
+- 修复（方案 A）：`web/src/views/Quiz.vue` 新增 `reportedGroups`（会话内每组只报一次）和 `markGroupsCompleted()`；在 `advance()`（最后一题提交前也会执行）、`jumpToQuestion()`、`answers` 深度 watch、草稿恢复完成后各调用一次，上报 `track(token, 'group_complete', { groupId })`。
+- 完成口径：组内所有**可见、非置灰、必答**的题都有答案才算完成，与 `canAdvance()` 和提交校验（`shared/src/validate.ts:130-138`）一致。方案 v1.0 原写「所有可见题」，但 `q5a`、`q18` 是 `required: false` 的可跳过题，若计入会让含这些题的组永远无法完成，实施时改为只算必答题。
+- 草稿恢复：恢复完成后主动扫一遍并上报，避免用户分几次填写、最后直接提交时漏记前面已完成的组；同一 invite 由服务端按 `invite_id` 去重，重复上报不重复计数。
+- 边界：不改漏斗 UI、指标口径和服务端逻辑；历史答卷没有组完成记录，不补算，上线后从新答卷开始计。方案 B（提交时服务端补记）与事件表索引优化未做。
+- 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）。本地走查：答完第一组后 Network 出现 `POST /api/events`，请求体含 `{"type":"group_complete","payload":{"groupId":"p1"}}`；回退再前进不重复上报 `p1`；后台概览「完成第 1 组」计数与百分比不再为 0。
+
+### 检索届别改用当前年份（2026-11-13，产品版本 v1.63）
+
+- 依据：`docs/archive/20261113/3-检索届别改用当前年份-修复方案.md` v1.0。用户明确：检索词里的「届别 / 时效」直接用检索当年的年份（2026 年就搜「2026 届」），不再按 Q3 年级推算毕业年份——问卷信息不足，产品也不需要推算。
+- 代码：删除 `shared/src/doc.ts` 的 `cohortYear()`；`server/src/ai/doc-search.ts` 改用 `new Date().getFullYear()` 拼全部检索词（主检索 / 方向补位 / 岗位补位 / 校园招聘兜底），拼法仍是「<城市> <关键词> <年份> 届 招聘」，只改年份取值。
+- 元数据：`ReportSearchMeta.cohortYear` 改名 `searchYear`（检索词里拼的年份）；`normalizeSearchMeta()` 读取旧报告时兼容旧字段名 `cohortYear`，旧报告的检索记录与届别说明保持原样，不伪造历史。
+- 文档同步：`docs/README.md`「检索可追溯」改为按检索当年年份拼「YYYY 届」，版本约定推进到 v1.63。
+- 验证：`npm run verify` 全绿（check:docs / check:dates / typecheck / build）；补做检索链路与旧报告兼容核对（stub 掉 fetch，不实际外呼）：同一专业按 Q3「大一」「大四」分别调用 `searchJobs()`，四类检索词都拼成 `2026 届`、`searchYear = 2026`；把旧报告存储 meta 改成 `cohortYear: 2028` 后，新代码渲染的「检索记录」仍显示「检索词按 2028 届拼写」，无 `undefined`。未跑完整 AI 报告端到端生成（避免 AI 费用）。
+- 边界：不改检索时间窗、补位策略、`fallback` 与 18 个月过期判断；旧报告不重新生成。
+
 ## 本轮（2026-11-12）
 
 ### 前端拆包与巨型文件拆分（2026-11-12，产品版本 v1.62）

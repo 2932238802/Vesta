@@ -272,7 +272,7 @@ function normalizeSearchMeta(raw: unknown): ReportSearchMeta | undefined {
     resultCount: Number(record.resultCount) || 0,
     searchedAt: typeof record.searchedAt === 'string' ? record.searchedAt : '',
     sources,
-    cohortYear: Number(record.cohortYear) || undefined
+    searchYear: Number(record.searchYear ?? record.cohortYear) || undefined
   }
 }
 

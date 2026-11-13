@@ -243,19 +243,6 @@ function monthsUntil(monthOfYear: number): number {
 const GRADE_NUMBER: Record<string, number> = { 大一: 1, 大二: 2, 大三: 3, 大四: 4 }
 
 /**
- * 学生所在届别（毕业年份）：按 Q3 年级和当前学年推算四年制毕业年份。
- * 检索词用这个年份拼「YYYY 届」，不要用系统当前年——否则大一大二会被搜成今年应届。
- */
-export function cohortYear(survey: Survey, answers: Answers): number {
-  const grade = GRADE_NUMBER[label(survey, answers, 'q3')] ?? 2
-  const now = new Date()
-  // 学年 9 月开学：9 月及以后算新学年，1—8 月仍属上一学年。
-  const academicStartYear = now.getMonth() + 1 >= 9 ? now.getFullYear() : now.getFullYear() - 1
-  const enrollYear = academicStartYear - (grade - 1)
-  return enrollYear + 4
-}
-
-/**
  * 到「第 stageGrade 学年某月」还有几个月。
  * 以前只会算“下一个 9 月”，导致大一学生也被算成半年后就要秋招/夏令营。
  */
@@ -1344,12 +1331,12 @@ function sourcesBlock(input: {
       : '用于核对：报告里的岗位原文'
     return source.date ? `${base} · 发布于 ${source.date.slice(0, 10)}` : base
   }
-  const cohortNote = search?.cohortYear ? `检索词按 ${search.cohortYear} 届拼写` : ''
+  const yearNote = search?.searchYear ? `检索词按 ${search.searchYear} 届拼写` : ''
 
   return {
     type: 'sources',
     title: '检索记录与原文',
-    subtitle: ['服务器实际发送的检索词和返回的原文链接，点开可核对', cohortNote]
+    subtitle: ['服务器实际发送的检索词和返回的原文链接，点开可核对', yearNote]
       .filter(Boolean)
       .join('；'),
     items: sources.slice(0, 12).map((source) => ({

@@ -128,6 +128,7 @@ let activeSince = 0
 let submitted = false
 let exitTracked = false
 let restoring = false
+const reportedGroups = new Set<string>()
 
 const visible = computed<Question[]>(() =>
   survey.value ? visibleQuestions(survey.value, answers.value) : []
@@ -334,11 +335,34 @@ function canAdvance(): boolean {
   return !isEmptyValue(answers.value[current.value.id])
 }
 
+/**
+ * 组完成上报：组内所有可见且必答的题都答完，就算这一组完成，每组只报一次。
+ * 口径与提交校验一致——跳过的题、disableIf 置灰的题不参与判定，可选答题不答也算完成。
+ */
+function markGroupsCompleted() {
+  if (!survey.value || restoring || submitting.value || submitted) return
+  const complete = new Map<string, boolean>()
+  for (const question of survey.value.questions) {
+    const groupId = question.groupId ?? ''
+    if (!groupId) continue
+    const resolved = resolveQuestion(survey.value, answers.value, question)
+    if (!resolved.visible || resolved.disabled) continue
+    const answered = !question.required || !isEmptyValue(answers.value[question.id])
+    complete.set(groupId, (complete.get(groupId) ?? true) && answered)
+  }
+  for (const [groupId, done] of complete) {
+    if (!done || reportedGroups.has(groupId)) continue
+    reportedGroups.add(groupId)
+    track(token, 'group_complete', { groupId })
+  }
+}
+
 function advance() {
   if (!survey.value || submitting.value) return
   clearAuto()
   error.value = ''
   flushTiming()
+  markGroupsCompleted()
   if (isLast.value) {
     void submit()
     return
@@ -383,6 +407,7 @@ function jumpToQuestion(id: string): boolean {
   const index = visible.value.findIndex((question) => question.id === id)
   if (index < 0 || index === step.value) return false
   step.value = index
+  markGroupsCompleted()
   return true
 }
 
@@ -502,12 +527,18 @@ onMounted(async () => {
     restoreDraft()
     await nextTick()
     restoring = false
+    // 草稿恢复出来的已完成分组也要上报，避免用户上次答完、这次直接提交时漏记。
+    markGroupsCompleted()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '链接无法打开'
   } finally {
     loading.value = false
   }
 })
+
+watch(answers, () => {
+  markGroupsCompleted()
+}, { deep: true })
 
 watch(answers, () => {
   if (!invalid.value.length && !showMissingHint.value) return

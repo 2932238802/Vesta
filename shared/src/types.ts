@@ -468,8 +468,8 @@ export interface ReportSearchMeta {
   resultCount: number
   searchedAt: string
   sources: ReportSearchSource[]
-  /** 检索词按学生所在届别拼接时记录该毕业年份；旧报告没有这个字段。 */
-  cohortYear?: number
+  /** 检索词里拼的年份：固定为发起检索的当年，不按年级推算；旧报告的历史字段名为 `cohortYear`。 */
+  searchYear?: number
 }
 
 export interface ReportResponse {
