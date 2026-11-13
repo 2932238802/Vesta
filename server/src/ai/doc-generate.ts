@@ -19,6 +19,7 @@ import { formatCalendarDate } from '../../../shared/src/date'
 import { config } from '../env'
 import { getDocReportSkill, now, type ReportSkillSource } from '../db'
 import { askDeepSeek, parseJsonObject } from './deepseek'
+import { log } from '../log'
 import { clipSentence, isCityLanding, isOldJob, parseTime, searchJobs } from './doc-search'
 import { buildModuleSpecs, jobSpec, moduleSpecsForPrompt, outputContract } from './doc-prompts'
 import {
@@ -50,8 +51,13 @@ function answerText(survey: Survey, answers: Answers): string {
     .join('\n')
 }
 
-async function requestJson(history: { role: 'system' | 'user' | 'assistant'; content: string }[]): Promise<unknown> {
-  const rawText = await askDeepSeek(history)
+async function requestJson(
+  history: { role: 'system' | 'user' | 'assistant'; content: string }[],
+  submissionId: string | undefined,
+  stage: string
+): Promise<unknown> {
+  const context = { submissionId, stage }
+  const rawText = await askDeepSeek(history, { context })
   try {
     return parseJsonObject(rawText)
   } catch {
@@ -63,7 +69,9 @@ async function requestJson(history: { role: 'system' | 'user' | 'assistant'; con
         content: '上一条不是合法 JSON。请严格按输出结构，只输出一个合法 JSON 对象，不要代码块。'
       }
     ]
-    return parseJsonObject(await askDeepSeek(repair))
+    return parseJsonObject(
+      await askDeepSeek(repair, { context: { ...context, stage: `${stage}_json_repair` } })
+    )
   }
 }
 
@@ -74,6 +82,7 @@ export async function generateDocContent(input: {
   slug: string
   createdAt: string
   claimed: boolean
+  submissionId?: string
 }): Promise<{
   content: DocAiContent
   meta: DocAiMeta
@@ -87,7 +96,9 @@ export async function generateDocContent(input: {
   const deadline = deadlineFact(survey, answers)
 
   // 先搜索，再构建模块事实：招聘原文是 jobmap / gap 的证据，不能等 AI 写完再补。
-  const { jobs, search } = await searchJobs(survey, answers)
+  const { jobs, search } = await searchJobs(survey, answers, {
+    submissionId: input.submissionId
+  })
   const baseInput: DocReportInput = {
     survey,
     answers,
@@ -142,7 +153,9 @@ ${searchSummary}
     { role: 'user' as const, content: userPrompt }
   ]
 
-  let content = normalizeDocAiContent(await requestJson(messages))
+  let content = normalizeDocAiContent(
+    await requestJson(messages, input.submissionId, 'doc.initial')
+  )
   let repaired = false
   const allowedNumbers = collectAllowedNumbers([
     answerLines,
@@ -167,8 +180,25 @@ ${searchSummary}
       textIssues.length === 0 &&
       numberIssues.length === 0
     ) {
+      log.info('doc.audit_passed', { submissionId: input.submissionId, reworked: repaired })
       break
     }
+    log.warn('doc.audit_failed', {
+      submissionId: input.submissionId,
+      pass: pass + 1,
+      problems: problems.length,
+      consistency: consistencyIssues.length,
+      repetition: repetitions.length,
+      text: textIssues.length,
+      number: numberIssues.length,
+      first:
+        numberIssues[0] ??
+        problems[0] ??
+        consistencyIssues[0] ??
+        repetitions[0] ??
+        textIssues[0] ??
+        ''
+    })
     if (pass === 1) {
       if (numberIssues.length > 0) {
         throw new Error(`数字核对未通过：${numberIssues[0]}`)
@@ -197,11 +227,15 @@ ${searchSummary}
     ].join('\n')
 
     content = normalizeDocAiContent(
-      await requestJson([
-        ...messages,
-        { role: 'assistant' as const, content: JSON.stringify(content).slice(0, 14_000) },
-        { role: 'user' as const, content: feedback }
-      ])
+      await requestJson(
+        [
+          ...messages,
+          { role: 'assistant' as const, content: JSON.stringify(content).slice(0, 14_000) },
+          { role: 'user' as const, content: feedback }
+        ],
+        input.submissionId,
+        `doc.rework_${pass + 1}`
+      )
     )
     repaired = true
   }

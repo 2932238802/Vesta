@@ -31,6 +31,8 @@ import {
 } from '../ai/generate'
 import { readDocContent } from '../ai/doc-generate'
 import { noStore } from '../auth'
+import { readDeployInfo } from '../deploy-info'
+import { log } from '../log'
 import {
   asyncRoute,
   encryptText,
@@ -99,7 +101,24 @@ publicRouter.get(
   '/health',
   (req, res) => {
     noStore(res)
-    res.json({ ok: true, time: now() })
+    let dbReady = true
+    try {
+      db.prepare('SELECT 1').get()
+    } catch (error) {
+      dbReady = false
+      log.warn('health.db_failed', { err: error })
+    }
+    const deploy = readDeployInfo()
+    res.json({
+      ok: true,
+      time: now(),
+      db: dbReady,
+      uptimeSec: Math.round(process.uptime()),
+      // 第 9 篇落地后 update.sh 会写 data/deploy-info.json；没有文件时留空，
+      // 不要用 version 字段，update.sh 的 L5 会把 semver 当成 commit 比对。
+      commit: deploy?.commit ?? '',
+      appVersion: deploy?.productVersion ?? ''
+    })
   }
 )
 
@@ -164,8 +183,17 @@ publicRouter.post(
     }
 
     const survey = getSurvey(invite.survey_id) ?? getActiveSurvey()
-    const validation = validateAnswers(survey, req.body?.answers)
+    const rawAnswers = req.body?.answers
+    const answerCount =
+      rawAnswers && typeof rawAnswers === 'object' ? Object.keys(rawAnswers).length : 0
+    const validation = validateAnswers(survey, rawAnswers)
     if (!validation.ok) {
+      log.warn('submit.invalid', {
+        reqId: res.locals.reqId,
+        inviteId: invite.id,
+        answerCount,
+        error: validation.errors[0] ?? '还有必答题没有完成'
+      })
       res.status(400).json({
         error: validation.errors[0] ?? '还有必答题没有完成',
         errors: validation.errors,
@@ -231,6 +259,13 @@ publicRouter.post(
     }
 
     recordEvent(invite.id, 'submit')
+    log.info('submit.stored', {
+      reqId: res.locals.reqId,
+      inviteId: invite.id,
+      submissionId: id,
+      answerCount: Object.keys(answers).length,
+      reportMode: survey.reportMode ?? 'default'
+    })
     startReportGeneration(id)
     res.json({ slug })
   })
@@ -351,7 +386,11 @@ publicRouter.get(
           content: storedContent
         })
       } catch (error) {
-        console.error('[ai-report] 报告内容无法渲染', submission.id, error)
+        log.error('report.render_failed', {
+          reqId: res.locals.reqId,
+          submissionId: submission.id,
+          err: error
+        })
         status = 'failed'
         statusError = 'AI 报告内容损坏，当前显示基础内容'
         db.prepare(

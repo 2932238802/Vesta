@@ -1,5 +1,6 @@
 import { config } from '../env'
 import { db, now } from '../db'
+import { log } from '../log'
 
 export interface SearchResult {
   title: string
@@ -90,7 +91,7 @@ function writeCache(key: string, results: SearchResult[]): void {
     )
   } catch (error) {
     // 缓存写失败不影响本次检索，只是下次还要再花一次额度。
-    console.warn('[bocha] 写入检索缓存失败', error instanceof Error ? error.message : error)
+    log.warn('search.cache_write_failed', { err: error })
   }
 }
 
@@ -175,13 +176,21 @@ export async function searchWeb(
 
   const key = cacheKey(query, options)
   const cached = readCache(key)
-  if (cached) return cached
+  if (cached) {
+    log.debug('search.cache_hit', { query, results: cached.length })
+    return cached
+  }
 
   const pending = inflight.get(key)
-  if (pending) return pending
+  if (pending) {
+    log.debug('search.inflight_join', { query })
+    return pending
+  }
 
+  log.debug('search.fetch_start', { query, freshness: options.freshness ?? 'noLimit' })
   const task = fetchSearch(query, options)
     .then((results) => {
+      log.debug('search.fetch_done', { query, results: results.length })
       writeCache(key, results)
       return results
     })

@@ -32,6 +32,7 @@
 - 不重置、不清空 `consult_tree`、`consult_runs` 和用户导入的咨询树；导入前必须预览 + 备份（SQLite WAL 用 `VACUUM INTO`）。
 - 生产必须账号密码 + `AUTH_SECRET`；不改 `requireAdmin()` 绕过校验；免密登录只能绑显式 `NODE_ENV=development`。
 - 不提交 `.env`、`data/`、`web/dist/`、`zxg/`；不把真实密码、API Key、联系方式密钥写进代码或文档。
+- 后端业务链路必须用 `server/src/log.ts` 打结构化日志，带 `reqId` / `submissionId` / `runId` 等关联字段；禁止记录密码、密钥、联系方式、完整答卷和完整 AI 正文，不要用 `console.log` 绕过统一日志。
 - 不动用户已经启动的 dev server；端口被占用先说明，征得同意再处理。
 
 ## 3. 交付前验证（必须全绿）

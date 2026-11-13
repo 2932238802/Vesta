@@ -6,7 +6,7 @@ Vesta 是一套面向大学在读学生的问卷、报告与咨询辅助系统�
 
 - 产品版本基线 **v1.60**（2026-11-12 起算）。
 - 每完成一轮需求递增一个小版本：**v1.61、v1.62……**（两位数小版本，不进位到 v2）。
-- 已完成：v1.61 管理员界面交互优化、v1.62 前端拆包与巨型文件拆分、v1.63 检索届别改用当前年份、v1.64 仪表盘「每组完成」修复、v1.65 后台 doc 模式不再展示映射分数、v1.66 问卷题号重排、v1.67 英语块表述约束与生成校验、v1.68 英语块校验误伤与漏拦订正；后续从 **v1.69** 继续递增。
+- 已完成：v1.61 管理员界面交互优化、v1.62 前端拆包与巨型文件拆分、v1.63 检索届别改用当前年份、v1.64 仪表盘「每组完成」修复、v1.65 后台 doc 模式不再展示映射分数、v1.66 问卷题号重排、v1.67 英语块表述约束与生成校验、v1.68 英语块校验误伤与漏拦订正、v1.69 日志系统完善；后续从 **v1.70** 继续递增。
 - `docs/archive/` 里单个方案的「v1.0 / v1.1」是方案文档自身版本，与产品版本分开编号；每轮改动对应的产品版本号要写进 `development-history.md`。
 
 ## 技术栈
@@ -118,7 +118,7 @@ bash update.sh --mode=systemd  # 覆盖 DEPLOY_MODE
 说明：
 
 - `DEPLOY_MODE=none` 只构建、不重启，无法完成 L4/L5 校验，因此脚本会在构建后明确失败退出；需要验证运行版本时请改用 `systemd` / `pm2` / `docker`。
-- 当前 `/api/health` 只返回 `{ ok, time }`，没有版本字段。L5 会退化为“HTTP 200 + 重启后时间戳 + 前端构建指纹”校验；服务端源码版本由 L4 的进程启动时间保证。以后若 health 增加 `version` / `commit` / `sha` 字段，脚本会自动改成与 git HEAD 比对。
+- 当前 `/api/health` 返回 `{ ok, time, db, uptimeSec, commit, appVersion }`。`commit` / `appVersion` 从 `data/deploy-info.json` 读取（第 9 篇落地后由 `update.sh` 写入）；没有这个文件时两者为空串，L5 仍走“HTTP 200 + 重启后时间戳 + 前端构建指纹”的降级校验。
 - 服务器上如果还是很久以前的 `update.sh`（不认识上述参数、也不会自动拉取），先手动执行一次 `git pull`；之后日常只需 `bash update.sh`。
 - 失败时脚本会打印失败阶段、日志命令、数据库备份路径和回滚命令；健康检查失败还会自动带出最近 60 行服务日志。
 
@@ -140,7 +140,8 @@ bash update.sh --mode=systemd  # 覆盖 DEPLOY_MODE
 | `AI_MODEL` | 模型名；也兼容 `DEEPSEEK_MODEL` |
 | `BOCHA_API_KEY` | 联网检索密钥；与 `BOCHA_BASE_URL` 同时配置才生效 |
 | `BOCHA_BASE_URL` | 博查检索接口地址；缺它时启动会明确 warning，检索不可用 |
-| `AI_TIMEOUT_MS` | AI 单次请求超时，默认 120 秒 |
+| `AI_TIMEOUT_MS` | AI 单次请求超时，默认 240 秒 |
+| `LOG_LEVEL` | 日志级别 `debug` / `info` / `warn` / `error`；默认生产 `info`、开发 `debug` |
 | `DEPLOY_MODE` | `systemd` / `pm2` / `docker` / `none` / 自动 |
 
 ## 报告生成
@@ -240,6 +241,35 @@ npm run verify                          # check:docs + check:dates + check:audit
 ```
 
 修改后端后至少执行 `typecheck`；修改前端后还要执行 `build`。当前没有统一的自动化测试套件，验收以类型检查、构建、时间用例、报告文本审计用例和实际页面走查为准。
+
+## 运行与排障
+
+服务端日志统一走 `server/src/log.ts`：生产是单行 JSON（journald 收集），开发是人类可读单行。不要再用 `console.log` 绕过它。
+
+```bash
+# 实时看（systemd 部署）
+journalctl -u vesta -f
+
+# 只看错误 / 5xx
+journalctl -u vesta -o cat --since '10 min ago' | jq -c 'select(.level=="error")'
+journalctl -u vesta -o cat --since '10 min ago' | jq -c 'select(.msg=="http" and .status>=500)'
+
+# 按一次请求 / 一条报告链路查
+journalctl -u vesta -o cat | jq -c 'select(.reqId=="<request id>")'
+journalctl -u vesta -o cat | jq -c 'select(.submissionId=="<submission id>")'
+journalctl -u vesta -o cat | jq -c 'select(.runId=="<consult run id>")'
+
+# pm2 / docker
+pm2 logs vesta --lines 100 --nostream
+docker compose logs --tail=100
+```
+
+常看的事件链：
+
+- 一次问卷提交：`submit.invalid` 或 `submit.stored` → `ai.queue` → `ai.start` → `search.start` / `search.done` → `ai.call`（`stage=doc.initial`）→ `doc.audit_failed` / `doc.audit_passed` → `ai.ready` / `ai.retry` / `ai.failed`。
+- `http` 日志的 `reqId` 关联一次 HTTP 请求；`submissionId` 关联整条异步报告链路；咨询稿用 `runId` + `seq`。
+- 慢请求（>3000ms）自动记为 `warn`；`search.cache_hit`、`ai.call_start` 等只在 `LOG_LEVEL=debug` 输出。
+- 日志不记录密码、密钥、联系方式、完整答卷和 AI 正文；邀请 token / 报告 slug 在路径里已替换成 `:token` / `:slug`，敏感 query key 不记录。
 
 ## 注意事项
 

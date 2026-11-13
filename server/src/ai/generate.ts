@@ -24,6 +24,7 @@ import {
   recordEvent
 } from '../db'
 import { parseJson } from '../util'
+import { log } from '../log'
 import { searchWeb, type SearchResult } from './bocha'
 import { askDeepSeek, parseJsonObject } from './deepseek'
 import { generateDocContent } from './doc-generate'
@@ -263,6 +264,8 @@ interface GenerateInput {
   createdAt: string
   claimed: boolean
   overrides: ReportOverrides
+  /** 只用于日志关联，不参与报告内容。 */
+  submissionId?: string
 }
 
 async function generateContent(input: GenerateInput): Promise<{
@@ -395,8 +398,12 @@ ${searchError || (results.length ? `共 ${results.length} 条可用结果` : '�
     { role: 'user', content: userPrompt }
   ]
 
-  async function requestJson(history: ChatMessage[]): Promise<unknown> {
-    const rawText = await askDeepSeek(history)
+  async function requestJson(
+    history: ChatMessage[],
+    stage: string
+  ): Promise<unknown> {
+    const context = { submissionId: input.submissionId, stage }
+    const rawText = await askDeepSeek(history, { context })
     try {
       return parseJsonObject(rawText)
     } catch {
@@ -408,7 +415,11 @@ ${searchError || (results.length ? `共 ${results.length} 条可用结果` : '�
           content: '上一条不是合法 JSON。请严格按输出结构，只输出一个合法 JSON 对象，不要代码块。'
         }
       ]
-      return parseJsonObject(await askDeepSeek(repair))
+      return parseJsonObject(
+        await askDeepSeek(repair, {
+          context: { ...context, stage: `${stage}_json_repair` }
+        })
+      )
     }
   }
 
@@ -417,9 +428,13 @@ ${searchError || (results.length ? `共 ${results.length} 条可用结果` : '�
     gapKeys,
     allowedSources: sourceList
   }
-  let content = normalizeAiContent(await requestJson(messages), normalizeOptions)
+  let content = normalizeAiContent(
+    await requestJson(messages, 'report.initial'),
+    normalizeOptions
+  )
   const requiresConsistency = base.blocks.some((block) => block.type === 'consistency')
 
+  let reworked = false
   for (let pass = 0; pass < 2; pass += 1) {
     const problems = contentProblems(content, {
       strengthKeys,
@@ -427,7 +442,20 @@ ${searchError || (results.length ? `共 ${results.length} 条可用结果` : '�
       requiresConsistency
     })
     const banned = findBannedPhrase(content)
-    if (problems.length === 0 && !banned) break
+    if (problems.length === 0 && !banned) {
+      log.info('report.audit_passed', {
+        submissionId: input.submissionId,
+        reworked
+      })
+      break
+    }
+    log.warn('report.audit_failed', {
+      submissionId: input.submissionId,
+      pass: pass + 1,
+      problems: problems.length,
+      banned: Boolean(banned),
+      first: problems[0] ?? banned ?? ''
+    })
 
     const feedback = [
       '你上一次输出的报告内容有以下问题，需要修正：',
@@ -439,13 +467,17 @@ ${searchError || (results.length ? `共 ${results.length} 条可用结果` : '�
       .filter(Boolean)
       .join('\n')
 
-    const repairedRaw = await requestJson([
-      ...messages,
-      { role: 'assistant', content: JSON.stringify(content).slice(0, 12_000) },
-      { role: 'user', content: feedback }
-    ])
+    const repairedRaw = await requestJson(
+      [
+        ...messages,
+        { role: 'assistant', content: JSON.stringify(content).slice(0, 12_000) },
+        { role: 'user', content: feedback }
+      ],
+      `report.rework_${pass + 1}`
+    )
     const repaired = normalizeAiContent(repairedRaw, normalizeOptions)
     content = mergeAiContent(repaired, content)
+    reworked = true
   }
 
   const problems = contentProblems(content, {
@@ -481,6 +513,10 @@ async function generate(submissionId: string): Promise<void> {
   if (!row || row.ai_status === 'ready') return
 
   if (!isAiConfigured()) {
+    log.warn('ai.unavailable', {
+      submissionId,
+      reason: 'AI 分析还没有配置'
+    })
     db.prepare(
       "UPDATE submissions SET ai_status = 'failed', ai_error = ?, ai_finished_at = ? WHERE id = ?"
     ).run('AI 分析还没有配置', now(), submissionId)
@@ -488,6 +524,7 @@ async function generate(submissionId: string): Promise<void> {
   }
 
   const started = now()
+  const startedMs = Date.now()
   const update = db
     .prepare(
       `UPDATE submissions
@@ -497,6 +534,8 @@ async function generate(submissionId: string): Promise<void> {
     )
     .run(started, submissionId)
   if (update.changes === 0) return
+  const attempt = row.ai_attempts + 1
+  log.info('ai.start', { submissionId, attempt })
 
   try {
     const invite = db
@@ -513,7 +552,8 @@ async function generate(submissionId: string): Promise<void> {
         name: invite?.name ?? '',
         slug: row.slug,
         createdAt: row.created_at,
-        claimed: Boolean(row.claimed_at)
+        claimed: Boolean(row.claimed_at),
+        submissionId
       })
       db.prepare(
         `UPDATE submissions
@@ -526,6 +566,12 @@ async function generate(submissionId: string): Promise<void> {
         submissionId
       )
       recordEvent(row.invite_id, 'ai_report_ready', { model: meta.model })
+      log.info('ai.ready', {
+        submissionId,
+        attempt,
+        ms: Date.now() - startedMs,
+        reportMode: 'doc'
+      })
       return
     }
 
@@ -543,7 +589,8 @@ async function generate(submissionId: string): Promise<void> {
       slug: row.slug,
       createdAt: row.created_at,
       claimed: Boolean(row.claimed_at),
-      overrides: parseJson<ReportOverrides>(row.overrides, {})
+      overrides: parseJson<ReportOverrides>(row.overrides, {}),
+      submissionId
     })
 
     db.prepare(
@@ -555,19 +602,30 @@ async function generate(submissionId: string): Promise<void> {
       model: meta.model,
       sourceCount: meta.sourceCount
     })
+    log.info('ai.ready', {
+      submissionId,
+      attempt,
+      ms: Date.now() - startedMs,
+      reportMode: 'legacy'
+    })
   } catch (error) {
     const message = errorMessage(error)
-    const attempt = row.ai_attempts + 1
-    if (attempt < MAX_AI_ATTEMPTS && isRetryableError(message)) {
-      const delay = RETRY_DELAYS_MS[Math.min(attempt - 1, RETRY_DELAYS_MS.length - 1)]
-      const retryMessage = `第 ${attempt} 次 AI 分析未完成，将自动重试：${message}`
+    const failureAttempt = row.ai_attempts + 1
+    if (failureAttempt < MAX_AI_ATTEMPTS && isRetryableError(message)) {
+      const delay = RETRY_DELAYS_MS[Math.min(failureAttempt - 1, RETRY_DELAYS_MS.length - 1)]
+      const retryMessage = `第 ${failureAttempt} 次 AI 分析未完成，将自动重试：${message}`
       db.prepare(
         `UPDATE submissions
          SET ai_status = 'pending', ai_error = ?, ai_finished_at = ?
          WHERE id = ?`
       ).run(retryMessage, now(), submissionId)
-      recordEvent(row.invite_id, 'ai_report_retry', { message, attempt, delay })
-      console.warn('[ai-report] 自动重试', submissionId, retryMessage)
+      recordEvent(row.invite_id, 'ai_report_retry', { message, attempt: failureAttempt, delay })
+      log.warn('ai.retry', {
+        submissionId,
+        attempt: failureAttempt,
+        delay,
+        error: message
+      })
       scheduleReportGeneration(submissionId, delay)
       return
     }
@@ -577,8 +635,14 @@ async function generate(submissionId: string): Promise<void> {
        SET ai_status = 'failed', ai_error = ?, ai_finished_at = ?
        WHERE id = ?`
     ).run(message, now(), submissionId)
-    recordEvent(row.invite_id, 'ai_report_failed', { message, attempt })
-    console.error('[ai-report]', submissionId, message)
+    recordEvent(row.invite_id, 'ai_report_failed', { message, attempt: failureAttempt })
+    log.error('ai.failed', {
+      submissionId,
+      attempt: failureAttempt,
+      ms: Date.now() - startedMs,
+      error: message,
+      err: error
+    })
   }
 }
 
@@ -598,10 +662,20 @@ export function startReportGeneration(submissionId: string): void {
     clearTimeout(timer)
     retryTimers.delete(submissionId)
   }
-  if (running.has(submissionId)) return
+  if (running.has(submissionId)) {
+    log.debug('ai.skip_running', { submissionId })
+    return
+  }
+  log.debug('ai.queue', { submissionId })
   running.add(submissionId)
   void generate(submissionId)
-    .catch((error) => console.error('[ai-report] 未处理异常', submissionId, errorMessage(error)))
+    .catch((error) =>
+      log.error('ai.unhandled', {
+        submissionId,
+        err: error,
+        error: errorMessage(error)
+      })
+    )
     .finally(() => running.delete(submissionId))
 }
 
@@ -644,6 +718,7 @@ export function regenerateReport(submissionId: string): boolean {
          ai_started_at = NULL, ai_finished_at = NULL
      WHERE id = ?`
   ).run(submissionId)
+  log.info('ai.regenerate', { submissionId })
   startReportGeneration(submissionId)
   return true
 }

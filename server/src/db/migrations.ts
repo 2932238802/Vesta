@@ -5,6 +5,7 @@ import { db } from './connection'
 import { getSetting, now, setSetting } from './core'
 import { clearExpiredAdminSessions, migrateLegacyAdminSession } from './sessions'
 import { migrateReportSkill, migrateReportSkillTemplates } from './skill'
+import { log } from '../log'
 
 function ensureInviteColumns(): void {
   const columns = new Set(
@@ -438,7 +439,10 @@ function migrate(): void {
             JSON.stringify(survey),
             surveyId
           )
-          console.log(`[db] 问卷已升级到 v${version}（${survey.questions.length} 题）`)
+          log.info('db.survey_upgraded', {
+            version,
+            questions: survey.questions.length
+          })
         }
       } catch {
         // 数据损坏时保持原样，管理员可以重新发布问卷

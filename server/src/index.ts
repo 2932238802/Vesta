@@ -1,14 +1,65 @@
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import express from 'express'
 import type { NextFunction, Request, Response } from 'express'
 import { config } from './env'
+import { log } from './log'
 import { adminRouter } from './routes/admin/index'
 import { publicRouter } from './routes/public'
 
 const app = express()
 app.disable('x-powered-by')
 app.set('trust proxy', config.trustProxy ? 1 : false)
+
+/** 邀请 token、报告 slug 是访问凭证，请求日志里只保留路由占位符。 */
+function logPath(pathname: string): string {
+  return pathname
+    .replace(/^\/api\/invite\/[^/]+/, '/api/invite/:token')
+    .replace(/^\/api\/report\/[^/]+/, '/api/report/:slug')
+    .replace(/^\/i\/[^/]+/, '/i/:token')
+    .replace(/^\/r\/[^/]+/, '/r/:slug')
+}
+
+/** Express 在子路由里会临时改写 req.path，日志统一用不会被改写的 originalUrl。 */
+function requestPath(req: Request): string {
+  return (req.originalUrl || req.url).split('?')[0]
+}
+
+// 请求日志：放在 express.json() 之前，JSON 解析失败也能留下请求线索。
+app.use((req, res, next) => {
+  const reqId = crypto.randomBytes(4).toString('hex')
+  res.locals.reqId = reqId
+  res.setHeader('X-Request-Id', reqId)
+  // 路由可能改写 req.path / req.query，进入路由前先把日志要的字段固定下来。
+  const pathname = requestPath(req)
+  const sensitiveQueryKey =
+    /^(wechat|weixin|phone|mobile|tel|token|code|password|passwd|secret|apikey|api_key|contact|openid)$/i
+  const queryKeys = [...new URLSearchParams(req.originalUrl.split('?')[1] ?? '').keys()].filter(
+    (key) => !sensitiveQueryKey.test(key)
+  )
+  const started = process.hrtime.bigint()
+  res.on('finish', () => {
+    // 静态资源、成功的健康检查和 304 一次页面加载会产生大量噪音，直接排除。
+    if (res.statusCode === 304) return
+    if (pathname.startsWith('/assets/')) return
+    if (pathname === '/api/health' && res.statusCode < 400) return
+    const ms = Number(process.hrtime.bigint() - started) / 1e6
+    const fields = {
+      reqId,
+      method: req.method,
+      path: logPath(pathname),
+      ...(queryKeys.length ? { queryKeys: queryKeys.join(',') } : {}),
+      status: res.statusCode,
+      ms: Math.round(ms),
+      ip: req.ip ?? '',
+      ua: (req.get('user-agent') ?? '').slice(0, 80)
+    }
+    if (ms > 3000) log.warn('http', fields)
+    else log.info('http', fields)
+  })
+  next()
+})
 
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
@@ -78,37 +129,48 @@ app.use((error: Error & { status?: number }, req: Request, res: Response, next: 
     res.status(400).json({ error: '请求格式不对' })
     return
   }
-  console.error('[server]', error)
+  log.error('http.error', {
+    reqId: res.locals.reqId,
+    method: req.method,
+    path: logPath(requestPath(req)),
+    err: error
+  })
   res.status(500).json({ error: '服务器出了点问题，请稍后再试' })
 })
 
 function warnIncompleteConfig(): void {
   if (config.deepseekApiKey && !config.deepseekBaseUrl) {
-    console.warn(
-      '[配置] 已配置 AI_API_KEY/DEEPSEEK_API_KEY，但缺少 AI_BASE_URL/DEEPSEEK_BASE_URL；AI 报告和咨询稿会不可用。'
-    )
+    log.warn('config.incomplete', {
+      detail:
+        '已配置 AI_API_KEY/DEEPSEEK_API_KEY，但缺少 AI_BASE_URL/DEEPSEEK_BASE_URL；AI 报告和咨询稿会不可用。'
+    })
   }
   if (config.bochaApiKey && !config.bochaBaseUrl) {
-    console.warn(
-      '[配置] 已配置 BOCHA_API_KEY，但缺少 BOCHA_BASE_URL；联网检索会不可用。'
-    )
+    log.warn('config.incomplete', {
+      detail: '已配置 BOCHA_API_KEY，但缺少 BOCHA_BASE_URL；联网检索会不可用。'
+    })
   }
 }
 
 const server = app.listen(config.port, () => {
   warnIncompleteConfig()
-  console.log(`Vesta 已启动 http://127.0.0.1:${config.port}`)
-  console.log(`数据目录 ${config.dataDir}`)
+  log.info('server.started', {
+    url: `http://127.0.0.1:${config.port}`,
+    dataDir: config.dataDir,
+    logLevel: config.logLevel
+  })
 })
 
 server.on('error', (error: NodeJS.ErrnoException) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(
-      `[server] 端口 ${config.port} 已被占用。请停止占用该端口的旧服务，或换一个端口后重试。`
-    )
-  } else {
-    console.error('[server] 启动失败', error)
-  }
+  log.error('server.start_failed', {
+    port: config.port,
+    code: error.code,
+    hint:
+      error.code === 'EADDRINUSE'
+        ? `端口 ${config.port} 已被占用。请停止占用该端口的旧服务，或换一个端口后重试。`
+        : undefined,
+    err: error
+  })
   process.exit(1)
 })
 
@@ -119,3 +181,14 @@ function shutdown() {
 
 process.on('SIGTERM', shutdown)
 process.on('SIGINT', shutdown)
+
+// 未捕获异常和未处理的 Promise 拒绝必须留下日志再退出，交给 systemd Restart=always 拉起。
+process.on('uncaughtException', (error) => {
+  log.error('process.uncaught_exception', { err: error })
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason) => {
+  log.error('process.unhandled_rejection', { err: reason })
+  process.exit(1)
+})

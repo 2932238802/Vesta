@@ -59,6 +59,7 @@
 
 - 不要随意杀掉用户已经启动的 dev server；端口占用时先说明并征得同意。
 - 后端改动后执行 `npm run typecheck`。
+- 新增或改动业务链路时，用 `server/src/log.ts` 打结构化日志（事件名 + `reqId` / `submissionId` / `runId` 等关联字段）；禁止记录密码、密钥、联系方式、完整答卷和完整 AI 正文，不要用 `console.log` 绕过统一日志。
 - 前端改动后执行 `npm run typecheck && npm run build`。
 - 没有自动化测试时，至少完成类型检查、构建和关键页面手工走查。
 - 服务器更新入口是 `bash update.sh`（脚本自己拉取、校验、构建、重启）；生产服务由 systemd / PM2 / Docker 重启，不要用开发脚本替代。

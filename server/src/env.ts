@@ -14,6 +14,14 @@ for (const file of [path.join(rootDir, '.env'), path.join(rootDir, 'server/.env'
 
 const isProd = process.env.NODE_ENV === 'production'
 
+const rawLogLevel = read('LOG_LEVEL')?.toLowerCase()
+const logLevel: 'debug' | 'info' | 'warn' | 'error' =
+  rawLogLevel === 'debug' || rawLogLevel === 'info' || rawLogLevel === 'warn' || rawLogLevel === 'error'
+    ? rawLogLevel
+    : isProd
+      ? 'info'
+      : 'debug'
+
 function read(name: string): string | undefined {
   const value = process.env[name]
   return value && value.trim() ? value.trim() : undefined
@@ -44,6 +52,7 @@ if (isProd && authSecret.length < 24) {
 
 export const config = {
   isProd,
+  logLevel,
   // 仅显式 development 环境可用；npm start / 生产环境都不会开放免密登录。
   devGuestLogin: process.env.NODE_ENV === 'development' && read('DEV_GUEST_LOGIN') !== 'false',
   rootDir,

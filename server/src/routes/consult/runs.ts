@@ -38,6 +38,7 @@ import {
 import { beatsToText, composePurposeModuleBeats, planPurposeModuleDraft } from '../../ai/purpose-module'
 import { clampString, parseJson } from '../../util'
 import { noStore } from '../../auth'
+import { log } from '../../log'
 import {
   buildConsultExportModel,
   consultExportFilename,
@@ -368,6 +369,7 @@ async function runSentenceConsultJob(row: ConsultRunRow): Promise<void> {
     }
   }
 
+  log.info('consult.plan', { runId, mode: 'sentence', sections: plan.length })
   setRunRunning(runId)
   let currentSeq = 0
   try {
@@ -375,6 +377,8 @@ async function runSentenceConsultJob(row: ConsultRunRow): Promise<void> {
       const seq = index + 1
       if (completedBySeq.has(seq)) continue
       currentSeq = seq
+      const sectionStartedMs = Date.now()
+      log.info('consult.section.start', { runId, seq })
       db.prepare(
         "UPDATE consult_run_sections SET status = 'running', error = '', updated_at = ? WHERE run_id = ? AND seq = ?"
       ).run(now(), runId, seq)
@@ -383,6 +387,12 @@ async function runSentenceConsultJob(row: ConsultRunRow): Promise<void> {
         .map(([, item]) => item)
       const result = await composeConsultChapter(input, plan, chapter, index, completed)
       completedBySeq.set(seq, result)
+      log.info('consult.section.ready', {
+        runId,
+        seq,
+        ms: Date.now() - sectionStartedMs,
+        chars: result.content.length
+      })
       db.prepare(
         "UPDATE consult_run_sections SET status = 'ready', content = ?, error = '', updated_at = ? WHERE run_id = ? AND seq = ?"
       ).run(result.content, now(), runId, seq)
@@ -402,6 +412,12 @@ async function runSentenceConsultJob(row: ConsultRunRow): Promise<void> {
     setRunReady(runId, output)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'AI 生成失败'
+    log.error('consult.section.failed', {
+      runId,
+      seq: currentSeq,
+      error: message,
+      err: error
+    })
     if (currentSeq) {
       db.prepare(
         "UPDATE consult_run_sections SET status = 'failed', error = ?, updated_at = ? WHERE run_id = ? AND seq = ?"
@@ -515,6 +531,11 @@ async function runModularPurposeConsultJob(
     }
   }
 
+  log.info('consult.plan', {
+    runId,
+    mode: 'purpose-modular',
+    sections: modules.length
+  })
   setRunRunning(runId)
   let currentSeq = 0
   try {
@@ -522,6 +543,8 @@ async function runModularPurposeConsultJob(
     for (const [index, section] of sections.entries()) {
       if (section.status === 'ready') continue
       currentSeq = section.seq
+      const sectionStartedMs = Date.now()
+      log.info('consult.section.start', { runId, seq: section.seq })
       db.prepare(
         "UPDATE consult_run_sections SET status = 'running', error = '', updated_at = ? WHERE run_id = ? AND seq = ?"
       ).run(now(), runId, section.seq)
@@ -536,6 +559,12 @@ async function runModularPurposeConsultJob(
         purposeFeedbackText(input.purposeTemplate.id, module.purposeKeys)
       )
       const content = beatsToText(result.beats)
+      log.info('consult.section.ready', {
+        runId,
+        seq: section.seq,
+        ms: Date.now() - sectionStartedMs,
+        chars: content.length
+      })
       db.prepare(
         `UPDATE consult_run_sections
          SET status = 'ready', error = '', content = ?, options_json = ?, selected_option_id = ?,
@@ -563,6 +592,12 @@ async function runModularPurposeConsultJob(
     setRunReady(runId, output)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'AI 生成失败'
+    log.error('consult.section.failed', {
+      runId,
+      seq: currentSeq,
+      error: message,
+      err: error
+    })
     if (currentSeq) {
       db.prepare(
         "UPDATE consult_run_sections SET status = 'failed', error = ?, updated_at = ? WHERE run_id = ? AND seq = ?"
@@ -601,6 +636,11 @@ async function runLegacyPurposeConsultJob(
     "UPDATE consult_run_sections SET status = 'pending', content = '', error = '', updated_at = ? WHERE run_id = ? AND status != 'ready'"
   ).run(now(), runId)
 
+  log.info('consult.plan', {
+    runId,
+    mode: 'purpose-legacy',
+    sections: chapters.length
+  })
   setRunRunning(runId)
   let currentSeq = 0
   try {
@@ -608,6 +648,8 @@ async function runLegacyPurposeConsultJob(
       const seq = index + 1
       if (completedBySeq.has(seq)) continue
       currentSeq = seq
+      const sectionStartedMs = Date.now()
+      log.info('consult.section.start', { runId, seq })
       db.prepare(
         "UPDATE consult_run_sections SET status = 'running', error = '', updated_at = ? WHERE run_id = ? AND seq = ?"
       ).run(now(), runId, seq)
@@ -616,6 +658,12 @@ async function runLegacyPurposeConsultJob(
         .map(([, item]) => item)
       const result = await composePurposeChapter(input, chapters, chapter, index, completed)
       completedBySeq.set(seq, result)
+      log.info('consult.section.ready', {
+        runId,
+        seq,
+        ms: Date.now() - sectionStartedMs,
+        chars: result.content.length
+      })
       db.prepare(
         "UPDATE consult_run_sections SET status = 'ready', content = ?, error = '', updated_at = ? WHERE run_id = ? AND seq = ?"
       ).run(result.content, now(), runId, seq)
@@ -635,6 +683,12 @@ async function runLegacyPurposeConsultJob(
     setRunReady(runId, output)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'AI 生成失败'
+    log.error('consult.section.failed', {
+      runId,
+      seq: currentSeq,
+      error: message,
+      err: error
+    })
     if (currentSeq) {
       db.prepare(
         "UPDATE consult_run_sections SET status = 'failed', error = ?, updated_at = ? WHERE run_id = ? AND seq = ?"
@@ -654,12 +708,23 @@ async function runConsultJob(runId: string): Promise<void> {
 }
 
 function startConsultJob(runId: string): void {
-  if (activeConsultJobs.has(runId)) return
+  if (activeConsultJobs.has(runId)) {
+    log.debug('consult.skip_running', { runId })
+    return
+  }
+  const startedMs = Date.now()
+  log.info('consult.start', { runId })
   const job = runConsultJob(runId)
     .catch((error) => {
+      log.error('consult.failed', {
+        runId,
+        ms: Date.now() - startedMs,
+        err: error
+      })
       setRunFailed(runId, error instanceof Error ? error.message : 'AI 生成失败')
     })
     .finally(() => {
+      log.info('consult.end', { runId, ms: Date.now() - startedMs })
       activeConsultJobs.delete(runId)
     })
   activeConsultJobs.set(runId, job)

@@ -4,6 +4,18 @@
 
 ## 本轮（2026-11-13）
 
+### 日志系统完善（2026-11-13，产品版本 v1.69）
+
+- 依据：`docs/archive/20261113/7-日志系统完善-开发文档.md` v1.1。目标：任何一个用户可见的故障，都能用学生姓名 / 答卷 id / 请求 id / 时间在 1 分钟内定位到原因。该文档原计划 v1.68，已被英语块校验 Review 占用，本轮按版本约定顺延为 v1.69。
+- 统一日志：新增 `server/src/log.ts`，`debug / info / warn / error` 四级；生产输出单行 JSON，开发输出人类可读单行；`Error` 归一化为 `err.name / err.message / err.stack`，生产堆栈只留前 3 行。`server/src/env.ts` 新增 `LOG_LEVEL`（默认生产 `info`、开发 `debug`）。
+- 请求日志：`server/src/index.ts` 在 `express.json()` 之前挂中间件，生成 `reqId`、回写 `X-Request-Id`，响应完成时记录 `method / path / status / ms / ip / ua / queryKeys`；排除 `/assets/*`、成功 `/api/health` 和 304，慢请求（>3s）提为 `warn`。路径用 `req.originalUrl` 固定（Express 子路由会改写 `req.path`，实测健康检查一度记成 `/health` 没被排除）；邀请 token / 报告 slug 替换为 `:token` / `:slug`，`wechat / phone / token / password` 等敏感 query key 不记录。
+- 业务日志：submit 成功/校验失败；`ai.start / ai.ready / ai.retry / ai.failed / ai.unavailable / ai.queue / ai.unhandled`；doc 报告 `doc.initial / doc.rework_N / doc.audit_failed / doc.audit_passed`；检索 `search.start / search.done / search.query_failed`；博查缓存命中/单飞/外呼；咨询稿 `consult.start / consult.plan / consult.section.* / consult.end`；问卷升级改 `log.info`。
+- AI 调用：`server/src/ai/deepseek.ts` 记录模型、耗时、返回字符数、`finish_reason`；调用方通过 `context` 带 `submissionId` / `stage`，不记录 prompt 或正文。
+- 健康检查与兜底：`/api/health` 返回 `db / uptimeSec / commit / appVersion`；`commit` / `appVersion` 从 `data/deploy-info.json` 读取，文件不存在时为空串（写入属于第 9 篇，L5 仍走降级校验）。新增 `uncaughtException` / `unhandledRejection` 日志后退出。`env.ts` 的 3 条启动前配置提醒保留 `console.warn`（发生在 `config` 构造之前，改走 `log.ts` 会形成循环依赖），运行期日志已全部统一。
+- 文档：`docs/README.md` 新增「运行与排障」，同步 health 字段、`LOG_LEVEL` 和已发布版本；`docs/agent-rules.md` 新增结构化日志约束；第 7 篇补实施记录，归档索引第 7 项同步为已修复。
+- 验证：`npm run typecheck` + `npm run verify` 全绿。临时 `DATA_DIR` + 8791–8800 端口实测（不写仓库 `data/`、不调 AI）：开发/生产日志格式与级别过滤正确；health 返回 `db:true`，写假 `deploy-info.json` 后 `commit/appVersion` 正确；成功 health 不再产生 http 日志；`X-Request-Id` 与日志 `reqId` 一致；邀请 token、query 值、`wechat/phone` 均不出现在日志（grep 零命中）；后台建邀请后空答卷提交打 `submit.invalid`，完整答卷提交打 `submit.stored` 并串起 `ai.queue` → `ai.unavailable`；`env -u AI_API_KEY` 调用 `askDeepSeek()` 直接打 `ai.not_configured missing=AI_API_KEY`。
+- 未做：真实 AI 端到端生成（避免费用）；`update.sh` 写 `data/deploy-info.json`（第 9 篇）；日志落文件（按方案默认不做）。
+
 ### 英语块校验误伤与漏拦订正（2026-11-13，产品版本 v1.68）
 
 - 依据：`docs/archive/20261113/6-英语块校验-review报告.md`。复核 v1.67 校验层发现 3 处残留：考研 + 听力按同段共现误伤、口语 / 英语时长正则覆盖不全或偏严、第 5 篇分析稿题号过期。

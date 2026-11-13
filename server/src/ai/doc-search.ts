@@ -15,6 +15,7 @@ import { inferDirectionKey, jobDirections, type JobDirection } from '../../../sh
 import { calendarMonthsBetween, isOlderThanMonths } from '../../../shared/src/date'
 import { config } from '../env'
 import { now } from '../db'
+import { log } from '../log'
 import { searchWeb, type SearchResult } from './bocha'
 
 // 招聘原文超过 18 个整月就不再当投递入口，只保留要求结构。
@@ -103,7 +104,10 @@ interface SearchRun {
 }
 
 /** 博查有 QPS 限制，串行跑并留间隔，避免一份报告把配额瞬间打满。 */
-async function runSearches(specs: QuerySpec[]): Promise<SearchRun> {
+async function runSearches(
+  specs: QuerySpec[],
+  logContext: { submissionId?: string } = {}
+): Promise<SearchRun> {
   const results: SearchResult[][] = []
   const errors: string[] = []
   const queries: string[] = []
@@ -119,7 +123,11 @@ async function runSearches(specs: QuerySpec[]): Promise<SearchRun> {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const friendly = friendlySearchError(message)
-      console.warn('[doc-report] 招聘检索失败', query, message)
+      log.warn('search.query_failed', {
+        submissionId: logContext.submissionId,
+        query,
+        error: message
+      })
       errors.push(`${query}：${friendly}`)
       results.push([])
     }
@@ -349,14 +357,17 @@ interface RankedJob {
 /** 用博查抓真实招聘原文，做成可点开的卡片；查询词、来源和失败原因全部记录下来。 */
 export async function searchJobs(
   survey: Survey,
-  answers: Answers
+  answers: Answers,
+  logContext: { submissionId?: string } = {}
 ): Promise<{ jobs: JobCard[]; search: ReportSearchMeta }> {
+  const startedMs = Date.now()
   const searchedAt = now()
   const configured = Boolean(config.bochaApiKey && config.bochaBaseUrl)
   if (!configured) {
     const reason = !config.bochaApiKey
       ? '未配置 BOCHA_API_KEY，无法检索招聘原文'
       : '未配置 BOCHA_BASE_URL，无法检索招聘原文'
+    log.warn('search.skipped', { submissionId: logContext.submissionId, reason })
     return {
       jobs: [],
       search: {
@@ -379,6 +390,8 @@ export async function searchJobs(
   // 学生没写具体岗位时，用专业方向去搜；不要把「专业+相关岗位」当岗位名。
   const role = explicitRole || major
   if (!role) {
+    const reason = '问卷里没有专业或目标岗位，无法生成检索词'
+    log.warn('search.skipped', { submissionId: logContext.submissionId, reason })
     return {
       jobs: [],
       search: {
@@ -396,6 +409,13 @@ export async function searchJobs(
   const directions = jobDirections(major)
   const useDirections = directions.length > 0 && !explicitRole
   const primarySpecs = buildSearchSpecs({ city, role, directions, useDirections, year: searchYear })
+  log.info('search.start', {
+    submissionId: logContext.submissionId,
+    city,
+    explicitRole: Boolean(explicitRole),
+    directions: directions.length,
+    primaryQueries: primarySpecs.length
+  })
 
   const byUrl = new Map<string, { item: SearchResult; directionKey?: string; fallback: boolean }>()
   const allErrors: string[] = []
@@ -463,7 +483,7 @@ export async function searchJobs(
   // 渐进式检索：先搜第 1 个方向，可用原文够 3 条就不再花后面的额度；
   // 不足时才退回全量检索，行为与改动前一致（见 docs/archive/20261112/7-博查检索成本优化-设计方案.md）。
   const [firstSpec, ...restSpecs] = primarySpecs
-  let run = await runSearches(firstSpec ? [firstSpec] : [])
+  let run = await runSearches(firstSpec ? [firstSpec] : [], logContext)
   collect(run, firstSpec ? [firstSpec] : [])
   let ranked = buildRanked()
   let usable = usableOf(ranked)
@@ -472,7 +492,7 @@ export async function searchJobs(
   if (usable.length < 3 && restSpecs.length > 0) {
     // runSearches 只在同一个 run 内保持 500ms 间隔；这里另起一轮，手动补上间隔。
     await sleep(500)
-    run = await runSearches(restSpecs)
+    run = await runSearches(restSpecs, logContext)
     collect(run, restSpecs)
     ranked = buildRanked()
     usable = usableOf(ranked)
@@ -501,7 +521,7 @@ export async function searchJobs(
       })
     }
     if (supplementSpecs.length) {
-      run = await runSearches(supplementSpecs)
+      run = await runSearches(supplementSpecs, logContext)
       collect(run, supplementSpecs)
       ranked = buildRanked()
       usable = usableOf(ranked)
@@ -516,7 +536,7 @@ export async function searchJobs(
       freshness: 'oneMonth',
       fallback: true
     }
-    run = await runSearches([fallbackSpec])
+    run = await runSearches([fallbackSpec], logContext)
     collect(run, [fallbackSpec])
     ranked = buildRanked()
     usable = usableOf(ranked)
@@ -529,7 +549,7 @@ export async function searchJobs(
       freshness: 'oneYear',
       fallback: true
     }
-    run = await runSearches([fallbackSpec])
+    run = await runSearches([fallbackSpec], logContext)
     collect(run, [fallbackSpec])
     ranked = buildRanked()
     usable = usableOf(ranked)
@@ -602,6 +622,15 @@ export async function searchJobs(
     site: job.company,
     date: job.date
   }))
+
+  log.info('search.done', {
+    submissionId: logContext.submissionId,
+    queries: new Set(allQueries).size,
+    resultCount: allUrls.size,
+    jobs: jobs.length,
+    ms: Date.now() - startedMs,
+    error: error || undefined
+  })
 
   return {
     jobs,
