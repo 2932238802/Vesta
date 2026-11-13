@@ -1,7 +1,7 @@
 # `events` 表保留策略与清理 · 开发文档
 
 > 版本：v1.0（2026-11-13）
-> 状态：**已实施**（代码在工作区，待提交；产品版本 v1.73）
+> 状态：**已实施并提交**（产品版本 v1.73，commit `cd09143`）
 > 对应产品版本：**v1.73**（承接 v1.72 gzip）
 > 需求来源：用户 2026-11-13 要求——「`events` 表只增不删的优化」
 
@@ -207,7 +207,7 @@ ON CONFLICT(invite_id,kind,key) DO UPDATE SET at = excluded.at;
 
 ## 十、实施记录
 
-2026-11-13 实施完成（产品版本 v1.73，代码在工作区，待提交）：
+2026-11-13 实施完成（产品版本 v1.73，已随 `cd09143` 提交）：
 
 - `server/src/db/schema.ts`：新增 `event_facts` 表（`invite_id, kind, key, at` 主键）与 `idx_events_created` / `idx_events_invite`。
 - **实施偏差**：`event_facts` 增加内部列 `seq`（原始事件 id）。原因是原始事件的 `created_at` 只有毫秒精度，同一毫秒内的多条 `quiz_exit` 靠 `at` 无法还原先后顺序；旧逻辑按 `id` 取最后一条。`seq` 只用于 exit 的先后判定（`ON CONFLICT ... WHERE excluded.seq > event_facts.seq`），不参与对外输出。

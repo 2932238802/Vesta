@@ -25,11 +25,11 @@ Vesta 是一套面向大学在读学生的问卷、报告与咨询辅助系统�
 | v1.67 | 2026-11-13 | `d8fa36c` | 英语块表述约束与生成校验 |
 | v1.68 | 2026-11-13 | `d8fa36c` | 英语块校验误伤与漏拦订正（新增 `check:audit`） |
 | v1.69 | 2026-11-13 | `a8d7b84` | 日志系统完善（`reqId`、结构化日志、health 增强） |
-| v1.70 | 2026-11-13 | 待提交 | 版本号同步与工程元数据规范（`check:version`、`engines`、`.node-version`、部署元数据写入） |
-| v1.71 | 2026-11-13 | 待提交 | 文件规模约束与首批拆分（`check:size`、`web/src/api/`、`Submissions.vue`） |
-| v1.72 | 2026-11-13 | 待提交 | 文本响应 gzip 压缩（Node `compression` + Nginx 模板）；`client_max_body_size` 调到 25m |
-| v1.73 | 2026-11-13 | 待提交 | `events` 保留与清理：`event_facts` 漏斗汇总、180/365 天保留期、`check-events` |
-| v1.74 | 2026-11-13 | 待提交 | 学员名单按咨询期次自动分组（周三起算），移除自定义分组与日期筛选 |
+| v1.70 | 2026-11-13 | `cd09143` | 版本号同步与工程元数据规范（`check:version`、`engines`、`.node-version`、部署元数据写入） |
+| v1.71 | 2026-11-13 | `cd09143` | 文件规模约束与首批拆分（`check:size`、`web/src/api/`、`Submissions.vue`） |
+| v1.72 | 2026-11-13 | `cd09143` | 文本响应 gzip 压缩（Node `compression` + Nginx 模板）；`client_max_body_size` 调到 25m |
+| v1.73 | 2026-11-13 | `cd09143` | `events` 保留与清理：`event_facts` 漏斗汇总、180/365 天保留期、`check-events` |
+| v1.74 | 2026-11-13 | `cd09143` | 学员名单按咨询期次自动分组（周三起算），移除自定义分组与日期筛选 |
 
 （只回填能确认 commit 的版本；`—` 表示基线之前没有单独提交。）
 

@@ -1,7 +1,7 @@
 # 开启 gzip 压缩 · 开发文档
 
 > 版本：v1.0（2026-11-13）
-> 状态：**已实施**（代码在工作区，待提交；产品版本 v1.72）
+> 状态：**已实施并提交**（产品版本 v1.72，commit `cd09143`）
 > 对应产品版本：**v1.72**（承接 v1.71 巨型文件拆分）
 > 需求来源：用户 2026-11-13 要求——「gzip 的实现」
 
@@ -176,7 +176,7 @@ gzip_types
 
 ## 十、实施记录
 
-2026-11-13 实施完成（产品版本 v1.72，代码在工作区，待提交）：
+2026-11-13 实施完成（产品版本 v1.72，已随 `cd09143` 提交）：
 
 - `server/package.json`：`compression: ~1.7.4`、`@types/compression`（dev）。
 - `server/src/index.ts`：安全响应头之后、`express.json()` 与所有路由之前挂 `compression({ threshold: 1024, level: 6, filter })`；`filter` 排除 `image|audio|video/*`、`zip|gzip|br|docx|pdf|octet-stream`、`text/event-stream`。

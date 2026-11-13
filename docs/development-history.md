@@ -137,6 +137,12 @@
 - 文档订正：`docs/规划自测问卷-设计文档.md` §6.2 的 `assets` 题号由旧编号 Q10 / Q11 / Q16 改为新编号 Q12 / Q13 / Q18；第 2 号方案里「CSV 仍保留 doc 总分」的过期描述改为「CSV 已按模式留空，接口仍返回历史 `total`」。
 - 仓库卫生：`8207668` 误带入的 `_scratch/mem-patch.py` 已从工作区 / 索引删除，`.gitignore` 增加 `_scratch/`，一次性脚本不再入库；旧提交历史不改写。
 
+### 文档状态同步：v1.69–v1.74 提交状态（2026-11-13）
+
+- 提交状态：v1.69 在 `a8d7b84`（已推送 `origin/main`）；v1.70–v1.74 在本地 `cd09143` 提交，`main` 领先 `origin/main` 1 个提交，尚未推送。
+- 同步范围：`docs/archive/20261113/README.md` 状态表与第三节提交状态、第 7–12 篇开发文档顶部状态与实施记录、`docs/README.md`「版本记录」表的 commit 列；仅订正状态与提交哈希，不改实现、验证结论和版本号。
+- 复核：`npm run verify` 全绿（check:docs / check:size / check:version / check:dates / check:audit / typecheck / build）。
+
 ## 本轮（2026-11-12）
 
 ### 前端拆包与巨型文件拆分（2026-11-12，产品版本 v1.62）
