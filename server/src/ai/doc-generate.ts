@@ -21,7 +21,7 @@ import { getDocReportSkill, now, type ReportSkillSource } from '../db'
 import { askDeepSeek, parseJsonObject } from './deepseek'
 import { log } from '../log'
 import { clipSentence, isCityLanding, isOldJob, parseTime, searchJobs } from './doc-search'
-import { buildModuleSpecs, jobSpec, moduleSpecsForPrompt, outputContract } from './doc-prompts'
+import { buildModuleSpecs, jobSpec, moduleSpecsForPrompt, outputContract, type ModuleSpec } from './doc-prompts'
 import {
   auditNumbers,
   collectAllowedNumbers,
@@ -31,13 +31,14 @@ import {
   repetitionIssues,
   type RepetitionContext
 } from './doc-audit'
+import { sanitizeDocContent } from './doc-sanitize'
 
 export interface DocAiMeta {
   model: string
   generatedAt: string
   skill: Pick<ReportSkillSource, 'id' | 'name' | 'hash'>
   search: ReportSearchMeta
-  audit: { passed: true; repaired: boolean }
+  audit: { passed: boolean; repaired: boolean; issues?: string[] }
 }
 
 function answerText(survey: Survey, answers: Answers): string {
@@ -49,6 +50,37 @@ function answerText(survey: Survey, answers: Answers): string {
     })
     .filter(Boolean)
     .join('\n')
+}
+
+interface DocAudit {
+  problems: string[]
+  consistency: string[]
+  repetitions: string[]
+  texts: string[]
+  numbers: string[]
+  all: string[]
+}
+
+function auditDocContent(input: {
+  content: DocAiContent
+  specs: ModuleSpec[]
+  repetitionContext: RepetitionContext
+  planPeriods: string[]
+  allowedNumbers: Set<string>
+}): DocAudit {
+  const problems = contentProblems(input.content, input.specs)
+  const consistency = crossModuleIssues(input.content, input.specs)
+  const repetitions = repetitionIssues(input.content, input.repetitionContext)
+  const texts = findTextIssues(input.content, input.planPeriods)
+  const numbers = auditNumbers(input.content, input.allowedNumbers, input.specs)
+  return {
+    problems,
+    consistency,
+    repetitions,
+    texts,
+    numbers,
+    all: [...problems, ...consistency, ...repetitions, ...texts, ...numbers]
+  }
 }
 
 async function requestJson(
@@ -124,11 +156,7 @@ export async function generateDocContent(input: {
   const answerLines = answerText(survey, answers)
   const today = formatCalendarDate(new Date())
   const jobSpecs = jobs.map(jobSpec)
-  const searchSummary = search.error
-    ? `状态：${search.error}`
-    : search.attempted
-      ? `已执行 ${search.queries.length} 次检索，返回 ${search.resultCount} 条结果，采用 ${jobs.length} 条原文。`
-      : '本次没有执行外部检索。'
+  const searchSummary = `本次${search.attempted ? '已执行外部检索' : '没有执行外部检索'}，采用 ${jobs.length} 条原文。`
 
   const userPrompt = `今天是 ${today}。
 学生：${input.name || '同学'}
@@ -143,7 +171,6 @@ ${JSON.stringify(moduleSpecsForPrompt(specs))}
 ${JSON.stringify(jobSpecs)}
 
 【检索记录】
-检索词：${search.queries.join('；') || '（无）'}
 ${searchSummary}
 
 请按 Skill 的要求写整份报告，只输出规定的 JSON 对象。`
@@ -167,61 +194,42 @@ ${searchSummary}
     today
   ])
 
+  let auditIssues: string[] = []
   for (let pass = 0; pass < 2; pass += 1) {
-    const problems = contentProblems(content, specs)
-    const consistencyIssues = crossModuleIssues(content, specs)
-    const repetitions = repetitionIssues(content, repetitionContext)
-    const textIssues = findTextIssues(content, planPeriods)
-    const numberIssues = auditNumbers(content, allowedNumbers, specs)
-    if (
-      problems.length === 0 &&
-      consistencyIssues.length === 0 &&
-      repetitions.length === 0 &&
-      textIssues.length === 0 &&
-      numberIssues.length === 0
-    ) {
+    const audit = auditDocContent({
+      content,
+      specs,
+      repetitionContext,
+      planPeriods,
+      allowedNumbers
+    })
+    if (audit.all.length === 0) {
       log.info('doc.audit_passed', { submissionId: input.submissionId, reworked: repaired })
       break
     }
     log.warn('doc.audit_failed', {
       submissionId: input.submissionId,
       pass: pass + 1,
-      problems: problems.length,
-      consistency: consistencyIssues.length,
-      repetition: repetitions.length,
-      text: textIssues.length,
-      number: numberIssues.length,
-      first:
-        numberIssues[0] ??
-        problems[0] ??
-        consistencyIssues[0] ??
-        repetitions[0] ??
-        textIssues[0] ??
-        ''
+      problems: audit.problems.length,
+      consistency: audit.consistency.length,
+      repetition: audit.repetitions.length,
+      text: audit.texts.length,
+      number: audit.numbers.length,
+      first: audit.all[0]
     })
+    // 质量类问题不再判死：重写一次后仍有残余，记录后交给 sanitizeDocContent() 清洗并放行。
     if (pass === 1) {
-      if (numberIssues.length > 0) {
-        throw new Error(`数字核对未通过：${numberIssues[0]}`)
-      }
-      if (problems.length > 0) {
-        throw new Error(`AI 报告模块不完整：${problems[0]}`)
-      }
-      if (consistencyIssues.length > 0) {
-        throw new Error(`AI 报告前后矛盾：${consistencyIssues[0]}`)
-      }
-      if (repetitions.length > 0) {
-        throw new Error(`AI 报告重复：${repetitions[0]}`)
-      }
-      throw new Error(`AI 报告审校未通过：${textIssues[0]}`)
+      auditIssues = audit.all
+      break
     }
 
     const feedback = [
       '你上一次输出的报告有以下问题，需要修正：',
-      ...problems.slice(0, 10).map((item) => `- ${item}`),
-      ...consistencyIssues.slice(0, 6).map((item) => `- ${item}`),
-      ...repetitions.slice(0, 6).map((item) => `- ${item}`),
-      ...textIssues.slice(0, 10).map((item) => `- ${item}`),
-      ...numberIssues.slice(0, 10).map((item) => `- ${item}`),
+      ...audit.problems.slice(0, 10).map((item) => `- ${item}`),
+      ...audit.consistency.slice(0, 6).map((item) => `- ${item}`),
+      ...audit.repetitions.slice(0, 6).map((item) => `- ${item}`),
+      ...audit.texts.slice(0, 10).map((item) => `- ${item}`),
+      ...audit.numbers.slice(0, 10).map((item) => `- ${item}`),
       '请保留已经正确的分析，补全所有缺失模块和字段，并重新输出完整 JSON。',
       '不要新增任何数字；数字只能原样使用系统提供的值。'
     ].join('\n')
@@ -240,8 +248,20 @@ ${searchSummary}
     repaired = true
   }
 
+  // 失败下限：AI 没给出可解析的正文时仍失败；模板兜底是明确禁止的。
+  if (content.modules.length === 0 && content.sections.length === 0) {
+    throw new Error('AI 报告没有可用的正文')
+  }
+  if (auditIssues.length > 0) {
+    log.warn('doc.audit_waived', {
+      submissionId: input.submissionId,
+      issues: auditIssues.length,
+      first: auditIssues[0]
+    })
+  }
+
   return {
-    content,
+    content: sanitizeDocContent(content, specs),
     jobs,
     search,
     meta: {
@@ -249,7 +269,7 @@ ${searchSummary}
       generatedAt: now(),
       skill: { id: skill.id, name: skill.name, hash: skill.hash },
       search,
-      audit: { passed: true, repaired }
+      audit: { passed: auditIssues.length === 0, repaired, issues: auditIssues.slice(0, 20) }
     }
   }
 }

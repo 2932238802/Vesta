@@ -4,6 +4,18 @@
 
 ## 本轮（2026-11-14）
 
+### AI 报告审校硬失败：事实去矛盾、质量类放行、落库前清洗（2026-11-14，产品版本 v1.83）
+
+- 依据：`docs/archive/20261114/10-AI报告审校硬失败-根因与修复方案.md` v1.1。触发：生产报告 `/r/<slug>` 返回 `数字核对未通过：模块 scorecard 的 school 写了 5 分，但系统给这一项的分数是 2.5 分`，另一条是 `gap 第 2 段出现内部检索信息`。两条都不是 AI 没返回，而是**系统喂给 AI 的事实与落库前审校互相矛盾**：scorecard 的 `rule` 原样带「封顶 5 分 / 6 分」，gap 行标签「关键时间窗」又命中内部信息黑名单；审校失败即整份报告 `throw`，重试拿同一份上下文重跑。用户已确认失败下限：只有 AI 不可用 / 无可解析正文才失败，质量类问题一律清洗 + 放行。
+- **L1 事实层（去掉根因）**：`server/src/ai/doc-prompts.ts` 的 scorecard item 不再把 `item.note` 原样给 AI，`封顶 / 最高 / 上限 / 按 N 分封顶` 统一写成「有上限」；`benchmark` 不再传 `6.0—8.0` 这类端点，改成相对结论 `benchmarkState`（低于 / 在 / 高于常规入场线、背景项不设门槛）。`outputContract()` 明确 item text 只解释分数来源，不写封顶值、入场线数字、区间端点，直接引用 `benchmarkState`。`shared/src/doc.ts` 的 gap 行标签「关键时间窗」改为「关键节点」。`doc-generate.ts` 的 user prompt 删除「检索词：…」，只保留「本次是否执行外部检索、采用几条原文」；原始 `queries` 继续留在 `ai_meta.search.queries` 与后台日志。
+- **L2 审校精度**：`server/src/ai/doc-audit.ts` 的 `isScoreDimension()` 补「封顶 / 最高 / 上限 / 至多 / 不超过 / 入场线 / 区间」前缀和区间连接词「到」；内部信息黑名单删除「时间窗」（这是报告页自己展示的词），保留 `检索词 / 检索参数 / freshness / site: / BOCHA / 博查 / 届拼写`；`N 天` 在「到岗 / 工作 / 上班 / 每周 / 工作日 / 实习」上下文放行，`N 年` 后跟「经验 / 以上 / 起 / 工龄 / 学制」放行。重复审计的提示改成「只在系统展示的 gap『关键节点』行和路线图副标题出现」，与实现一致。
+- **L3 生成层（保证报告出来）**：`doc-generate.ts` 把审校拆成「质量」与「阻断」两类：重写一次后仍有 `contentProblems / crossModuleIssues / repetitionIssues / findTextIssues / auditNumbers`，只记 `audit.issues` 并继续落库，日志记 `doc.audit_waived`；只有 AI 调用失败、JSON 修复后仍不可解析、或 `modules` 与 `sections` 全空才 `throw`（禁止模板兜底）。新增 `server/src/ai/doc-sanitize.ts`（101 行，纯函数）：按整句删除 `检索词 / 检索参数 / 博查 / BOCHA / freshness / site:`，删空则跳过该段；「关键时间窗 / 时间窗」收口成「关键节点」；scorecard item 里不等于该项分数的 `N 分`，前有「封顶 / 最高 / 上限」时整句改成「这一项有上限」，前有「得分 / 分数 / 实际」时替换成系统分数。`DocAiMeta.audit` 扩展为 `{ passed, repaired, issues? }`。
+- **L4 展示与重试**：`server/src/routes/public.ts` 的失败态不再把 `ai_error` 原样返回学生：可重试时固定「这次报告没有生成完，可以点重新生成。」，配置 / 规则问题返回「这是服务端配置或规则问题，请把这段提示发给发链接的人。」；真实 error 仍写 `ai_error` / 日志。`ReportView.vue` 删除重复的配置提示段。`isRetryableError()` 与 `MAX_AI_ATTEMPTS=4` 不改。`AGENTS.md` / `docs/agent-rules.md` 的「显示真实原因」同步改为「给出可操作的真实结论，不暴露内部 key」。
+- **L1-4 静态文案**：`shared/src/docScore.ts` 的 `schoolParts()` / `cityParts()` 记录封顶是否真的生效；`school=2.5` 时 note 只说「学校层级 + 专业是否对口」，不再解释一个没生效的「封顶 5 分」。分数计算逻辑与结果不变。
+- **文档**：`docs/README.md` 报告生成段改为「重写一次 → 残余问题清洗 + 放行」；`docs/规划自测问卷-设计文档.md` §6.2 / §6.3 同步；第 10 篇状态与实施记录、`docs/archive/20261114/README.md` 索引同步；`scripts/file-size-baseline.json` 随 `public.ts` / `doc.ts` / `ReportView.vue` 行数下调。
+- **验证**：`npm run check:audit` 新增分数量纲（`封顶 5 分`、`6 到 8 分`、错误分数仍拦）、gap 标签、岗位时间（`3 年经验`、`每周到岗 3 天`、真距离仍拦）、`sanitizeDocContent()`（内部词整句删除不补写、封顶分值改写）用例；本地只读脚本确认 `school=2.5` 的 moduleSpecs 已无「封顶 5 分 / 6.0—8.0」、`benchmarkState=低于常规入场线`，且 note 不再解释未生效封顶、封顶生效时仍写「封顶 5 分」。本地假 AI 网关（临时 `DATA_DIR`，不调用真实 AI）复现生产故障：`school=2.5`、gap 段落含「关键时间窗」与「检索词」时，第 1 轮审校不过 → 重写 1 次 → 仍不过则 `doc.audit_waived` 放行（`audit.passed=false`、16 条 issues）；落库内容 gap 段只剩「关键节点还很长…」，scorecard 变成「这一项有上限。…实际 2.5 分。」，正文不含内部词；首轮 prompt 不含「封顶 5 分 / 6.0—8.0 / 检索词：/ 关键时间窗」。临时 `DATA_DIR` + 本地构建走查报告页：正常报告 gap 系统标签为「关键节点」，失败页只显示固定文案与重试按钮、390px 不溢出、控制台零错误；旧报告正文里的历史用词不在本次清洗范围。`npm run verify` 全绿。未调用真实 AI / 博查，未写仓库 `data/`，未重新生成旧报告。
+- **未做 / 已知**：生产回放（对当前失败链接调用一次 `retry`）是面向学生的外部动作，等用户确认后再做；后台自定义 Skill 的正文仍可能带「封顶 X 分 / 时间窗」，由 L2 / L3 兜底，建议运营自查当前启用模板；旧报告不重新生成。部署需 `bash update.sh`，回滚 `git revert` 即可（无表结构、无新依赖）。
+
 ### 分数线维度字典与研招网国家线解析（2026-11-14，产品版本 v1.82）
 
 - 依据：`docs/archive/20261114/9-分数线筛选栏批次与科类无选项-根因与修复方案.md` v1.2。本轮按用户确认的范围实施 **9.1 的 1 → 2 → 3 → 5 → 8**：先立字典与归一化，再让解析 / 落库落到口径上，同时补 Content-Type 分派与研招网国家线解析；facets 接口、页面 chips、复核「修正后通过」、抓取/导出脚本不在本轮。

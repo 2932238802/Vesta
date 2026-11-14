@@ -52,6 +52,32 @@ export function jobSpec(job: JobCard): Record<string, unknown> {
   }
 }
 
+/** 系统规则的封顶写法（「封顶 5 分」「按 6 分封顶」）改成「有上限」，不把分值递给 AI。 */
+const CAP_PATTERNS: RegExp[] = [
+  /按\s*\d+(?:\.\d+)?\s*分\s*(?:封顶|为上限)/g,
+  /(?:封顶|最高|上限|不超过|至多)\s*\d+(?:\.\d+)?\s*分/g,
+  /\d+(?:\.\d+)?\s*分\s*(?:封顶|为上限)/g
+]
+
+function ruleWithoutCapInput(text: string): string {
+  return CAP_PATTERNS.reduce((value, pattern) => value.replace(pattern, '有上限'), text)
+}
+
+/** 入场线区间换成相对结论，避免 AI 照抄 6.0—8.0 这类端点数字。 */
+function benchmarkState(item: { score: number; benchmark?: string }): string {
+  const benchmark = item.benchmark ?? ''
+  if (!benchmark) return ''
+  if (benchmark.includes('背景项')) return '背景项，不设门槛'
+  const range = /(\d+(?:\.\d+)?)\s*[—~\-至到]\s*(\d+(?:\.\d+)?)/.exec(benchmark)
+  if (!range) return ''
+  const low = Number(range[1])
+  const high = Number(range[2])
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return ''
+  if (item.score < low) return '低于常规入场线'
+  if (item.score > high) return '高于常规入场线'
+  return '在常规入场线内'
+}
+
 export function buildModuleSpecs(input: {
   base: ReportPayload
   survey: Survey
@@ -88,8 +114,8 @@ export function buildModuleSpecs(input: {
             label: item.label,
             score: item.score,
             source: item.source ?? '',
-            rule: item.note,
-            benchmark: item.benchmark ?? ''
+            rule: ruleWithoutCapInput(item.note),
+            benchmarkState: benchmarkState(item)
           }
         }))
       })
@@ -303,13 +329,14 @@ export function outputContract(): string {
 - jobmap 某个方向有 stale 为 true 的招聘原文参与时，entry 必须以「仅看要求结构，不能当投递入口」开头，不能当成现在的投递门槛。
 - jobmap 的 facts 出现「原文对专业的写法不一致」时，fit 要写明这句、以具体岗位为准，不能只写「原文没写专业限制」。
 - scorecard 每个 item 的 text 如提到分数，必须等于该 item 在 moduleSpecs 里的 score；scorecard 的 summary 如提到分数，必须是本模块某一项的 score。不要写别的 item 的分数，也不要用 10 分制总分冒充单项分。
-- 用分数对照经验值区间时，分数落在区间端点（例如 8 分对 6.0—8.0）写「达到上限」或「达到下限」，不要写「在……之上」「在……以下」；只有分数严格超出区间才写「高于」「低于」。
+- scorecard 的 item 只解释「这个分数是怎么由回答来的」；不要再写封顶值、入场线数字、区间端点或其它 item 的分数。需要说上限时写「有上限 / 上限不高」，不要写具体分值。
+- scorecard item 的 benchmarkState 已经给出「低于常规入场线 / 在常规入场线内 / 高于常规入场线 / 背景项，不设门槛」，直接按这个结论写，不要自己写区间或端点分数字。
 - assets 模块的标题写「你现在能借到的力」：这些是家庭、学校或已有经历给的支撑，不要叫「资源」「能力盘点」。
 - 所有数字只能原样使用 moduleSpecs、jobSpecs、问卷回答或检索记录里的值，不能自己计算、换算或估算。
 - jobSpecs 里 fallback 为 true 的原文是主检索不足时的补位结果，只能参考要求结构，不能用来统计「几条原文」或门槛数量；stale 为 true 的过期原文同理，不能当成当前投递门槛。
 - 原文没有写薪资时不要写「薪资以原文为准」之类的话，也不要补一个薪资数字；没有就略过薪资。
 - 时间只使用系统给出的粗粒度表达；不要写「547 天」「24 个月」「2 年」这种数字加时间单位。
-- 整份报告的时间距离只由系统给出两处：gap 的「关键时间窗」和 roadmap 副标题。conclusion、模块标题和正文都不要再写「还有约 X」「距离 X」或「X 年后」；deadline 模块只讲这个节点的准备含义。
+- 整份报告的时间距离只由系统给出两处：gap 的「关键节点」行和 roadmap 副标题（两者由系统直接展示）。conclusion、模块标题和正文都不要再写「还有约 X」「距离 X」或「X 年后」；deadline 模块只讲这个节点的准备含义。
 - 目标城市统一写 moduleSpecs 给出的具体城市（gap.data.targetCity.city）；不要回抄问卷 Q9 选项原文，也不要带「新一线（杭州、成都、武汉、西安等）」这类整串档位说明。
 - 英语块不要复述问卷的每周投入和总时长（如「每周 5 小时」「总共 17.5 小时」；roadmap 副标题已经给过一次），只写怎么补、怎么验证；「每周末做一套真题」这类练习节奏可以写。
 - 英语块的听力和口语要并列写，不能写「先补听力，再补口语」「口语不追求流利」「等流利了再练」，也不要写「不追求口语流利」「口语先放一放」「口语以后再说」这类反向语序或换词；只有 moduleSpecs 材料明确给出先后时才写顺序。
@@ -319,5 +346,5 @@ export function outputContract(): string {
 - 同一段里把「考研」和「听力考试」写在一起（如「初试考听力」「听力计入总分」）时，必须写明是复试或雅思/托福类考试；考研初试不考听力，不能把「听力弱」直接写成初试要考。单纯说「考研和听力都重要」不算。
 - 「简历上缺一段和目标方向对得上的经历」这类整句整份报告最多出现一次；岗位卡只写这条原文的具体要求，不要复述整句。
 - 过期原文的说明由块副标题统一给出；模块正文和标题不要逐条重复「这是某年的公告」。
-- roadmap 的 label 只写阶段名（如「方向确认」「实践积累」），不要重复系统给的时间窗，也不要写月份数字。`
+- roadmap 的 label 只写阶段名（如「方向确认」「实践积累」），不要重复系统给的阶段时间段，也不要写月份数字。`
 }

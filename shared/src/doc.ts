@@ -970,7 +970,7 @@ function gapLines(survey: Survey, answers: Answers): { label: string; value: str
 
   const lines: { label: string; value: string }[] = [
     { label: '你的第一选择', value: first || '还没确定' },
-    { label: '关键时间窗', value: `${node.node}：${node.windowText}，还有约 ${node.distance}` }
+    { label: '关键节点', value: `${node.node}：${node.windowText}，还有约 ${node.distance}` }
   ]
 
   if (first === '就业') {

@@ -221,18 +221,28 @@ function skillScore(survey: Survey, answers: Answers): number {
   return clamp(score)
 }
 
-function cityScore(survey: Survey, answers: Answers): number {
+function cityParts(survey: Survey, answers: Answers): { score: number; capped: boolean } {
   let score = pick(optionIndex(survey, answers, 'q8'), CITY, 3)
   const target = textAnswer(answers, 'q5a')
   if (target.length >= 6) score += 2
   else if (target.length > 0) score += 1
   // 城市这一项封顶：不是北上广深或新一线，最高 6 分。
   // 岗位写得再清楚，也只说明方向清楚，不等于城市机会密度够。
-  if (!isTopCity(survey, answers)) score = Math.min(score, 6)
-  return clamp(score)
+  if (!isTopCity(survey, answers)) {
+    const capped = Math.min(score, 6)
+    return { score: clamp(capped), capped: score > 6 }
+  }
+  return { score: clamp(score), capped: false }
 }
 
-function schoolScore(survey: Survey, answers: Answers): number {
+/**
+ * 学校与专业：先算未封顶的原始分，再记录封顶是否真的生效。
+ * 2.5 分却被解释成「封顶 5 分」会误导学生，所以只在封顶生效时才写进 note。
+ */
+function schoolParts(
+  survey: Survey,
+  answers: Answers
+): { score: number; cap: 0 | 5 | 6 } {
   let score = pick(optionIndex(survey, answers, 'q1'), SCHOOL, 4)
   const majorJob = optionIndex(survey, answers, 'q5')
   if (majorJob === 0) score += 0.5
@@ -242,28 +252,41 @@ function schoolScore(survey: Survey, answers: Answers): number {
   // 1) 就业面窄的专业，不管学校多好，最高 5 分；
   // 2) 非一线/新一线城市，专业又不属于就业面较宽的方向，最高 6 分。
   const tier = majorTier(survey, answers)
-  if (tier === 'weak') score = Math.min(score, 5)
-  else if (!isTopCity(survey, answers) && tier !== 'strong') score = Math.min(score, 6)
-
-  return clamp(score)
+  if (tier === 'weak') {
+    const capped = Math.min(score, 5)
+    return { score: clamp(capped), cap: score > 5 ? 5 : 0 }
+  }
+  if (!isTopCity(survey, answers) && tier !== 'strong') {
+    const capped = Math.min(score, 6)
+    return { score: clamp(capped), cap: score > 6 ? 6 : 0 }
+  }
+  return { score: clamp(score), cap: 0 }
 }
 
 export function computeDocScores(survey: Survey, answers: Answers): DocScores {
+  const school = schoolParts(survey, answers)
+  const city = cityParts(survey, answers)
   const background: ScoredItem[] = [
     {
       key: 'school',
       label: '学校与专业',
-      score: schoolScore(survey, answers),
+      score: school.score,
       note:
-        '学校层级 + 专业是否对口；就业面窄的专业封顶 5 分，非一线/新一线城市且专业不属于就业面较宽的方向时封顶 6 分',
+        school.cap === 5
+          ? '学校层级 + 专业是否对口；就业面窄的专业封顶 5 分'
+          : school.cap === 6
+            ? '学校层级 + 专业是否对口；非一线/新一线城市且专业不属于就业面较宽的方向时封顶 6 分'
+            : '学校层级 + 专业是否对口',
       benchmark: '常规入场线 6.0—8.0',
       source: 'Q1 学校 + Q5 是否对口'
     },
     {
       key: 'city',
       label: '城市与行业',
-      score: cityScore(survey, answers),
-      note: '目标城市的机会密度 + 行业岗位写得清不清楚；非一线/新一线城市按 6 分封顶',
+      score: city.score,
+      note: city.capped
+        ? '目标城市的机会密度 + 行业岗位写得清不清楚；非一线/新一线城市按 6 分封顶'
+        : '目标城市的机会密度 + 行业岗位写得清不清楚',
       benchmark: '常规入场线 6.0—8.0',
       source: 'Q9 城市 + Q6 岗位'
     },

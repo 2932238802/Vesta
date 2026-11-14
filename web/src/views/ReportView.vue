@@ -38,9 +38,6 @@
       <p class="eyebrow">这次没有生成成功</p>
       <h1 class="serif">报告暂时打不开</h1>
       <p class="analysis-copy">{{ reportError || 'AI 报告生成失败，具体原因还没有返回。' }}</p>
-      <p v-if="!retryable" class="quiet small">
-        这是服务端配置或规则问题。把这段提示发给发链接的人，可以更快处理。
-      </p>
       <button
         v-if="retryable"
         class="btn retry-btn"

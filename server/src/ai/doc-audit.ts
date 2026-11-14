@@ -208,7 +208,7 @@ export function repetitionIssues(content: DocAiContent, ctx: RepetitionContext):
       if (seen.has(key)) continue
       seen.add(key)
       issues.push(
-        `${where} 重复了系统已经给出的时间距离「${match[0]}」；整份报告只在 gap 的「关键时间窗」和路线图副标题各写一次，正文和标题不要再写`
+        `${where} 重复了系统已经给出的时间距离「${match[0]}」；整份报告只在系统展示的 gap「关键节点」行和路线图副标题出现，正文和标题不要复述`
       )
     }
     // 「大约三年」「三年后」这类没有「还有 / 距离」前缀的写法同样算重复。
@@ -219,7 +219,7 @@ export function repetitionIssues(content: DocAiContent, ctx: RepetitionContext):
     ) {
       distanceWhere.add(where)
       issues.push(
-        `${where} 重复了系统已经给出的时间距离「${ctx.distance}」；整份报告只在 gap 的「关键时间窗」和路线图副标题各写一次，正文和标题不要再写`
+        `${where} 重复了系统已经给出的时间距离「${ctx.distance}」；整份报告只在系统展示的 gap「关键节点」行和路线图副标题出现，正文和标题不要复述`
       )
     }
     if (checkCityLabel) {
@@ -367,10 +367,17 @@ export function findTextIssues(content: DocAiContent, planPeriods: string[] = []
     if (/(天坑|野鸡|垃圾专业|最差专业)/.test(text)) {
       issues.push(`${where} 出现贬低专业的说法`)
     }
-    if (/检索词|检索参数|时间窗|freshness|site:|BOCHA|届拼写|博查/.test(text)) {
+    if (/检索词|检索参数|freshness|site:|BOCHA|届拼写|博查/.test(text)) {
       issues.push(`${where} 出现内部检索信息，报告里只能写结果和原文来源`)
     }
-    if (/\d+(?:\.\d+)?\s*天/.test(text)) {
+    // 岗位原文里的「每周到岗 3 天」「3 年经验」是工作要求，不是报告的时间距离。
+    const days = [...text.matchAll(/\d+(?:\.\d+)?\s*天/g)]
+    const dayIsWorkRequirement = (match: RegExpMatchArray): boolean => {
+      const index = match.index ?? 0
+      const near = text.slice(Math.max(0, index - 6), index + match[0].length + 6)
+      return /到岗|工作|上班|每周|工作日|实习/.test(near)
+    }
+    if (days.some((match) => !dayIsWorkRequirement(match))) {
       issues.push(`${where} 使用了「天」作为时间距离，必须换成粗粒度表达`)
     }
     for (const match of text.matchAll(/(\d+)\s*个月/g)) {
@@ -379,6 +386,8 @@ export function findTextIssues(content: DocAiContent, planPeriods: string[] = []
       }
     }
     for (const match of text.matchAll(/(^|[^\d])(\d{1,2})\s*年/g)) {
+      const end = (match.index ?? 0) + match[0].length
+      if (/^(经验|以上|起|工龄|学制)/.test(text.slice(end, end + 3))) continue
       issues.push(`${where} 的「${match[2]} 年」必须改成中文粗粒度表达`)
     }
   }
@@ -423,14 +432,14 @@ export function collectAllowedNumbers(sources: string[]): Set<string> {
   return allowed
 }
 
-/** 「0—10 分」「满分 10 分」「10 分制」是量纲或门槛说明，不是单项得分。 */
+/** 「0—10 分」「满分 10 分」「10 分制」「封顶 5 分」「6 到 8 分」是量纲或门槛说明，不是单项得分。 */
 function isScoreDimension(text: string, index: number, end: number): boolean {
   const before = text.slice(Math.max(0, index - 8), index)
   // end 落在「分」之后；从「分」本身开始取，才能识别「10 分制」。
   const after = text.slice(Math.max(index, end - 1), end + 1)
   return (
-    /[—~\-至/]\s*$/.test(before) ||
-    /(满分|入场线|门槛|基准)\s*$/.test(before) ||
+    /[—~\-至/到]\s*$/.test(before) ||
+    /(满分|入场线|门槛|基准|封顶|最高|上限|至多|不超过|区间)\s*$/.test(before) ||
     /^\s*分制/.test(after)
   )
 }

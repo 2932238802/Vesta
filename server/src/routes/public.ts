@@ -314,12 +314,16 @@ publicRouter.get(
 
       if (submission.ai_status === 'failed') {
         const error = submission.ai_error || 'AI 报告生成失败'
+        const retryable = isRetryableError(error)
+        // 真实 error 仍写 ai_error / 后台日志；学生侧只说能做什么，不暴露模块 key 和分数口径。
         const response: ReportResponse = {
           status: 'failed',
           report: null,
           name,
-          error,
-          retryable: isRetryableError(error)
+          error: retryable
+            ? '这次报告没有生成完，可以点重新生成。'
+            : '这是服务端配置或规则问题，请把这段提示发给发链接的人。',
+          retryable
         }
         res.json(response)
         return

@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict'
 import type { DocAiContent } from '../../../shared/src/doc'
-import { crossModuleIssues, findTextIssues, repetitionIssues } from './doc-audit'
+import {
+  auditNumbers,
+  crossModuleIssues,
+  findTextIssues,
+  repetitionIssues
+} from './doc-audit'
+import type { ModuleSpec } from './doc-prompts'
+import { sanitizeDocContent } from './doc-sanitize'
 
 interface TextCase {
   text: string
@@ -61,6 +68,56 @@ function contentOf(
   }
 }
 
+function scorecardContent(text: string): DocAiContent {
+  return {
+    conclusion: '',
+    sections: [],
+    modules: [
+      { key: 'scorecard', title: '', summary: '', paragraphs: [], items: [{ key: 'school', text }] }
+    ]
+  }
+}
+
+function scorecardSpecs(score: number): ModuleSpec[] {
+  return [
+    {
+      key: 'scorecard',
+      kind: 'scores',
+      summaryRequired: true,
+      paragraphsRequired: false,
+      textRequired: true,
+      allFields: [],
+      anyFields: [],
+      data: {},
+      items: [{ key: 'school', data: { score } }]
+    }
+  ]
+}
+
+/** 分数表达：封顶值、入场线区间、区间连接词「到」按量纲放行；写别的分数仍记录。 */
+export const SCORE_DIMENSION_CASES: { text: string; score: number; blocked: boolean }[] = [
+  {
+    text: '旅游管理就业面窄，按规则封顶 5 分；你目前是公办专科，实际 2.5 分。',
+    score: 2.5,
+    blocked: false
+  },
+  { text: '这一项在入场线区间 6 到 8 分里。', score: 2.5, blocked: false },
+  { text: '实际 3 分。', score: 2.5, blocked: true }
+]
+
+/** gap 的系统标签换成「关键节点」；「时间窗」不是内部词，不再拦。 */
+export const GAP_LABEL_CASES: TextCase[] = [
+  { text: '关键节点还很长，先把运营岗需要的作品做出来。', blocked: false },
+  { text: '关键时间窗还很长，先把运营岗需要的作品做出来。', blocked: false }
+]
+
+/** 岗位原文里的「3 年经验」「每周到岗 3 天」是工作要求，不是报告的时间距离。 */
+export const JOB_TIME_CASES: TextCase[] = [
+  { text: '要求 3 年经验，能独立做项目。', blocked: false },
+  { text: '每周到岗 3 天，其余时间线上。', blocked: false },
+  { text: '还有 547 天就到报名截止。', blocked: true }
+]
+
 function expectBlocked(label: string, issues: string[], blocked: boolean): void {
   const actual = issues.length > 0
   assert.equal(
@@ -91,6 +148,52 @@ export function runDocAuditCases(): void {
   for (const text of ['检索词是「上海 工程师 应届 招聘」', '博查返回的结果里没有合适的岗位']) {
     expectBlocked(`内部检索信息「${text}」`, findTextIssues(contentOf('gap', [text])), true)
   }
+
+  for (const item of GAP_LABEL_CASES) {
+    expectBlocked(`gap 标签「${item.text}」`, findTextIssues(contentOf('gap', [item.text])), item.blocked)
+  }
+
+  for (const item of JOB_TIME_CASES) {
+    expectBlocked(
+      `岗位时间「${item.text}」`,
+      findTextIssues(contentOf('jobmap', [item.text])),
+      item.blocked
+    )
+  }
+
+  for (const item of SCORE_DIMENSION_CASES) {
+    expectBlocked(
+      `scorecard 分数表达「${item.text}」`,
+      auditNumbers(
+        scorecardContent(item.text),
+        new Set(['2.5', '3', '5', '6', '8']),
+        scorecardSpecs(item.score)
+      ),
+      item.blocked
+    )
+  }
+
+  // 落库前清洗：真内部词整句删除，不补写；「时间窗」收口成「关键节点」。
+  const sanitized = sanitizeDocContent(
+    contentOf('gap', [
+      '按检索词「上海 工程师」找到的岗位。关键时间窗还很长。',
+      '博查返回的结果里没有合适的岗位。'
+    ]),
+    []
+  )
+  const sanitizedText = sanitized.modules[0]?.paragraphs.join('\n') ?? ''
+  assert.equal(sanitizedText, '关键节点还很长。', `清洗后正文不符合预期：${sanitizedText}`)
+
+  const sanitizedScore = sanitizeDocContent(
+    scorecardContent('旅游管理就业面窄，按规则封顶 5 分；你目前是公办专科，实际 2.5 分。'),
+    scorecardSpecs(2.5)
+  )
+  const sanitizedScoreText = sanitizedScore.modules[0]?.items[0]?.text ?? ''
+  assert.ok(
+    !/(?<![\d.])5\s*分/.test(sanitizedScoreText),
+    `清洗后仍含封顶分值：${sanitizedScoreText}`
+  )
+  assert.ok(/2\.5\s*分/.test(sanitizedScoreText), `清洗后丢了正确分数：${sanitizedScoreText}`)
 
   const repetitionContext = {
     distance: '三年',
@@ -134,6 +237,6 @@ const directRun = process.argv[1]
 if (directRun) {
   runDocAuditCases()
   console.log(
-    `报告文本审计用例通过：考研 × 听力 ${CROSS_MODULE_CASES.length} 组 + 口语 ${SPEAKING_CASES.length} 组 + 英语时长 ${ENGLISH_TIME_CASES.length} 组 + 2 组模块 / 数字边界 + 2 组内部信息`
+    `报告文本审计用例通过：考研 × 听力 ${CROSS_MODULE_CASES.length} 组 + 口语 ${SPEAKING_CASES.length} 组 + 英语时长 ${ENGLISH_TIME_CASES.length} 组 + 分数量纲 ${SCORE_DIMENSION_CASES.length} 组 + gap 标签 ${GAP_LABEL_CASES.length} 组 + 岗位时间 ${JOB_TIME_CASES.length} 组 + 内部信息 / 清洗`
   )
 }
