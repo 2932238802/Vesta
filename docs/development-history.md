@@ -4,6 +4,18 @@
 
 ## 本轮（2026-11-14）
 
+### 分数线抓取失败修复：入口、发现与类别表（2026-11-14，产品版本 v1.80）
+
+- 依据：`docs/archive/20261114/7-分数线模块抓取失败-根因与修复方案.md` v1.0。现象：浙江 T0 源抓到的是「点击进入」引导页（0 表、0 `<a>`，跳转写在 `onclick`），报文「没有识别到分数线表格」；即使换成真实公告页也解析不出，因为专升本省控线是「类别 × 分数」转置表。
+- **入口（S1）**：`shared/src/score-line-region.ts` 新增 `provinceUpgradeEntry()`，浙江栏目入口 `https://www.zjzs.net/col/col48/index.html` 标记已核验，其余 30 省暂用官网首页并标 `verified=0`。`html-shape.ts` 新增引导页跳转识别（`onclick` / `meta refresh` / `script`），抓取器最多跟 1 跳且必须同域；实际入口写 `crawl_documents.note`。新增失败码 `network / entry_redirect / no_table / unsupported_table / decode / needs_seed`，`crawl_documents.error` 写 `code: detail`，`shape` 存 `tables/rows/cols/links`。
+- **解析（S2）**：新增 `parsers/category-table.ts` 与 `html-category@1`。`html-table@1` 先跑科目表，失败再按类别表识别：转置（类别行 + 下一行「分数线」）与正置（类别列 + 分数列）都支持，每个类别一条 batch（`track=类别`、`metric.subject_code='total'`、`full_score=null`、`confidence=0.9`）。识别不出时返回 `unsupported_table`，不返回空数组冒充成功。
+- **发现（S3）**：`crawl.ts` 单 URL → 有界队列，`discover_depth` 默认 2、每页最多 10 条、每 run 最多 30 页、同域 1 请求/2 秒；候选 ≥3 条且多数带年份视为列表页，只取最新年份前 5 条，按「分数线 > 录取 > 招生计划」排序。`scoreline_sources` 新增 `entry_url / discover_depth / url_include / verified`，`crawl_documents` 新增 `note / shape`，启动迁移 `ensureScoreLineColumns()` 可重复执行。
+- **口径与落库**：类别落 `track`，`category` 留空（公告只有招考类别时不编建档立卡 / 退役士兵）；唯一键天然区分 8 个类别，查询侧 `requires: ['track']` 无需改动。复核仍为 `pending`，8 条可按省 / 年批量通过。
+- **可观测**：`CoverageView.vue` 把失败码翻成「中文结论 + 下一步」；未核验省份抓取失败时 `crawl_runs.details` 首条写 `needs_seed`，不再只显示一句「没有识别到分数线表格」。
+- **文档**：设计文档 §5.7 来源表、§7.2.1 栏目入口核验进度与抓取发现 / 失败码；第 7 篇状态与实施记录；`docs/archive/20261114/README.md` 同步。
+- **验证**：`npm run check:score` 覆盖浙江引导页（读出 `onclick` 跳转）、栏目页（发现 2026 公告）、公告页（8 条 batch，`track` 文史/法学/教育/艺术/理工/经管/农学/医学，分数 222/198/226/210/182/156/214/220）、类别表正置 / 缺分数行 / 多备注列 / 空表、gbk 解码、meta / script / onclick 跳转、列表页取最新年。本地 fixture HTTP + 临时 `DATA_DIR` 端到端：引导页跟 1 跳到栏目页 → 只取 2026 公告 5 条 → 1 页解析出 8 条 `pending`，共 8 页、`saved=8`、`status=success`。真实站点只读一次：浙江 2026 公告页单页抓取 → 8 条 `pending`，`confidence=0.9`，数字与公告逐个一致。`npm run verify` 全绿。
+- **未做 / 已知**：S4 只核验浙江，其余 30 省栏目 URL 需运营按实际站点补（失败会提示 `needs_seed`，不会假装成功）；考研国家线的「学科门类 × 多列分数」不在 `html-category@1` 的识别范围，仍需原科目解析器或后续补形状；未做 robots.txt 检查和无头浏览器渲染。
+
 ### 招聘检索重构：检索计划与证据判定（2026-11-14，产品版本 v1.79）
 
 - 依据：`docs/archive/20261114/6-招聘检索重构-检索计划与证据判定-修复方案.md` v1.0。触发：生产报告 `/r/mK3hKns5tyU0CmfeHNZai9T5ozA` 用 Q6 原话「上海 都可以吧，想当工程师 2026 届 招聘」检索，`jobs = 0`。实测同一城市换写法能拿到 6/6 条岗位详情页，问题在检索词、过滤与兜底，不在数据源。

@@ -131,3 +131,23 @@ export function provinceExamUrl(province: string): string {
   const name = normalizeProvince(province)
   return provinces.find((item) => item.name === name)?.examUrl ?? ''
 }
+
+/**
+ * 已人工核验的专升本栏目入口。未列出的省份退回官网首页，并标 verified=false，
+ * 抓取失败时覆盖页提示 needs_seed，不假装能抓。
+ */
+const VERIFIED_UPGRADE_ENTRIES: Record<string, string> = {
+  浙江: 'https://www.zjzs.net/col/col48/index.html'
+}
+
+export interface UpgradeEntry {
+  url: string
+  verified: boolean
+}
+
+export function provinceUpgradeEntry(province: string): UpgradeEntry {
+  const name = normalizeProvince(province)
+  const verified = VERIFIED_UPGRADE_ENTRIES[name]
+  if (verified) return { url: verified, verified: true }
+  return { url: provinceExamUrl(name), verified: false }
+}

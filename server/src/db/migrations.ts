@@ -471,6 +471,41 @@ function migrate(): void {
   }
 }
 
+/** 分数线抓取：栏目入口、发现深度、失败码形状等增量列；可重复执行。 */
+function ensureScoreLineColumns(): void {
+  const sourceColumns = new Set(
+    (db.prepare('PRAGMA table_info(scoreline_sources)').all() as { name: string }[]).map(
+      (column) => column.name
+    )
+  )
+  const sourceAdditions: [string, string][] = [
+    ['entry_url', "TEXT NOT NULL DEFAULT ''"],
+    ['discover_depth', 'INTEGER NOT NULL DEFAULT 2'],
+    ['url_include', "TEXT NOT NULL DEFAULT ''"],
+    ['verified', 'INTEGER NOT NULL DEFAULT 0']
+  ]
+  for (const [name, definition] of sourceAdditions) {
+    if (!sourceColumns.has(name)) {
+      db.exec(`ALTER TABLE scoreline_sources ADD COLUMN ${name} ${definition}`)
+    }
+  }
+
+  const documentColumns = new Set(
+    (db.prepare('PRAGMA table_info(crawl_documents)').all() as { name: string }[]).map(
+      (column) => column.name
+    )
+  )
+  const documentAdditions: [string, string][] = [
+    ['note', "TEXT NOT NULL DEFAULT ''"],
+    ['shape', "TEXT NOT NULL DEFAULT ''"]
+  ]
+  for (const [name, definition] of documentAdditions) {
+    if (!documentColumns.has(name)) {
+      db.exec(`ALTER TABLE crawl_documents ADD COLUMN ${name} ${definition}`)
+    }
+  }
+}
+
 export function runMigrations(): void {
   ensureInviteColumns()
   ensureSubmissionColumns()
@@ -482,6 +517,7 @@ export function runMigrations(): void {
   seed()
   migrate()
   migrateScoreLineV1()
+  ensureScoreLineColumns()
   seedScorelineSources()
 }
 

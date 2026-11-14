@@ -338,12 +338,16 @@ export function initSchema(): void {
     name           TEXT NOT NULL,
     publisher      TEXT NOT NULL DEFAULT '',
     url            TEXT NOT NULL,
+    entry_url      TEXT NOT NULL DEFAULT '',
     exam           TEXT NOT NULL,
     province       TEXT NOT NULL DEFAULT '',
     school_id      TEXT NOT NULL DEFAULT '',
     parser_id      TEXT NOT NULL DEFAULT '',
     tier           TEXT NOT NULL DEFAULT 'T0',
     interval_hours INTEGER NOT NULL DEFAULT 168,
+    discover_depth INTEGER NOT NULL DEFAULT 2,
+    url_include    TEXT NOT NULL DEFAULT '',
+    verified       INTEGER NOT NULL DEFAULT 0,
     enabled        INTEGER NOT NULL DEFAULT 1,
     last_run_at    TEXT NOT NULL DEFAULT '',
     last_status    TEXT NOT NULL DEFAULT '',
@@ -389,6 +393,8 @@ export function initSchema(): void {
     parser_id    TEXT NOT NULL DEFAULT '',
     parse_status TEXT NOT NULL DEFAULT 'pending',
     error        TEXT NOT NULL DEFAULT '',
+    note         TEXT NOT NULL DEFAULT '',
+    shape        TEXT NOT NULL DEFAULT '',
     fetched_at   TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_crawl_documents_run ON crawl_documents(run_id);

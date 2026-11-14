@@ -138,12 +138,16 @@ export interface AdminScoreLineSourceInput {
   name: string
   publisher?: string
   url: string
+  entryUrl?: string
   exam: ExamType
   province?: string
   schoolId?: string
   parserId?: string
   tier?: string
   intervalHours?: number
+  discoverDepth?: number
+  urlInclude?: string
+  verified?: boolean
   enabled?: boolean
 }
 

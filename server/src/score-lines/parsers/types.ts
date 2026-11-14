@@ -10,6 +10,8 @@ export interface ParserContext {
   schoolName?: string
   year?: number
   scopeHint?: ScoreLineScope
+  /** 候选链接正则；为空用内置关键词 */
+  urlInclude?: string
 }
 
 export interface ParsedMetric {
@@ -41,11 +43,25 @@ export interface ParsedBatch {
   metrics: ParsedMetric[]
 }
 
+export type ParserFailureCode =
+  | 'no_table'
+  | 'unsupported_table'
+  | 'decode'
+  | 'entry_redirect'
+
 export interface ParserResult {
   batches: ParsedBatch[]
   issues: string[]
   /** HTML 索引页里发现的候选链接，交给抓取器继续抓取。 */
   links?: string[]
+  /** 候选链接的可见文字，用于判断列表页和选最新年份。 */
+  linkItems?: { url: string; text: string }[]
+  /** 页面形状；写进 crawl_documents.shape，排障用。 */
+  shape?: { tables: number; rows: number; cols: number; links: number }
+  /** 引导页跳转目标；抓取器最多跟 1 跳。 */
+  redirect?: string
+  /** 机读失败码；crawl_documents.error 会写成 `code: detail`。 */
+  failure?: { code: ParserFailureCode; detail: string }
 }
 
 export interface ParserInput {

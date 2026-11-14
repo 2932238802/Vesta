@@ -7,6 +7,7 @@ import { newId, now } from '../db/core'
 import { findBatchId, getBatch, saveBatch } from './batch-store'
 import { refreshCoverage, refreshProvinceCoverage } from './coverage'
 import { fetchResource, insertDocument, saveSnapshot } from './crawl-fetch'
+import { followTarget, selectCandidates } from './discovery'
 import { normalizeParsedBatch } from './normalize'
 import { parseContent } from './parsers'
 import type { ParsedBatch, ParserContext } from './parsers/types'
@@ -62,7 +63,7 @@ export function getRun(id: string): { run: CrawlRun; documents: unknown[] } | nu
   if (!row) return null
   const documents = db
     .prepare(
-      'SELECT id, url, http_status, content_type, parse_status, error, fetched_at FROM crawl_documents WHERE run_id = ? ORDER BY fetched_at LIMIT 100'
+      'SELECT id, url, http_status, content_type, parse_status, error, note, shape, fetched_at FROM crawl_documents WHERE run_id = ? ORDER BY fetched_at LIMIT 100'
     )
     .all(id)
   return { run: runFromRow(row), documents }
@@ -166,9 +167,18 @@ function contextFor(source: ScoreLineSource): ParserContext {
     sourceUrl: source.url,
     exam: source.exam,
     province: source.province,
-    schoolId: source.schoolId || undefined
+    schoolId: source.schoolId || undefined,
+    urlInclude: source.urlInclude
   }
 }
+
+/** 解析失败码统一写成 `code: detail`，覆盖页据此给下一步。 */
+function codedError(result: Awaited<ReturnType<typeof parseContent>>): string {
+  if (result.failure) return `${result.failure.code}: ${result.failure.detail}`
+  return result.issues.slice(0, 3).join('；') || 'parse: 没有识别到可写库的数据'
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 async function processParsedBatches(
   batches: ParsedBatch[],
@@ -209,68 +219,163 @@ async function processParsedBatches(
   }
 }
 
+const MAX_PAGES_PER_RUN = 30
+const REQUEST_INTERVAL_MS = 2000
+
+interface CrawlCandidate {
+  url: string
+  depth: number
+}
+
+interface PageInput {
+  source: ScoreLineSource
+  runId: string
+  url: string
+  context: ParserContext
+  years: number[]
+  stats: SourceStats
+}
+
+/** 取一页 → 跟引导页 → 解析 → 落 document → 写批次；返回下一层候选链接。 */
+async function processPage(input: PageInput): Promise<string[]> {
+  const { source, runId, url, context, years, stats } = input
+  let fetched: Awaited<ReturnType<typeof fetchResource>> | null = null
+  try {
+    fetched = await fetchResource(url)
+    stats.fetched += 1
+    let content = fetched.content
+    let finalUrl = url
+    let note = ''
+    let result = await parseContent({
+      parserId: source.parserId || 'html-table@1',
+      content,
+      contentType: fetched.contentType,
+      url: finalUrl,
+      context
+    })
+
+    // 入口是「点击进入」引导页：跟 1 跳同域，仍没内容才标 entry_redirect。
+    if (result.redirect && !result.batches.length) {
+      const target = followTarget(result.redirect, url)
+      if (!target) {
+        result.failure = { code: 'entry_redirect', detail: '引导页跳转到非同域地址' }
+      } else {
+        try {
+          const second = await fetchResource(target)
+          stats.fetched += 1
+          content = second.content
+          finalUrl = target
+          note = `entry → ${target}`
+          result = await parseContent({
+            parserId: source.parserId || 'html-table@1',
+            content,
+            contentType: second.contentType,
+            url: finalUrl,
+            context
+          })
+          if (!result.batches.length && (result.linkItems?.length ?? 0) < 3) {
+            result.failure = {
+              code: 'entry_redirect',
+              detail: `引导页 ${url} → ${target} 后仍未拿到表格`
+            }
+          }
+        } catch (error) {
+          result.failure = {
+            code: 'entry_redirect',
+            detail: `引导页 ${url} → ${target} 打不开：${(error as Error).message}`
+          }
+        }
+      }
+    }
+
+    const snapshot = saveSnapshot(content, fetched.contentType, finalUrl)
+    const isIndex = (result.linkItems?.length ?? 0) >= 3
+    const parseStatus = result.batches.length ? 'parsed' : isIndex ? 'index' : 'failed'
+    const error = result.batches.length || isIndex ? '' : codedError(result)
+    insertDocument({
+      runId,
+      sourceId: source.id,
+      url,
+      httpStatus: fetched.httpStatus,
+      contentType: fetched.contentType,
+      checksum: snapshot.checksum,
+      storagePath: snapshot.storagePath,
+      parserId: source.parserId,
+      parseStatus,
+      error,
+      note,
+      shape: JSON.stringify(result.shape ?? {})
+    })
+    await processParsedBatches(result.batches, context, years, stats)
+    if (error) stats.details.push(`${url}：${error}`)
+    return result.linkItems?.length ? selectCandidates(result.linkItems) : []
+  } catch (error) {
+    stats.failed += 1
+    const coded = `network: ${(error as Error).message}`
+    stats.details.push(`${url}：${coded}`)
+    insertDocument({
+      runId,
+      sourceId: source.id,
+      url,
+      httpStatus: fetched?.httpStatus ?? 0,
+      contentType: fetched?.contentType ?? '',
+      checksum: '',
+      storagePath: '',
+      parserId: source.parserId,
+      parseStatus: 'failed',
+      error: coded,
+      note: '',
+      shape: ''
+    })
+    return []
+  }
+}
+
 async function processSource(
   source: ScoreLineSource,
   runId: string,
-  years: number[]
+  years: number[],
+  budget: { pages: number }
 ): Promise<SourceStats> {
   const stats = emptyStats()
   const context = contextFor(source)
-  const urls = [source.url]
-  let index = 0
-  while (index < urls.length && index < 4) {
-    const url = urls[index]
-    index += 1
-    let fetched: Awaited<ReturnType<typeof fetchResource>> | null = null
-    try {
-      fetched = await fetchResource(url)
-      stats.fetched += 1
-      const snapshot = saveSnapshot(fetched.content, fetched.contentType, url)
-      const result = await parseContent({
-        parserId: source.parserId || 'html-table@1',
-        content: fetched.content,
-        contentType: fetched.contentType,
-        url,
-        context
-      })
-      insertDocument({
-        runId,
-        sourceId: source.id,
-        url,
-        httpStatus: fetched.httpStatus,
-        contentType: fetched.contentType,
-        checksum: snapshot.checksum,
-        storagePath: snapshot.storagePath,
-        parserId: source.parserId,
-        parseStatus: result.batches.length ? 'parsed' : 'failed',
-        error: result.issues.join('；')
-      })
-      if (result.links && index === 1) {
-        for (const link of result.links.slice(0, 3)) {
-          if (!urls.includes(link)) urls.push(link)
-        }
-        stats.discovered += Math.min(result.links.length, 3)
+  const maxDepth = Math.min(5, Math.max(0, source.discoverDepth ?? 2))
+  const startUrl = source.entryUrl || source.url
+  const queue: CrawlCandidate[] = [{ url: startUrl, depth: 0 }]
+  const visited = new Set<string>()
+  if (budget.pages >= MAX_PAGES_PER_RUN) {
+    stats.details.push('budget: 本 run 已达到 30 页上限，剩余来源下次继续')
+    return stats
+  }
+
+  while (queue.length && budget.pages < MAX_PAGES_PER_RUN) {
+    const current = queue.shift() as CrawlCandidate
+    if (visited.has(current.url)) continue
+    visited.add(current.url)
+    budget.pages += 1
+    if (budget.pages > 1) await sleep(REQUEST_INTERVAL_MS)
+    const found = await processPage({
+      source,
+      runId,
+      url: current.url,
+      context,
+      years,
+      stats
+    })
+    const nextDepth = current.depth + 1
+    if (nextDepth <= maxDepth && found.length) {
+      for (const link of found) {
+        if (!visited.has(link)) queue.push({ url: link, depth: nextDepth })
       }
-      await processParsedBatches(result.batches, context, years, stats)
-      if (result.issues.length && result.batches.length === 0) {
-        stats.details.push(`${url}：${result.issues.slice(0, 3).join('；')}`)
-      }
-    } catch (error) {
-      stats.failed += 1
-      stats.details.push(`${url}：${(error as Error).message}`)
-      insertDocument({
-        runId,
-        sourceId: source.id,
-        url,
-        httpStatus: fetched?.httpStatus ?? 0,
-        contentType: fetched?.contentType ?? '',
-        checksum: '',
-        storagePath: '',
-        parserId: source.parserId,
-        parseStatus: 'failed',
-        error: (error as Error).message
-      })
+      stats.discovered += found.length
     }
+  }
+
+  if (queue.length && budget.pages >= MAX_PAGES_PER_RUN) {
+    stats.details.push('budget: 本 run 已达到 30 页上限，剩余来源下次继续')
+  }
+  if (stats.saved === 0 && source.exam === 'upgrade' && !source.verified) {
+    stats.details.unshift('needs_seed: 该省专升本栏目入口未人工核验，请补栏目 URL')
   }
   return stats
 }
@@ -303,6 +408,7 @@ export async function runNext(): Promise<void> {
   })()
   const sources = sourcesForProvince(next.province)
   const total = emptyStats()
+  const budget = { pages: 0 }
   const deadline = started + Math.max(1, config.scorelineCrawlProvinceMinutes) * 60_000
   log.info('scoreline.crawl_started', {
     runId: next.id,
@@ -315,7 +421,7 @@ export async function runNext(): Promise<void> {
         total.details.push('达到本省运行时限，剩余来源下次继续')
         break
       }
-      const stats = await processSource(source, next.id, years)
+      const stats = await processSource(source, next.id, years, budget)
       total.fetched += stats.fetched
       total.parsed += stats.parsed
       total.saved += stats.saved

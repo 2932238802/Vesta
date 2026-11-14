@@ -96,12 +96,16 @@ export function insertDocument(input: {
   parserId: string
   parseStatus: string
   error?: string
+  /** 实际入口（引导页跟随后）等备注 */
+  note?: string
+  /** 页面形状 JSON：tables / rows / cols / links */
+  shape?: string
 }): void {
   db.prepare(
     `INSERT INTO crawl_documents
      (id, run_id, source_id, url, http_status, content_type, checksum, storage_path,
-      parser_id, parse_status, error, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      parser_id, parse_status, error, note, shape, fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     newId('cd'),
     input.runId,
@@ -114,6 +118,8 @@ export function insertDocument(input: {
     input.parserId,
     input.parseStatus,
     input.error ?? '',
+    input.note ?? '',
+    input.shape ?? '',
     now()
   )
 }

@@ -1,11 +1,15 @@
 import type { Parser, ParserInput, ParserResult } from './types'
 import { htmlTableParser } from './html'
+import { htmlCategoryParser } from './category-table'
 import { jsonParser } from './json'
 import { pdfTextParser } from './pdf'
 import { xlsxParser } from './xlsx'
 
 const registry = new Map<string, Parser>(
-  [htmlTableParser, xlsxParser, pdfTextParser, jsonParser].map((parser) => [parser.id, parser])
+  [htmlTableParser, htmlCategoryParser, xlsxParser, pdfTextParser, jsonParser].map((parser) => [
+    parser.id,
+    parser
+  ])
 )
 
 export function getParser(id: string): Parser | null {

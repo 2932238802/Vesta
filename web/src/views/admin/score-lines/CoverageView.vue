@@ -38,7 +38,7 @@
             <td><span class="chip" :class="{ accent: item.status === 'covered' }">{{ coverageLabel(item.status) }}</span></td>
             <td class="quiet">{{ item.missing.map(missingLabel).join('、') || '—' }}</td>
             <td class="quiet tiny">{{ formatDate(item.updatedAt) }}</td>
-            <td class="error-cell">{{ item.lastError || '—' }}</td>
+            <td class="error-cell">{{ failureText(item.lastError) || '—' }}</td>
           </tr>
         </tbody>
       </table>
@@ -61,7 +61,7 @@
 import { ref, watch } from 'vue'
 import { api } from '@/api'
 import type { AdminCoverageResponse, CoverageStatus } from '@/api'
-import { COVERAGE_LABELS, COVERAGE_MISSING_LABELS } from '@shared/score-line'
+import { COVERAGE_LABELS, COVERAGE_MISSING_LABELS, crawlFailureHint } from '@shared/score-line'
 import { provinceNames } from '@shared/score-line-region'
 import { formatDate } from '@/format'
 import Modal from '@/components/Modal.vue'
@@ -77,6 +77,12 @@ const page = ref(1)
 const loading = ref(false)
 const error = ref('')
 const data = ref<AdminCoverageResponse | null>(null)
+
+/** 失败码 → 中文结论 + 下一步；不认识的旧报文原样展示。 */
+function failureText(value: string): string {
+  const hint = crawlFailureHint(value)
+  return hint ? `${hint.label}：${hint.next}` : value
+}
 
 function coverageLabel(value: CoverageStatus): string {
   return COVERAGE_LABELS[value] ?? value

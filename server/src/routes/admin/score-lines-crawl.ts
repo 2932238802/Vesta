@@ -122,17 +122,33 @@ scoreLineCrawlRouter.post('/score-lines/sources', (req, res) => {
     res.status(400).json({ error: '抓取间隔需在 1–8760 小时之间' })
     return
   }
+  const discoverDepth = Number(clampString(body.discoverDepth, 2))
+  const depth = Number.isInteger(discoverDepth) ? Math.min(5, Math.max(0, discoverDepth)) : 2
+  const entryUrl = clampString(body.entryUrl, 500)
+  if (entryUrl) {
+    try {
+      assertSafeUrl(entryUrl)
+    } catch (error) {
+      res.status(400).json({ error: (error as Error).message })
+      return
+    }
+  }
   const source = upsertSource({
     id: clampString(body.id, 100) || undefined,
     name,
     publisher: clampString(body.publisher, 80),
     url,
+    entryUrl: body.entryUrl === undefined ? undefined : entryUrl,
     exam,
     province,
     schoolId: clampString(body.schoolId, 100),
     parserId: clampString(body.parserId, 40) || 'html-table@1',
     tier: clampString(body.tier, 10) || 'T0',
     intervalHours,
+    discoverDepth: body.discoverDepth === undefined ? undefined : depth,
+    urlInclude:
+      body.urlInclude === undefined ? undefined : clampString(body.urlInclude, 200),
+    verified: body.verified === undefined ? undefined : body.verified === true,
     enabled: body.enabled === undefined ? true : body.enabled === true
   })
   log.info('scoreline.source_saved', { id: source.id, exam: source.exam, province: source.province })
