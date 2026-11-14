@@ -6,8 +6,8 @@ Vesta 是一套面向大学在读学生的问卷、报告与咨询辅助系统�
 
 - 产品版本基线 **v1.60**（2026-11-12 起算）。
 - 每完成一轮需求递增一个小版本：**v1.61、v1.62……**（两位数小版本，不进位到 v2）。
-- 已完成：v1.61 管理员界面交互优化、v1.62 前端拆包与巨型文件拆分、v1.63 检索届别改用当前年份、v1.64 仪表盘「每组完成」修复、v1.65 后台 doc 模式不再展示映射分数、v1.66 问卷题号重排、v1.67 英语块表述约束与生成校验、v1.68 英语块校验误伤与漏拦订正、v1.69 日志系统完善、v1.70 版本号同步与工程元数据规范、v1.71 文件规模约束与首批拆分、v1.72 文本响应 gzip 压缩、v1.73 events 保留与漏斗事实汇总、v1.74 学员名单按期次自动分组、v1.75 管理端查询效率与死接口、限长清理、v1.76 后台栏目调整（新增分数线、设置下移、删除简历收集）；后续从 **v1.77** 继续递增。
-- 根 `package.json` 的 `version` 是版本号的唯一事实源：产品 `v1.<n>` ↔ `1.<n>.0`（`major` 恒为 `1`、`patch` 恒为 `0`，当前为 `1.76.0`）。「已完成」这行写入当前最高版本后，`package.json` 必须与之相等；本轮已升版本、文档还没写完时最多领先 1 个版本。不一致时 `npm run check:version` 会让 `npm run verify` 失败。
+- 已完成：v1.61 管理员界面交互优化、v1.62 前端拆包与巨型文件拆分、v1.63 检索届别改用当前年份、v1.64 仪表盘「每组完成」修复、v1.65 后台 doc 模式不再展示映射分数、v1.66 问卷题号重排、v1.67 英语块表述约束与生成校验、v1.68 英语块校验误伤与漏拦订正、v1.69 日志系统完善、v1.70 版本号同步与工程元数据规范、v1.71 文件规模约束与首批拆分、v1.72 文本响应 gzip 压缩、v1.73 events 保留与漏斗事实汇总、v1.74 学员名单按期次自动分组、v1.75 管理端查询效率与死接口、限长清理、v1.76 后台栏目调整（新增分数线、设置下移、删除简历收集）、v1.77 分数线 v3 Phase 1（主线/院校线/专业线查询、折线图、全国院校主表、抓取与复核）、v1.78 AI 报告启动恢复与并发上限（启动扫描续跑 + 并发队列）；后续从 **v1.79** 继续递增。
+- 根 `package.json` 的 `version` 是版本号的唯一事实源：产品 `v1.<n>` ↔ `1.<n>.0`（`major` 恒为 `1`、`patch` 恒为 `0`，当前为 `1.78.0`）。「已完成」这行写入当前最高版本后，`package.json` 必须与之相等；本轮已升版本、文档还没写完时最多领先 1 个版本。不一致时 `npm run check:version` 会让 `npm run verify` 失败。
 - `server/package.json`、`web/package.json` 是 workspace 成员，保持 `private` 且不带 `version`，避免三处版本号打架。
 - `docs/archive/` 里单个方案的「v1.0 / v1.1」是方案文档自身版本，与产品版本分开编号；每轮改动对应的产品版本号要写进 `development-history.md`。
 
@@ -32,13 +32,15 @@ Vesta 是一套面向大学在读学生的问卷、报告与咨询辅助系统�
 | v1.74 | 2026-11-13 | `cd09143` | 学员名单按咨询期次自动分组（周三起算），移除自定义分组与日期筛选 |
 | v1.75 | 2026-11-13 | `096b79d` | 管理端查询效率、死接口与限长清理（概览 / CSV / 咨询树与模板写接口） |
 | v1.76 | 2026-11-14 | `ba57bb6` | 后台栏目调整：新增分数线、设置下移、删除简历收集 |
+| v1.77 | 2026-11-14 | 待提交 | 分数线 v3 Phase 1：主线 / 院校线 / 专业线查询、折线图、全国院校主表、抓取与复核 |
+| v1.78 | 2026-11-14 | 待提交 | AI 报告启动恢复与并发上限：启动扫描续跑 + 并发队列 |
 
-（只回填能确认 commit 的版本；`—` 表示基线之前没有单独提交。）
+（只回填能确认 commit 的版本；`—` 表示基线之前没有单独提交，`待提交` 表示本地已实施、尚未入库。）
 
 ## 技术栈
 
 - 运行时：Node.js 24+（`node:sqlite` 需要；仓库根 `.node-version` 与 `package.json` 的 `engines` 已声明）
-- 后端：Express + SQLite（`node:sqlite`）+ TypeScript / tsx
+- 后端：Express + SQLite（`node:sqlite`）+ TypeScript / tsx；分数线抓取在服务端使用 `cheerio` / `xlsx` / `pdfjs-dist`（不进前端 bundle）
 - 前端：Vue 3 + Vue Router + Vite
 - 数据：单文件 SQLite，默认 `data/vesta.db`
 - AI：DeepSeek，可选博查联网检索
@@ -50,7 +52,7 @@ server/src/        Express 服务、数据库、鉴权、AI 生成
 shared/src/        问卷、报告、咨询目的树等共享类型与算法
 web/src/           Vue 管理后台、问卷、报告页面
 deploy/            systemd、Nginx、安装与备份脚本
-scripts/           一次性导入与维护脚本；check-size.mjs + file-size-baseline.json 负责文件规模约束，check-version.mjs 负责版本号一致性，check-events.mjs 核对 events 与 event_facts；shared/src/score-line.cases.ts 由 check:score 执行
+scripts/           一次性导入与维护脚本；check-size.mjs + file-size-baseline.json 负责文件规模约束，check-version.mjs 负责版本号一致性，check-events.mjs 核对 events 与 event_facts；import-schools.ts 导入院校名单，seed-sources.ts 写入分数线抓取源；shared/src/score-line.cases.ts 与 parser fixture 由 check:score 执行
 docs/              架构、运行、历史、问卷口径与 Agent 交接文档
 docs/archive/      已作废的历史方案（只存档，不要照着实现）
 data/              本地数据库与备份（不提交 Git）
@@ -165,6 +167,10 @@ bash update.sh --mode=systemd  # 覆盖 DEPLOY_MODE
 | `COMPRESS` | 设为 `off` 关闭 Node 层 gzip；默认开启，只有前面已有网关压缩时才关 |
 | `EVENT_RETENTION_DAYS` | 业务埋点（`quiz_*` / `group_complete` 等）保留天数，默认 `180` |
 | `EVENT_OPERATIONAL_RETENTION_DAYS` | 运维事件（`ai_report_*` / `submission_deleted`）保留天数，默认 `365` |
+| `SCORELINE_CRAWL` | 设为 `off` 关闭分数线定时抓取；默认开启 |
+| `SCORELINE_CRAWL_PROVINCE_MINUTES` | 单个省一次抓取的最长运行时间，默认 `30` 分钟 |
+| `SCORELINE_CRAWL_INTERVAL_MINUTES` | 调度器检查间隔，默认 `10` 分钟 |
+| `SCORELINE_CRAWL_ALLOW_PRIVATE` | 仅本地 fixture 测试用；设为 `1` 才允许抓取内网地址，生产不要开 |
 | `SESSION_TTL` | 登录有效期秒数，默认 30 天 |
 | `AI_API_KEY` | AI 报告与咨询稿生成密钥；也兼容旧的 `DEEPSEEK_API_KEY` |
 | `AI_BASE_URL` | OpenAI 兼容接口地址；也兼容 `DEEPSEEK_BASE_URL`。未配置时启动会明确 warning，AI 功能不可用 |
@@ -188,6 +194,7 @@ doc 模式报告（`survey.reportMode === 'doc'`）完全由 AI 生成正文，�
 - **检索可追溯**：需要外部信息时，服务端主动调用博查，并记录检索词、时间、结果数量和来源链接，展示在报告底部。未配置密钥、超时或失败会显示真实原因；缺 `BOCHA_API_KEY` 或 `BOCHA_BASE_URL` 都会明确报错，不会静默跳过。报告已经生成时不再显示必然 409 的「重新检索」按钮，改为提示需要新建报告；生成失败页仍保留重试。报告检索默认带**一年时间窗**（`freshness: 'oneYear'`）；一年内可用原文不足 3 条时，再用 `oneMonth` 补一次，补位结果标记 `fallback`，只作要求结构参考，不参与方向门槛统计。过期原文（发布日期或标题年份早于约 18 个月）会标注「信息较早」，同样不参与统计。检索词里的年份固定用**检索当年**拼成 `<年份> 届`（2026 年即「2026 届」），不按填表人 Q3 年级推算毕业届别——年级到毕业年份的推算信息不足，产品也不需要；报告底部「检索记录」会注明检索词里的年份。检索遇到 `fetch failed` 这类瞬时网络错误时自动退避重试一次；无权限、参数错误等确定性失败不重试。报告底部的错误统一转成可行动的中文（如「网络请求失败，可以重新检索」），未知错误保留原文，不吞掉真实原因。
 - **检索缓存与渐进式检索**：见 [`7-博查检索成本优化-设计方案.md`](./archive/20261112/7-博查检索成本优化-设计方案.md)。博查结果按规范化检索词（空白折叠 + 小写，`count` / `freshness` 进 key）缓存在 `search_cache` 表 7 天，同城同专业的学生、AI 自动重试都不会重复外呼；同一 key 的并发请求在进程内合并成一次外呼（single-flight，仅单实例有效）。一份 doc 报告先只搜一个岗位方向，可用原文 ≥3 条就停，不足才补搜其余方向，因此报告可能只覆盖实际搜到结果的方向（不编造，方向覆盖会变窄）。缓存命中不影响报告底部「检索记录」；但渐进式检索只记录本次实际执行的检索词，条数可能比改动前少，每条都真实外呼过，来源链接和结果数照常记录。错误结果不缓存；回滚方式是删掉 `server/src/ai/bocha.ts` 的缓存分支和 `doc-generate.ts` 的渐进式分支，`search_cache` 表可保留。
 - **失败不伪装**：AI 未配置、规则为空或生成失败时，报告页显示失败原因和重试入口，不展示规则版/模板版冒充 AI 结果。
+- **启动恢复与并发上限**：AI 报告统一由 `server/src/ai/report-queue.ts` 调度，同一时间最多生成 **2** 份（常量 `REPORT_CONCURRENCY`），其余按提交先后排队并保持 `pending`，页面仍显示「正在生成」。服务启动、端口就绪后自动扫描 `submissions` 里所有 `pending / running` 且未用完 4 次机会的记录并续跑，不需要学生打开页面；重启时正在跑的那一份会整份重跑（博查检索结果有 7 天缓存）。AI 未配置时跳过续跑，不把记录批量标成失败。队列只存在单进程内存里，按单实例部署设计（见第 4 篇方案）。
 - **保存方式**：报告页顶部只保留“保存图片”“保存为 PDF”“复制链接”，不再提供打印入口。PDF 由页面在浏览器内按 A4 分页生成并直接下载，不经过打印弹窗；正文按约 300dpi 输出，翻页会避开正文行。PDF 是渲染后的版式，链接请回到原报告点开。
 
 ## 登录与会话
@@ -210,6 +217,8 @@ node deploy/backup.mjs data/vesta.db data/backups/vesta-YYYYMMDD-HHMMSS.db
 `search_cache` 只存博查检索结果（检索词 → 结果 JSON，7 天有效，写入时顺手清理过期行）。它和其他表一样进备份；直接清空也不影响问卷、答卷和报告，只是下一次检索会重新付费。
 
 `events` 是问卷漏斗的原始埋点，会按时间自动清理：业务埋点默认保留 **180 天**（`EVENT_RETENTION_DAYS`），`ai_report_*` / `submission_deleted` 等运维事件默认保留 **365 天**（`EVENT_OPERATIONAL_RETENTION_DAYS`）。后台概览的漏斗数字不读原始事件，而是读永久保留的汇总表 `event_facts`；清理前后数字不变。启动时清理一次，之后每 24 小时一次，每批 5000 行，不做 `VACUUM`。
+
+分数线 v3 新增 `schools` / `school_aliases` / `school_programs` / `scoreline_batches` / `scoreline_metrics` / `school_coverage` / `scoreline_sources` / `crawl_runs` / `crawl_documents` 九张表，全部 `CREATE TABLE IF NOT EXISTS`，启动自动建表。v1 的 `score_line_sets` / `score_line_entries` 保留为 legacy；启动迁移 `migrateScoreLineV1()` 只迁 `postgrad` / `upgrade`，用 `settings.scoreline_v3_migrated` 标记、可重复执行。抓取原始快照在 `data/crawl/`，保留 90 天；`update.sh` 只备份数据库，`data/crawl/` 需要单独备份。
 
 ## 咨询稿导入
 
@@ -263,12 +272,16 @@ npx tsx scripts/import-collections-docx.ts zxg --write
 
 ### 分数线
 
-`/admin/score-lines` 用于管理员人工录入各类考试分数线（考研 / 四六级 / 专升本 / 教资 / 考公），仅后台查询，不接入 AI 报告、不预置任何真实数字。
+`/admin/score-lines` 是咨询师内部查询工具：手填考试类型 / 年份 / 省份 / 院校 / 专业，查看主线（考研国家线、专升本省控线）、校线、专业线（总分 + 各科单科）和招生计划。仅后台使用，不接入 AI 报告，不预置任何真实数字。
 
-- **类型**：受控词表在 `shared/src/score-line.ts` 的 `scoreLineCategories`，新增类型只加一行常量，不改表结构；类型 id 上线后不要改。
-- **数据**：`score_line_sets` 存「某年 + 某地区 + 某来源」的一批线，`score_line_entries` 存每个具体数值（总分 / 单科 / 某专业线）；编辑时整组替换，删除数据集会同时删除条目。
-- **录入规则**：来源必填、来源链接可选但必须是 http(s)；条目至少 1 条、最多 100 条；分数 0–1000，填了满分时分数不能大于满分。
-- **校验**：`shared/src/score-line.ts` 的 `validateScoreLineInput()` 前后端共用，用例在 `shared/src/score-line.cases.ts`，由 `npm run check:score` 执行并接入 `verify`。
+- **四层口径**：`scoreline_batches` 的 `scope` 区分 `national` / `provincial` / `school` / `program`；`scoreline_metrics` 一行一个科目（`total` 也是科目），`full_score` 未知时留空。最低分用 `is_minimum=1` + `minimum_type`（`admit` / `retest` / `transfer` / `other`）单独标记，图上空心标记、不连线。
+- **全国院校**：`schools` / `school_aliases` 存院校主表与别名，`school_programs` 存招生专业、计划数、学费和考试科目。院校名单没有自动抓取，按 `scripts/import-schools.ts` 导入教育部名单（支持 CSV / XLSX，`--dry-run` 只统计）。
+- **查询**：`GET /api/admin/score-lines/query` 只读 `review_status='approved'`；主线永远返回，校线 / 专业线在选院校 / 专业后叠加；同一科类有多条批次且未选 `category` / `track` 时返回 `requires`，页面提示补选，不混画。
+- **抓取**：`scoreline_sources` 注册 31 省考试院 + 研招网源，`scripts/seed-sources.ts` 幂等写入；`crawl_runs` / `crawl_documents` 记录任务和原始快照。调度器一次只跑一个省，页面「立即抓取本省」插队。抓取结果默认 `pending`，复核通过后才可查询；失败原因写进覆盖看板。原始快照存 `data/crawl/`，保留 90 天。
+- **解析器**：`server/src/score-lines/parsers/` 下 `html-table@1` / `xlsx@1` / `pdf-text@1` / `json@1`，fixture 用例随 `check:score` 执行。PDF 无文本层（扫描件）直接标失败，不做 OCR。
+- **人工兜底**：`POST /api/admin/score-lines/import` 支持 `dryRun`，批量导入分数线和招生计划；导入默认 `approved`。复核队列支持单条 / 批量通过或拒绝。
+- **边界**：Phase 1 已注册全 31 省源并用通用表格解析器抓取，但各站点结构差异仍需逐源适配；抓不到时覆盖看板标 `failed`，由人工导入兜底。Phase 2 再做 T1/T2 院校线铺开和更多站点解析器。
+- **校验**：`shared/src/score-line.ts` 的 `validateImportPayload()` / 科目归一化 / 省份 A-B 区映射前后端共用；用例在 `shared/src/score-line.cases.ts` 和 `server/src/score-lines/parsers/cases.ts`，由 `npm run check:score` 执行并接入 `verify`。
 
 公开页面：
 
@@ -288,7 +301,7 @@ node scripts/check-events.mjs           # events 与 event_facts 漏斗事实一
 npm run verify                          # check:docs + check:size + check:version + check:dates + check:score + check:audit + typecheck + build
 ```
 
-修改后端后至少执行 `typecheck`；修改前端后还要执行 `build`。当前没有统一的自动化测试套件，验收以类型检查、构建、时间用例、报告文本审计、文件规模检查、版本号一致性和实际页面走查为准。
+修改后端后至少执行 `typecheck`；修改前端后还要执行 `build`。当前没有统一的自动化测试套件，验收以类型检查、构建、时间用例、分数线导入/解析用例、报告文本审计、文件规模检查、版本号一致性和实际页面走查为准。分数线接口与抓取管线用临时 `DATA_DIR` + 本地 fixture 验证，不访问真实站点。
 
 ## 运行与排障
 
@@ -326,3 +339,4 @@ docker compose logs --tail=100
 - 不要在本地测试时杀掉用户已经启动的服务，除非用户明确要求。
 - 数据库结构迁移由服务启动代码执行，修改表结构时要兼容已有数据。
 - 简历收集已于 v1.76 下线；`resume_images` 表与存量图片保留在库中，代码不再读写，确认清理前不要 `DROP`。
+- 分数线抓取只访问 `scoreline_sources` 里服务端配置的公开页面；普通用户不能传入抓取 URL。`SCORELINE_CRAWL_ALLOW_PRIVATE=1` 只用于本地 fixture 测试，生产不要打开。

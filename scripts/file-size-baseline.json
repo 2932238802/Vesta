@@ -1,6 +1,6 @@
 {
   "server/src/ai/doc-search.ts": 648,
-  "server/src/ai/generate.ts": 735,
+  "server/src/ai/generate.ts": 701,
   "server/src/routes/consult/runs.ts": 1293,
   "server/src/routes/public.ts": 613,
   "shared/src/doc.ts": 1404,

@@ -87,5 +87,11 @@ export const config = {
   aiTimeoutMs: Number(read('AI_TIMEOUT_MS') ?? 240_000),
   // 原始事件保留期；漏斗事实 event_facts 永久保留，不受影响。
   eventRetentionDays: readDays('EVENT_RETENTION_DAYS', 180),
-  eventOperationalRetentionDays: readDays('EVENT_OPERATIONAL_RETENTION_DAYS', 365)
+  eventOperationalRetentionDays: readDays('EVENT_OPERATIONAL_RETENTION_DAYS', 365),
+  // 分数线抓取：默认开启；测试环境可关。一次只跑一个省，页面可插队。
+  scorelineCrawl: read('SCORELINE_CRAWL') !== 'off',
+  scorelineCrawlProvinceMinutes: Number(read('SCORELINE_CRAWL_PROVINCE_MINUTES') ?? 30),
+  scorelineCrawlIntervalMinutes: Number(read('SCORELINE_CRAWL_INTERVAL_MINUTES') ?? 10),
+  // 仅本地 fixture 测试用；生产不要打开，避免 SSRF。
+  scorelineCrawlAllowPrivate: read('SCORELINE_CRAWL_ALLOW_PRIVATE') === '1'
 }

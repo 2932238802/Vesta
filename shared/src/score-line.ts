@@ -1,78 +1,432 @@
 /**
- * 分数线类型注册表与共享校验。
+ * 分数线模块 v3 的共享类型、科目归一化与导入校验。
  *
- * 类型放代码（受控词表，前后端共用），数据集 / 条目放数据库：
- *   类型（考试）→ 数据集（某年某地区的一批线）→ 条目（一个具体数值）
- * 新增类型只加一行常量，不改表结构。
+ * 四层口径：主线（national / provincial）→ 院校线（school）→ 专业线（program）
+ * → 招生计划（school_programs）。所有数字必须带来源，抓取默认 pending，复核通过才可查询。
  */
 
-export interface ScoreLineCategory {
-  id: string
+import { normalizeProvince, provinceRegion } from './score-line-region'
+
+export type ExamType = 'upgrade' | 'postgrad'
+export type ScoreLineScope = 'national' | 'provincial' | 'school' | 'program'
+export type CoverageStatus =
+  | 'covered'
+  | 'partial'
+  | 'pending'
+  | 'no_data'
+  | 'not_offered'
+  | 'failed'
+export type MinimumType = '' | 'admit' | 'retest' | 'transfer' | 'other'
+export type ReviewStatus = 'pending' | 'approved' | 'rejected'
+
+export const SCORELINE_HISTORY_YEARS = 10
+export const SCORELINE_MAX_IMPORT_BATCHES = 200
+export const SCORELINE_MAX_METRICS_PER_BATCH = 100
+
+export const EXAM_LABELS: Record<ExamType, string> = {
+  upgrade: '专升本',
+  postgrad: '考研'
+}
+
+export const SCOPE_LABELS: Record<ScoreLineScope, string> = {
+  national: '国家线',
+  provincial: '省控线',
+  school: '校线',
+  program: '专业线'
+}
+
+export const COVERAGE_LABELS: Record<CoverageStatus, string> = {
+  covered: '已收录',
+  partial: '部分收录',
+  pending: '待复核',
+  no_data: '暂无数据',
+  not_offered: '不招生',
+  failed: '抓取失败'
+}
+
+export const MINIMUM_TYPE_LABELS: Record<Exclude<MinimumType, ''>, string> = {
+  admit: '录取最低分',
+  retest: '复试最低分',
+  transfer: '投档最低分',
+  other: '其他最低分'
+}
+
+export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
+  pending: '待复核',
+  approved: '已通过',
+  rejected: '已拒绝'
+}
+
+export const COVERAGE_MISSING_LABELS: Record<string, string> = {
+  main_line: '主线',
+  school_line: '校线',
+  program_line: '专业线',
+  plan_count: '招生计划'
+}
+
+export interface ExamSubject {
+  code: string
   name: string
-  /** 列表页 tab 的补充说明，可空；不确定就不填。 */
-  hint?: string
+  fullScore?: number | null
 }
 
-/** 首批类型；增删不影响表结构。类型 id 一旦上线不要改。 */
-export const scoreLineCategories: ScoreLineCategory[] = [
-  { id: 'postgrad', name: '考研' },
-  { id: 'cet', name: '四六级' },
-  { id: 'upgrade', name: '专升本' },
-  { id: 'teacher', name: '教资' },
-  { id: 'civil', name: '考公' }
-]
-
-export const scoreLineCategoryIds = new Set(scoreLineCategories.map((item) => item.id))
-
-export function scoreLineCategoryName(id: string): string {
-  return scoreLineCategories.find((item) => item.id === id)?.name ?? id
-}
-
-export interface ScoreLineEntry {
+export interface School {
   id: string
-  label: string
-  value: number
-  maxValue?: number
-  note?: string
-}
-
-export interface ScoreLineSet {
-  id: string
-  categoryId: string
-  title: string
-  year: number
-  region: string
-  sourceName: string
-  sourceUrl: string
-  note: string
-  entries: ScoreLineEntry[]
+  code: string
+  name: string
+  province: string
+  city: string
+  level: string
+  nature: string
+  tags: string[]
+  officialUrl: string
+  graduateUrl: string
+  admissionsUrl: string
+  status: string
   createdAt: string
   updatedAt: string
 }
 
-export interface ScoreLineEntryInput {
-  label: string
-  value: number
-  maxValue?: number | null
-  note?: string
-}
-
-export interface ScoreLineInput {
-  categoryId: string
-  title: string
+export interface SchoolProgram {
+  id: string
+  schoolId: string
   year: number
-  region?: string
-  sourceName: string
-  sourceUrl?: string
-  note?: string
-  entries: ScoreLineEntryInput[]
+  exam: ExamType
+  province: string
+  majorCode: string
+  majorName: string
+  degreeType: string
+  studyMode: string
+  planCount: number | null
+  tuition: string
+  examSubjects: ExamSubject[]
+  note: string
+  sourceUrl: string
+  reviewStatus: ReviewStatus
+  updatedAt: string
 }
 
-function text(value: unknown): string {
+export interface ScoreLineMetric {
+  id?: string
+  subjectCode: string
+  subjectName: string
+  fullScore?: number | null
+  value: number
+  isMinimum: 0 | 1
+  minimumType: MinimumType
+  sortOrder?: number
+  note?: string
+}
+
+export interface ScoreLineBatch {
+  id: string
+  scope: ScoreLineScope
+  exam: ExamType
+  year: number
+  province: string
+  region: string
+  schoolId: string
+  programId: string
+  category: string
+  track: string
+  title: string
+  sourceName: string
+  sourceUrl: string
+  publishedAt: string
+  fetchedAt: string
+  checksum: string
+  confidence: number
+  reviewStatus: ReviewStatus
+  note: string
+  createdAt: string
+  updatedAt: string
+  metrics?: ScoreLineMetric[]
+}
+
+export interface CoverageInfo {
+  status: CoverageStatus | ''
+  missing: string[]
+  lastUpdatedAt: string
+  pendingCount: number
+}
+
+export interface QuerySelection {
+  exam: ExamType
+  year: number
+  province: string
+  region: string
+  schoolId: string
+  programId: string
+  category: string
+  track: string
+}
+
+export interface ScoreLineYear {
+  year: number
+  metrics: ScoreLineMetric[]
+}
+
+export interface QueryLine {
+  scope: ScoreLineScope
+  region: string
+  title: string
+  years: ScoreLineYear[]
+}
+
+export interface MinimumPoint {
+  subjectCode: string
+  name: string
+  year: number
+  value: number
+  fullScore?: number | null
+  minimumType: Exclude<MinimumType, ''>
+  label: string
+  schoolId: string
+  programId: string
+}
+
+export interface SeriesPoint {
+  year: number
+  value: number
+  fullScore?: number | null
+}
+
+export interface QuerySeries {
+  key: string
+  lineType: 'main' | 'school' | 'program'
+  subjectCode: string
+  name: string
+  points: SeriesPoint[]
+  minimumType?: Exclude<MinimumType, ''>
+}
+
+export interface QuerySource {
+  name: string
+  url: string
+  fetchedAt: string
+}
+
+export interface ScoreLineQueryResult {
+  selection: QuerySelection
+  school: School | null
+  program: SchoolProgram | null
+  coverage: CoverageInfo
+  main: QueryLine | null
+  schoolLine: QueryLine | null
+  programLine: QueryLine | null
+  minimums: MinimumPoint[]
+  series: QuerySeries[]
+  sources: QuerySource[]
+  requires: string[]
+}
+
+export interface SchoolSearchItem extends School {
+  planCount: number | null
+  coverage: CoverageInfo | null
+}
+
+export interface CoverageItem {
+  schoolId: string
+  name: string
+  province: string
+  year: number
+  status: CoverageStatus
+  missing: string[]
+  lastRunId: string
+  lastError: string
+  updatedAt: string
+}
+
+export interface ScoreLineSource {
+  id: string
+  name: string
+  publisher: string
+  url: string
+  exam: ExamType
+  province: string
+  schoolId: string
+  parserId: string
+  tier: string
+  intervalHours: number
+  enabled: boolean
+  lastRunAt: string
+  lastStatus: string
+  lastError: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type CrawlStatus = 'queued' | 'running' | 'success' | 'partial' | 'failed'
+
+export interface CrawlRun {
+  id: string
+  sourceId: string
+  province: string
+  priority: number
+  trigger: string
+  status: CrawlStatus
+  startedAt: string
+  finishedAt: string
+  discovered: number
+  fetched: number
+  parsed: number
+  saved: number
+  failed: number
+  message: string
+  createdAt: string
+}
+
+/** 科目注册表：同一科目跨年份必须用同一 code。 */
+export interface SubjectDefinition {
+  code: string
+  name: string
+  aliases: string[]
+}
+
+export const subjectDefinitions: SubjectDefinition[] = [
+  { code: 'total', name: '总分', aliases: ['总分', '总成绩', '总分线', '总成绩线', '合计'] },
+  { code: 'politics', name: '政治', aliases: ['政治', '思想政治', '思想政治理论'] },
+  { code: 'english1', name: '英语一', aliases: ['英语一', '英语1', '英语（一）'] },
+  { code: 'english2', name: '英语二', aliases: ['英语二', '英语2', '英语（二）'] },
+  { code: 'math1', name: '数学一', aliases: ['数学一', '数学1', '数学（一）'] },
+  { code: 'math2', name: '数学二', aliases: ['数学二', '数学2', '数学（二）'] },
+  { code: 'major1', name: '专业课一', aliases: ['专业课一', '专业一', '业务课一', '专业课（一）'] },
+  { code: 'major2', name: '专业课二', aliases: ['专业课二', '专业二', '业务课二', '专业课（二）'] },
+  { code: 'english', name: '英语', aliases: ['英语', '大学英语', '公共英语'] },
+  { code: 'computer', name: '计算机', aliases: ['计算机', '计算机基础', '计算机文化基础', '信息技术'] },
+  { code: 'chinese', name: '语文', aliases: ['语文', '大学语文'] },
+  { code: 'math', name: '数学', aliases: ['数学', '高等数学'] },
+  { code: 'major', name: '专业课', aliases: ['专业课', '专业综合', '专业基础', '综合课'] },
+  { code: 'other', name: '其他', aliases: ['其他', '其它'] }
+]
+
+const subjectByCode = new Map(subjectDefinitions.map((item) => [item.code, item]))
+
+function subjectKey(value: string): string {
+  return value
+    .replace(/\s+/g, '')
+    .replace(/[（）()【】[\]]/g, '')
+    .replace(/[：:]/g, '')
+    .replace(/(分数线|成绩线|线)$/, '')
+}
+
+const subjectByAlias = new Map<string, SubjectDefinition>()
+for (const item of subjectDefinitions) {
+  for (const alias of [item.name, ...item.aliases]) {
+    subjectByAlias.set(subjectKey(alias), item)
+  }
+}
+
+/** 把「政治 / 英语（一） / 总分线」等写法归一成固定科目；认不出返回 null。 */
+export function resolveSubject(value: string | null | undefined): SubjectDefinition | null {
+  const raw = String(value ?? '').trim()
+  if (!raw) return null
+  const byCode = subjectByCode.get(raw)
+  if (byCode) return byCode
+  return subjectByAlias.get(subjectKey(raw)) ?? null
+}
+
+export function subjectNameOf(code: string, fallback = ''): string {
+  return subjectByCode.get(code)?.name ?? (fallback || code)
+}
+
+export function isExamType(value: unknown): value is ExamType {
+  return value === 'upgrade' || value === 'postgrad'
+}
+
+export function isScoreLineScope(value: unknown): value is ScoreLineScope {
+  return value === 'national' || value === 'provincial' || value === 'school' || value === 'program'
+}
+
+export function isCoverageStatus(value: unknown): value is CoverageStatus {
+  return (
+    value === 'covered' ||
+    value === 'partial' ||
+    value === 'pending' ||
+    value === 'no_data' ||
+    value === 'not_offered' ||
+    value === 'failed'
+  )
+}
+
+export function isMinimumType(value: unknown): value is Exclude<MinimumType, ''> {
+  return value === 'admit' || value === 'retest' || value === 'transfer' || value === 'other'
+}
+
+export function isReviewStatus(value: unknown): value is ReviewStatus {
+  return value === 'pending' || value === 'approved' || value === 'rejected'
+}
+
+export interface MetricInput {
+  subjectCode?: string
+  subjectName?: string
+  fullScore?: number | string | null
+  value: number | string
+  isMinimum?: boolean | number
+  minimumType?: string
+  note?: string
+}
+
+export interface BatchInput {
+  scope?: string
+  exam?: string
+  year?: number | string
+  province?: string
+  region?: string
+  schoolId?: string
+  programId?: string
+  category?: string
+  track?: string
+  title?: string
+  sourceName?: string
+  sourceUrl?: string
+  publishedAt?: string
+  confidence?: number | string
+  note?: string
+  metrics?: MetricInput[]
+}
+
+export interface ImportPayload {
+  dryRun?: boolean
+  batches?: BatchInput[]
+}
+
+export interface NormalizedBatch {
+  scope: ScoreLineScope
+  exam: ExamType
+  year: number
+  province: string
+  region: string
+  schoolId: string
+  programId: string
+  category: string
+  track: string
+  title: string
+  sourceName: string
+  sourceUrl: string
+  publishedAt: string
+  confidence: number
+  note: string
+  metrics: Array<{
+    subjectCode: string
+    subjectName: string
+    fullScore: number | null
+    value: number
+    isMinimum: 0 | 1
+    minimumType: MinimumType
+    note: string
+  }>
+}
+
+function str(value: unknown, max: number): string {
+  return typeof value === 'string' ? value.trim().slice(0, max) : ''
+}
+
+function raw(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function toNumber(value: unknown): number | null {
+function num(value: unknown): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null
   if (typeof value === 'string' && value.trim()) {
     const parsed = Number(value)
@@ -81,103 +435,152 @@ function toNumber(value: unknown): number | null {
   return null
 }
 
-/** 年份留空按 0（未标年份）处理；其他数字原样返回。 */
-function toYear(value: unknown): number {
-  if (value === undefined || value === null || value === '') return 0
-  const parsed = toNumber(value)
-  return parsed === null ? Number.NaN : parsed
-}
+/** 校验导入批次；返回中文错误，第一条可直接展示。 */
+export function validateImportPayload(input: unknown): string[] {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return ['导入内容格式不对']
+  const payload = input as ImportPayload
+  const batches = Array.isArray(payload.batches) ? payload.batches : []
+  if (batches.length === 0) return ['至少导入一条分数线']
+  if (batches.length > SCORELINE_MAX_IMPORT_BATCHES) {
+    return [`一次最多导入 ${SCORELINE_MAX_IMPORT_BATCHES} 条分数线`]
+  }
 
-/** 校验输入，返回中文错误；第一条可以直接展示给用户。 */
-export function validateScoreLineInput(input: unknown): string[] {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return ['请求格式不对']
-  const raw = input as Record<string, unknown>
   const errors: string[] = []
-
-  if (!scoreLineCategoryIds.has(text(raw.categoryId))) errors.push('请选择分数线类型')
-
-  const title = text(raw.title)
-  if (!title) errors.push('请填写标题')
-  else if (title.length > 120) errors.push('标题最多 120 个字')
-
-  const year = toYear(raw.year)
-  if (!Number.isInteger(year) || (year !== 0 && (year < 2000 || year > 2100))) {
-    errors.push('年份需在 2000–2100 之间，或留空')
-  }
-
-  if (text(raw.region).length > 20) errors.push('地区最多 20 个字')
-
-  const sourceName = text(raw.sourceName)
-  if (!sourceName) errors.push('请填写来源')
-  else if (sourceName.length > 80) errors.push('来源最多 80 个字')
-
-  const sourceUrl = text(raw.sourceUrl)
-  if (sourceUrl && !/^https?:\/\//i.test(sourceUrl)) {
-    errors.push('来源链接需以 http:// 或 https:// 开头')
-  }
-  if (sourceUrl.length > 500) errors.push('来源链接最多 500 个字')
-
-  if (text(raw.note).length > 500) errors.push('说明最多 500 个字')
-
-  const entries: unknown[] = Array.isArray(raw.entries) ? raw.entries : []
-  if (entries.length === 0) {
-    errors.push('至少填写一条分数线')
-  } else if (entries.length > 100) {
-    errors.push('最多 100 条分数线')
-  } else {
-    entries.forEach((entry, index) => {
-      const label = `第 ${index + 1} 条：`
-      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-        errors.push(`${label}格式不对`)
-        return
-      }
-      const row = entry as Record<string, unknown>
-      const name = text(row.label)
-      if (!name) errors.push(`${label}名称不能为空`)
-      else if (name.length > 40) errors.push(`${label}名称最多 40 个字`)
-
-      const value = toNumber(row.value)
-      if (value === null || value < 0 || value > 1000) {
-        errors.push(`${label}分数需在 0–1000 之间`)
-      }
-
-      const hasMax =
-        row.maxValue !== undefined && row.maxValue !== null && row.maxValue !== ''
-      const maxValue = hasMax ? toNumber(row.maxValue) : null
-      if (hasMax && (maxValue === null || maxValue <= 0 || maxValue > 1000)) {
-        errors.push(`${label}满分需大于 0 且不超过 1000`)
-      } else if (value !== null && maxValue !== null && value > maxValue) {
-        errors.push(`${label}分数不能大于满分`)
-      }
-
-      if (text(row.note).length > 100) errors.push(`${label}备注最多 100 个字`)
-    })
-  }
-
+  batches.forEach((batch, index) => {
+    const prefix = `第 ${index + 1} 条：`
+    errors.push(...validateBatch(batch, prefix))
+  })
   return errors
 }
 
-/** 校验通过后调用：把输入整理成可写库的结构（空字符串补空，数字统一）。 */
-export function normalizeScoreLineInput(input: unknown): ScoreLineInput {
-  const raw = (input ?? {}) as Record<string, unknown>
-  const entries: unknown[] = Array.isArray(raw.entries) ? raw.entries : []
-  return {
-    categoryId: text(raw.categoryId),
-    title: text(raw.title),
-    year: toYear(raw.year),
-    region: text(raw.region),
-    sourceName: text(raw.sourceName),
-    sourceUrl: text(raw.sourceUrl),
-    note: text(raw.note),
-    entries: entries.map((entry) => {
-      const row = (entry ?? {}) as Record<string, unknown>
-      const maxValue = toNumber(row.maxValue)
-      return {
-        label: text(row.label),
-        value: toNumber(row.value) ?? 0,
-        ...(maxValue === null ? {} : { maxValue }),
-        note: text(row.note)
+function validateBatch(batch: BatchInput | null | undefined, prefix: string): string[] {
+  if (!batch || typeof batch !== 'object' || Array.isArray(batch)) return [`${prefix}格式不对`]
+  const errors: string[] = []
+  if (!isScoreLineScope(batch.scope)) errors.push(`${prefix}范围需为 national / provincial / school / program`)
+  if (!isExamType(batch.exam)) errors.push(`${prefix}考试类型需为 upgrade / postgrad`)
+  const year = num(batch.year)
+  if (year === null || !Number.isInteger(year) || year < 2000 || year > 2100) {
+    errors.push(`${prefix}年份需在 2000–2100 之间`)
+  }
+  const province = normalizeProvince(str(batch.province, 20))
+  if (batch.scope !== 'national' && !province) errors.push(`${prefix}请选择省份`)
+  const sourceUrl = raw(batch.sourceUrl)
+  if (sourceUrl && !/^https?:\/\//i.test(sourceUrl)) {
+    errors.push(`${prefix}来源链接需以 http:// 或 https:// 开头`)
+  }
+  if (sourceUrl.length > 500) errors.push(`${prefix}来源链接最多 500 个字`)
+  if (raw(batch.title).length > 200) errors.push(`${prefix}标题最多 200 个字`)
+  if (raw(batch.category).length > 40) errors.push(`${prefix}批次最多 40 个字`)
+  if (raw(batch.track).length > 60) errors.push(`${prefix}科类最多 60 个字`)
+  if (raw(batch.note).length > 500) errors.push(`${prefix}说明最多 500 个字`)
+  if (raw(batch.sourceName).length > 80) errors.push(`${prefix}来源最多 80 个字`)
+  if (raw(batch.schoolId).length > 100 || raw(batch.programId).length > 100) {
+    errors.push(`${prefix}院校或专业 id 太长`)
+  }
+  const confidence = batch.confidence === undefined ? 1 : num(batch.confidence)
+  if (confidence === null || confidence < 0 || confidence > 1) {
+    errors.push(`${prefix}置信度需在 0–1 之间`)
+  }
+  if (batch.scope === 'school' && !str(batch.schoolId, 100)) errors.push(`${prefix}院校线需要院校`)
+  if (batch.scope === 'program' && (!str(batch.schoolId, 100) || !str(batch.programId, 100))) {
+    errors.push(`${prefix}专业线需要院校和专业`)
+  }
+  if (batch.scope === 'national' && (str(batch.schoolId, 100) || str(batch.programId, 100))) {
+    errors.push(`${prefix}国家线不能绑定院校或专业`)
+  }
+
+  const metrics = Array.isArray(batch.metrics) ? batch.metrics : []
+  if (metrics.length === 0) errors.push(`${prefix}至少一条指标`)
+  else if (metrics.length > SCORELINE_MAX_METRICS_PER_BATCH) {
+    errors.push(`${prefix}最多 ${SCORELINE_MAX_METRICS_PER_BATCH} 条指标`)
+  } else {
+    const seen = new Set<string>()
+    metrics.forEach((metric, metricIndex) => {
+      const label = `${prefix}第 ${metricIndex + 1} 个指标：`
+      if (!metric || typeof metric !== 'object' || Array.isArray(metric)) {
+        errors.push(`${label}格式不对`)
+        return
+      }
+      const subject = resolveSubject(metric.subjectCode) ?? resolveSubject(metric.subjectName)
+      if (!subject) errors.push(`${label}科目认不出`)
+      const value = num(metric.value)
+      if (value === null || value < 0 || value > 1000) errors.push(`${label}分数需在 0–1000 之间`)
+      const hasFull = metric.fullScore !== undefined && metric.fullScore !== null && metric.fullScore !== ''
+      const fullScore = hasFull ? num(metric.fullScore) : null
+      if (hasFull && (fullScore === null || fullScore <= 0 || fullScore > 1000)) {
+        errors.push(`${label}满分需大于 0 且不超过 1000`)
+      }
+      if (value !== null && fullScore !== null && value > fullScore) {
+        errors.push(`${label}分数不能大于满分`)
+      }
+      const isMinimum = metric.isMinimum === true || metric.isMinimum === 1
+      const minimumType = str(metric.minimumType, 20)
+      if (isMinimum && !isMinimumType(minimumType)) {
+        errors.push(`${label}最低分必须标明录取 / 复试 / 投档`)
+      }
+      if (!isMinimum && minimumType) errors.push(`${label}非最低分不能带最低分类型`)
+      if (raw(metric.note).length > 200) errors.push(`${label}备注最多 200 个字`)
+      if (subject) {
+        const key = `${subject.code}|${isMinimum ? 1 : 0}|${isMinimum ? minimumType : ''}`
+        if (seen.has(key)) errors.push(`${label}同一科目和最低分类型重复`)
+        seen.add(key)
       }
     })
   }
+  return errors
+}
+
+/** 校验通过后调用：整理成可写库的批次（科目 code、最低分类型、省份）。 */
+export function normalizeImportBatch(batch: BatchInput): NormalizedBatch {
+  const metrics = Array.isArray(batch.metrics) ? batch.metrics : []
+  return {
+    scope: batch.scope as ScoreLineScope,
+    exam: batch.exam as ExamType,
+    year: Number(batch.year),
+    province: normalizeProvince(str(batch.province, 20)),
+    region: batch.exam === 'postgrad' ? str(batch.region, 20) || provinceRegion(str(batch.province, 20)) : str(batch.region, 20),
+    schoolId: str(batch.schoolId, 100),
+    programId: str(batch.programId, 100),
+    category: str(batch.category, 40),
+    track: str(batch.track, 60),
+    title: str(batch.title, 200),
+    sourceName: str(batch.sourceName, 80),
+    sourceUrl: str(batch.sourceUrl, 500),
+    publishedAt: str(batch.publishedAt, 40),
+    confidence: batch.confidence === undefined ? 1 : Number(batch.confidence),
+    note: str(batch.note, 500),
+    metrics: metrics.map((metric) => {
+      const subject = resolveSubject(metric.subjectCode) ?? resolveSubject(metric.subjectName)
+      const hasFull = metric.fullScore !== undefined && metric.fullScore !== null && metric.fullScore !== ''
+      const isMinimum = metric.isMinimum === true || metric.isMinimum === 1
+      return {
+        subjectCode: subject?.code ?? str(metric.subjectCode, 40),
+        subjectName: subject?.name ?? str(metric.subjectName, 40),
+        fullScore: hasFull ? Number(metric.fullScore) : null,
+        value: Number(metric.value),
+        isMinimum: isMinimum ? 1 : 0,
+        minimumType: isMinimum ? (str(metric.minimumType, 20) as MinimumType) : '',
+        note: str(metric.note, 200)
+      }
+    })
+  }
+}
+
+/** 同一批次重复抓取时用于判断内容是否变化；不含抓取时间。 */
+export function batchChecksum(batch: NormalizedBatch): string {
+  const metrics = batch.metrics
+    .map((metric) => [metric.subjectCode, metric.isMinimum, metric.minimumType, metric.value, metric.fullScore ?? ''].join(':'))
+    .sort()
+  return [
+    batch.scope,
+    batch.exam,
+    batch.year,
+    batch.province,
+    batch.region,
+    batch.schoolId,
+    batch.programId,
+    batch.category,
+    batch.track,
+    metrics.join('|')
+  ].join('~')
 }

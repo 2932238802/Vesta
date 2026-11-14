@@ -1,7 +1,7 @@
 {
   "name": "vesta",
   "private": true,
-  "version": "1.76.0",
+  "version": "1.78.0",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"
@@ -20,7 +20,7 @@
     "check:size": "node scripts/check-size.mjs",
     "check:version": "node scripts/check-version.mjs",
     "check:dates": "tsx shared/src/date.cases.ts && tsx shared/src/cycle.cases.ts",
-    "check:score": "tsx shared/src/score-line.cases.ts",
+    "check:score": "tsx shared/src/score-line.cases.ts && tsx server/src/score-lines/parsers/cases.ts",
     "check:audit": "tsx server/src/ai/doc-audit.cases.ts",
     "verify": "npm run check:docs && npm run check:size && npm run check:version && npm run check:dates && npm run check:score && npm run check:audit && npm run typecheck && npm run build",
     "start": "npm --workspace server run start",

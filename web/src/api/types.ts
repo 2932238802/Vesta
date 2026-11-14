@@ -1,4 +1,5 @@
 import type { Survey } from '@shared/types'
+import type { CoverageItem, CoverageStatus, CrawlRun, ExamType } from '@shared/score-line'
 
 export type { Answers, Question, ReportPayload, ReportResponse, ReportTemplate, Survey } from '@shared/types'
 export type {
@@ -30,11 +31,121 @@ export type {
   ConsultCollectionKind
 } from '@shared/consult-collection'
 export type {
-  ScoreLineCategory,
-  ScoreLineEntry,
-  ScoreLineInput,
-  ScoreLineSet
+  CoverageInfo,
+  CoverageItem,
+  CoverageStatus,
+  CrawlRun,
+  CrawlStatus,
+  ExamSubject,
+  ExamType,
+  MinimumPoint,
+  MinimumType,
+  QueryLine,
+  QuerySelection,
+  QuerySeries,
+  QuerySource,
+  ReviewStatus,
+  School,
+  SchoolProgram,
+  SchoolSearchItem,
+  ScoreLineBatch,
+  ScoreLineMetric,
+  ScoreLineQueryResult,
+  ScoreLineScope,
+  ScoreLineSource
 } from '@shared/score-line'
+
+export interface AdminCoverageResponse {
+  summary: Record<CoverageStatus, number>
+  items: CoverageItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface AdminReviewItem {
+  kind: 'batch' | 'program'
+  id: string
+  province: string
+  schoolName: string
+  year: number
+  title?: string
+  confidence?: number
+  createdAt: string
+  majorName?: string
+  planCount?: number | null
+  tuition?: string
+}
+
+export interface AdminReviewResponse {
+  total: number
+  page: number
+  pageSize: number
+  items: AdminReviewItem[]
+}
+
+export interface AdminReviewActionInput {
+  kind: 'batch' | 'program'
+  id?: string
+  ids?: string[]
+  action: 'approve' | 'reject'
+  note?: string
+}
+
+export interface AdminCrawlResult {
+  runId: string
+  status: string
+  province: string
+  position: number
+  existing: boolean
+}
+
+export interface AdminCrawlQueueResponse {
+  running: CrawlRun | null
+  queue: (CrawlRun & { position: number })[]
+}
+
+export interface AdminCrawlRunDetail {
+  run: CrawlRun
+  documents: {
+    id: string
+    url: string
+    http_status: number
+    content_type: string
+    parse_status: string
+    error: string
+    fetched_at: string
+  }[]
+}
+
+export interface AdminImportResult {
+  ok: boolean
+  dryRun: boolean
+  batches: number
+  programs: number
+  metrics?: number
+  ids?: string[]
+}
+
+export interface AdminImportInput {
+  dryRun?: boolean
+  batches?: unknown[]
+  programs?: unknown[]
+}
+
+export interface AdminScoreLineSourceInput {
+  id?: string
+  name: string
+  publisher?: string
+  url: string
+  exam: ExamType
+  province?: string
+  schoolId?: string
+  parserId?: string
+  tier?: string
+  intervalHours?: number
+  enabled?: boolean
+}
 
 export interface InvitePayload {
   name: string

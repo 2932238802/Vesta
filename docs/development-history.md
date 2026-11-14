@@ -4,6 +4,17 @@
 
 ## 本轮（2026-11-14）
 
+### AI 报告启动恢复与并发上限（2026-11-14，产品版本 v1.78）
+
+- 依据：`docs/archive/20261114/4-AI报告生成启动恢复与并发上限-修复方案.md` v1.0（2026-11-13 项目优化审阅 P0；2026-11-14 用户要求实施）。问题：报告「谁在跑」只记在 Node 进程内存里，重启即丢；同时没有并发闸门，集中提交会把 AI 网关和报告链路一起打崩。产品版本按用户 2026-11-14 决定记 **v1.78**（v1.77 已由分数线 v3 Phase 1 占用）。
+- **队列**：新增 `server/src/ai/report-queue.ts`（109 行，无表结构变更）：内存 FIFO `waiting` / `waitingSet`、`running`、延时 `timers`，常量 `REPORT_CONCURRENCY = 2`；导出 `startReportQueue(runner)`、`enqueueReport(id, delayMs?)`、`resumeUnfinishedReports({ maxAttempts })`、`isReportRunning(id)`。排队中的记录保持 `pending`，真正开跑才在 `generateSubmission()` 里写 `running`；前端 3 秒轮询无需改动。
+- **生成侧**：`server/src/ai/generate.ts` 删除 `running` Set、`retryTimers`、`scheduleReportGeneration()`、`startReportGeneration()`；`generate()` 导出为 `generateSubmission()`；失败重试改 `enqueueReport(id, delay)`；`ensureReportGeneration()` 保留 4 分钟兜底并改走队列；`regenerateReport()` 用 `isReportRunning()` 判断是否正在跑。`MAX_AI_ATTEMPTS` 保持 4。
+- **启动恢复**：`server/src/index.ts` 在 `app.listen` 成功回调里 `startReportQueue(generateSubmission)` + `resumeUnfinishedReports({ maxAttempts: MAX_AI_ATTEMPTS })`；扫描 `pending / running` 按 `created_at` 升序入队，`failed` 与 `ai_attempts >= 4` 不恢复；AI 未配置时只记一条 `ai.unavailable`（`stage=startup_resume`）并跳过，不批量标 `failed`。提交入口 `server/src/routes/public.ts` 改 `enqueueReport(id)`。
+- **实施中修正**：失败重试是在 runner 内部调用的，此时 `running` 尚未释放；若按「running 就去重」会丢掉重试。最终让**延时入队**允许在运行中预约（`timers` / `waiting` 仍去重），**立即入队**才被 `running` / `waiting` 挡住。
+- **文档**：`docs/README.md` 报告生成新增「启动恢复与并发上限」；第 4 篇状态改「已实施」并补「实施记录」；`docs/archive/20261114/README.md` 同步状态；`scripts/file-size-baseline.json` 的 `generate.ts` 基线 735 → 701（删除内存调度代码后下调）。
+- **验证**：`npm run verify` 全绿（check:docs / check:size / check:version / check:dates / check:score / check:audit / typecheck / build）。临时 `DATA_DIR` + 假 runner 8 个场景：并发上限 2、FIFO、遗留 `running` / `pending` 启动续跑、`failed` 与机会用完不恢复、延时重试被立即重试抢占、重复入队去重、runner 内部预约的延时重试不丢失；`ensureReportGeneration()` / `regenerateReport()` 的状态分支逐项断言。真实服务 + 本地假 AI：6 条遗留记录启动即续跑（日志 `ai.resume queued=6 skipped=1`），并发峰值 2，全程未打开 `/r/:slug`；AI 返回 500 时每份按 5/15/30 秒重试、第 4 次失败，8 次调用并发始终为 2；AI 未配置启动只记 `ai.unavailable`，记录保持原状态、健康检查正常。未调用真实 AI / 博查，未写仓库 `data/`，未重新生成旧报告。
+- **未做 / 已知**：队列只在单进程内存里（按单实例部署设计）；积压时页面不显示排位；并发数先写常量 2，观察一周 `ai.failed` 里的 429/503 再决定是否调 3 或提成环境变量；重启时正在跑的那一份会整份重跑（博查结果有 7 天缓存）。
+
 ### 后台栏目调整：新增分数线、设置下移、删除简历收集（2026-11-14，产品版本 v1.76）
 
 - 依据：`docs/archive/20261114/README.md` 及第 1–3 篇开发文档 v1.0。三项同属一轮「后台栏目调整」，按「删除简历 → 新增分数线 → 设置下移」实施，保证任何中间状态导航自洽。
@@ -16,6 +27,20 @@
 - **文档**：`docs/README.md` 更新版本、栏目顺序、分数线说明、验证命令、25m 说明与简历表保留说明；`docs/archive/20261114/` 三份方案补实施记录与状态。
 - **验证**：`npm run verify` 全绿（check:docs / check:size / check:version / check:dates / check:score / check:audit / typecheck / build）。临时 `DATA_DIR=/tmp/vesta-score-test` + 8891 端口做接口断言：未带令牌四个接口均 401；空表 5 类型 0 数据集；新增 / 筛选 / 更新整组替换 / 删除 / 删除后 404；7 组非法输入 400 且文案与文档一致；`resume_images` 删除后孤儿条目 0；简历接口 401/404。Playwright 走查（桌面 + 390px）：侧栏顺序、空状态、新增 / 编辑 / 删除、tab 计数、年份筛选、搜索、`/admin/resumes` 404、设置页高亮与折叠记忆、无横向溢出、控制台零错误。未调用真实 AI、未写仓库 `data/`、未重新生成旧报告。
 - **未做 / 已知**：分数线不做自动抓取、批量导入、公开页、报告注入或权限分级；从注册表移除类型不会删数据，加回常量即可恢复；简历图片未导出 / 未 `DROP`，`client_max_body_size` 未下调；本轮已提交 `ba57bb6`，尚未推送 `origin/main`。
+
+## 本轮（2026-11-14）
+
+### 分数线 v3 Phase 1：查询、图表、全国院校主表与抓取框架（2026-11-14，产品版本 v1.77）
+
+- 依据：`docs/archive/20261114/1-分数线模块-综合设计-开发文档.md` v3.3 第 15 节 Phase 1。v1.76 的人工录入页只支持「类型 + 数据集 + 条目」，无法表达全国院校、专业、各科目单科、计划/学费和自动抓取；本轮按 v3.3 重写。
+- **数据表**：`server/src/db/schema.ts` 新增 `schools` / `school_aliases` / `school_programs` / `scoreline_batches` / `scoreline_metrics` / `school_coverage` / `scoreline_sources` / `crawl_runs` / `crawl_documents` 九张表与索引；旧 `score_line_sets` / `score_line_entries` 原样保留为 legacy。`server/src/db/migrations.ts` 新增 `migrateScoreLineV1()`：只迁 `postgrad` / `upgrade`，`settings.scoreline_v3_migrated` 标记可重复执行；迁移识别科目 code、A/B 区和标题里的学硕/专硕、学科门类，认不出的科目用稳定 `legacy_` code；`cet/teacher/civil` 跳过，旧表不删。
+- **共享层**：`shared/src/score-line.ts` 重写为 v3 类型（四层 scope、科目、最低分类型、覆盖状态、查询结果、抓取源/任务）与导入校验；新增 `shared/src/score-line-region.ts`（31 省、21 A 区 / 10 B 区、省份简称归一化）；`shared/src/score-line.cases.ts` 重写用例。
+- **服务端**：新增 `server/src/score-lines/`：`store.ts`（院校 upsert/搜索）、`program-store.ts`（专业/计划/学费）、`batch-store.ts`（批次/指标覆盖写、复核状态）、`coverage.ts`（覆盖状态重算、看板分页）、`query.ts`（主线/校线/专业线聚合、requires、series、最低分、来源）、`normalize.ts`（校名/科目/分数/标题归一化）、`validate.ts`（同比异常、置信度、分值边界）、`sources.ts`（31 省考试院 + 研招网源种子）、`crawl.ts` + `crawl-fetch.ts` + `crawl-scheduler.ts`（按省队列、单任务、SSRF 防护、快照、90 天清理）、`parsers/`（`html-table@1` / `xlsx@1` / `pdf-text@1` / `json@1` + fixture 用例）。`server/src/index.ts` 启动调度器并清理快照。
+- **接口**：`server/src/routes/admin/score-lines.ts` 重写为院校搜索 / 专业搜索 / 查询 / 覆盖看板；新增 `score-lines-crawl.ts`（触发、队列、run 明细、取消、源列表/新增）与 `score-lines-import.ts`（人工导入 dry-run、复核队列/计数/批量通过拒绝）。全部在 `requireAdmin()` 之后；抓取 URL 只来自 `scoreline_sources`，并校验 http(s)、拒绝内网地址（本地 fixture 用 `SCORELINE_CRAWL_ALLOW_PRIVATE=1`）。
+- **前端**：`ScoreLines.vue` 重写为查询页；新增 `score-lines/ScoreLineFilters.vue`、`SchoolPicker.vue`、`ProgramPicker.vue`、`LineCard.vue`、`ChartCard.vue`、`ScoreLineTable.vue`、`PlanTable.vue`、`CoverageView.vue`、`ReviewView.vue`、`ImportDialog.vue`、`types.ts` 与通用 `components/LineChart.vue`（手写 SVG，无新前端依赖）。v1 的 `ScoreLineCard.vue` / `ScoreLineEditor.vue` 删除。
+- **脚本**：新增 `scripts/import-schools.ts`（教育部名单 CSV/XLSX，`--dry-run` 只统计，按 `(name, province)` upsert，不删旧校）与 `scripts/seed-sources.ts`（幂等写入 33 个源）。`package.json` 的 `check:score` 现在同时跑共享用例与解析器 fixture；server 新增 `cheerio` / `xlsx` / `pdfjs-dist`。
+- **验证**：`npm run verify` 全绿（check:docs / check:size / check:version / check:dates / check:score / check:audit / typecheck / build）。临时 `DATA_DIR=/tmp/vesta-score-v3` + 8891/8892 端口：院校导入 dry-run 不写库、重复导入不重复；院校搜索（校名/城市/别名）、专业搜索；国家线 + 校线 + 专业线 + 录取最低分 + coverage + series；多批次缺 `category` 返回 `requires`；覆盖看板；本地 fixture 源跑通「触发 → 抓取 → HTML 解析 → pending → 复核通过后查询可见」；复核拒绝不进入查询；非法导入 400；所有新接口未带令牌 401。Playwright 桌面 + 390px 走查：查询、选院校/专业、三线图表与显隐、科目切换、覆盖看板、抓取、复核通过、人工导入 dry-run、无横向溢出、控制台零错误。未访问真实考试院站点、未调用 AI。
+- **未做 / 已知**：Phase 1 只注册 31 省源并用通用表格解析器，**各站点选择器和真实页面回归仍需逐源适配**；抓不到会在覆盖看板标 `failed`，用人工导入兜底。T1/T2/T3 院校线铺开、更多解析器样本（尤其 PDF fixture）、批量导入 Excel、学员带入、报告引用、OCR、学生端均留 Phase 2/3。`data/crawl/` 快照需单独备份。本轮尚未提交。
 
 ## 本轮（2026-11-13）
 

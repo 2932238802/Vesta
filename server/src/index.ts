@@ -7,8 +7,15 @@ import type { NextFunction, Request, Response } from 'express'
 import { config } from './env'
 import { pruneEvents } from './db/events'
 import { log } from './log'
+import {
+  generateSubmission,
+  isAiConfigured,
+  MAX_AI_ATTEMPTS
+} from './ai/generate'
+import { resumeUnfinishedReports, startReportQueue } from './ai/report-queue'
 import { adminRouter } from './routes/admin/index'
 import { publicRouter } from './routes/public'
+import { pruneCrawlDocuments, startScorelineScheduler } from './score-lines/crawl-scheduler'
 
 const app = express()
 app.disable('x-powered-by')
@@ -180,6 +187,18 @@ const server = app.listen(config.port, () => {
     logLevel: config.logLevel
   })
   pruneEventLogs()
+  pruneCrawlSnapshot()
+  startScorelineScheduler()
+  // 报告队列：端口起来之后才注册 runner 和续跑，避免端口占用时还在花钱跑 AI。
+  startReportQueue(generateSubmission)
+  if (isAiConfigured()) {
+    resumeUnfinishedReports({ maxAttempts: MAX_AI_ATTEMPTS })
+  } else {
+    log.warn('ai.unavailable', {
+      stage: 'startup_resume',
+      reason: 'AI 分析还没有配置，跳过未完成报告的续跑'
+    })
+  }
   // 单进程部署，不需要文件锁；unref 让定时器不阻止进程退出。
   setInterval(pruneEventLogs, 24 * 60 * 60 * 1000).unref()
 })
@@ -200,6 +219,15 @@ function pruneEventLogs(): void {
     }
   } catch (error) {
     log.error('events.prune_failed', { err: error })
+  }
+}
+
+function pruneCrawlSnapshot(): void {
+  try {
+    const pruned = pruneCrawlDocuments(90)
+    if (pruned) log.info('scoreline.crawl_documents_pruned', { pruned, days: 90 })
+  } catch (error) {
+    log.error('scoreline.crawl_prune_failed', { err: error })
   }
 }
 

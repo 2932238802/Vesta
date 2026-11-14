@@ -1,101 +1,135 @@
 import assert from 'node:assert/strict'
 import {
-  normalizeScoreLineInput,
-  scoreLineCategories,
-  validateScoreLineInput
+  SCORELINE_HISTORY_YEARS,
+  SCORELINE_MAX_IMPORT_BATCHES,
+  batchChecksum,
+  normalizeImportBatch,
+  resolveSubject,
+  validateImportPayload
 } from './score-line'
+import { normalizeProvince, provinceRegion, provinces } from './score-line-region'
 
-const valid = {
-  categoryId: 'postgrad',
-  title: '2026 考研国家线（A 区）',
-  year: 2026,
-  region: 'A 区',
-  sourceName: '教育部',
-  sourceUrl: 'https://example.com/official',
-  note: '',
-  entries: [
-    { label: '总分', value: 273, maxValue: 500 },
-    { label: '英语一', value: 38, maxValue: 100 }
+// 31 个省级地区 + A/B 区
+assert.equal(provinces.length, 31)
+assert.equal(new Set(provinces.map((item) => item.name)).size, 31, '省份不能重复')
+assert.equal(normalizeProvince('浙江省'), '浙江')
+assert.equal(normalizeProvince(' 内蒙古自治区 '), '内蒙古')
+assert.equal(normalizeProvince('广西壮族自治区'), '广西')
+assert.equal(normalizeProvince('北京市'), '北京')
+assert.equal(normalizeProvince('新疆维吾尔自治区'), '新疆')
+assert.equal(normalizeProvince('香港特别行政区'), '')
+assert.equal(provinceRegion('浙江'), 'A区')
+assert.equal(provinceRegion('广东省'), 'A区')
+assert.equal(provinceRegion('内蒙古'), 'B区')
+assert.equal(provinceRegion('新疆维吾尔自治区'), 'B区')
+assert.equal(provinceRegion(''), '')
+const aCount = provinces.filter((item) => provinceRegion(item.name) === 'A区').length
+const bCount = provinces.filter((item) => provinceRegion(item.name) === 'B区').length
+assert.equal(aCount, 21, 'A 区 21 个省级地区')
+assert.equal(bCount, 10, 'B 区 10 个省级地区')
+assert.equal(SCORELINE_HISTORY_YEARS, 10)
+console.log('✓ 省份 / A-B 区 / 历史年限')
+
+// 科目归一化
+const subjects: [string, string][] = [
+  ['总分线', 'total'],
+  ['总成绩', 'total'],
+  ['思想政治理论', 'politics'],
+  ['英语（一）', 'english1'],
+  ['英语二', 'english2'],
+  ['数学（二）', 'math2'],
+  ['业务课一', 'major1'],
+  ['专业课二', 'major2'],
+  ['大学英语', 'english'],
+  ['计算机基础', 'computer'],
+  ['大学语文', 'chinese'],
+  ['高等数学', 'math'],
+  ['专业综合', 'major']
+]
+for (const [input, expected] of subjects) {
+  assert.equal(resolveSubject(input)?.code, expected, `${input} → ${expected}`)
+}
+assert.equal(resolveSubject('不存在的科目'), null)
+console.log('✓ 科目 code 归一化')
+
+const validBatch = {
+  scope: 'program',
+  exam: 'postgrad',
+  year: 2025,
+  province: '浙江',
+  schoolId: 'sch_1',
+  programId: 'prg_1',
+  category: '学硕',
+  track: '工学',
+  title: '2025 示例大学计算机学硕复试线',
+  sourceName: '示例大学研究生院',
+  sourceUrl: 'https://example.com/line',
+  metrics: [
+    { subjectCode: 'total', subjectName: '总分', fullScore: 500, value: 320 },
+    { subjectName: '政治', fullScore: 100, value: 50 },
+    { subjectName: '英语（一）', fullScore: 100, value: 50 },
+    { subjectName: '总分', fullScore: 500, value: 312, isMinimum: 1, minimumType: 'admit' }
   ]
 }
 
-function expectOk(name: string, input: unknown) {
-  const errors = validateScoreLineInput(input)
-  assert.deepEqual(errors, [], `${name}：应通过，实际 ${errors.join(' / ')}`)
+function expectOk(name: string, payload: unknown) {
+  assert.deepEqual(validateImportPayload(payload), [], `${name} 应通过`)
+}
+function expectError(name: string, payload: unknown, expected: string) {
+  const errors = validateImportPayload(payload)
+  assert.ok(errors.some((item) => item.includes(expected)), `${name} 应包含「${expected}」，实际 ${errors.join(' / ')}`)
 }
 
-function expectError(name: string, input: unknown, expected: string) {
-  const errors = validateScoreLineInput(input)
-  assert.ok(errors.includes(expected), `${name}：应包含「${expected}」，实际 ${errors.join(' / ')}`)
-}
-
-expectOk('最小合法输入', valid)
-expectOk('年份留空', { ...valid, year: 0 })
-expectOk('可选字段留空', {
-  categoryId: 'cet',
-  title: '2026 年 6 月四级',
-  year: 2026,
-  sourceName: '中国教育考试网',
-  entries: [{ label: '总分', value: 425 }]
+expectOk('合法导入', { batches: [validBatch] })
+expectOk('国家线不绑院校', {
+  batches: [{ ...validBatch, scope: 'national', schoolId: '', programId: '', province: '' }]
 })
+expectError('空批次', { batches: [] }, '至少导入一条分数线')
+expectError('批次过多', { batches: Array(SCORELINE_MAX_IMPORT_BATCHES + 1).fill(validBatch) }, '一次最多导入')
+expectError('范围非法', { batches: [{ ...validBatch, scope: 'other' }] }, '范围需为')
+expectError('考试非法', { batches: [{ ...validBatch, exam: 'cet' }] }, '考试类型需为')
+expectError('年份越界', { batches: [{ ...validBatch, year: 1999 }] }, '年份需在 2000–2100')
+expectError('缺省份', { batches: [{ ...validBatch, province: '' }] }, '请选择省份')
+expectError('专业线缺专业', { batches: [{ ...validBatch, programId: '' }] }, '专业线需要院校和专业')
+expectError('国家线绑院校', { batches: [{ ...validBatch, scope: 'national' }] }, '国家线不能绑定院校或专业')
+expectError('空指标', { batches: [{ ...validBatch, metrics: [] }] }, '至少一条指标')
+expectError('指标过多', { batches: [{ ...validBatch, metrics: Array(101).fill(validBatch.metrics[0]) }] }, '最多 100')
+expectError('科目认不出', { batches: [{ ...validBatch, metrics: [{ subjectName: '玄学科目', value: 50 }] }] }, '科目认不出')
+expectError('负分', { batches: [{ ...validBatch, metrics: [{ subjectName: '总分', value: -1 }] }] }, '分数需在 0–1000')
+expectError('超过满分', {
+  batches: [{ ...validBatch, metrics: [{ subjectName: '总分', fullScore: 300, value: 301 }] }]
+}, '分数不能大于满分')
+expectError('最低分缺类型', {
+  batches: [{ ...validBatch, metrics: [{ subjectName: '总分', value: 300, isMinimum: 1 }] }]
+}, '最低分必须标明')
+expectError('非最低分带类型', {
+  batches: [{ ...validBatch, metrics: [{ subjectName: '总分', value: 300, minimumType: 'admit' }] }]
+}, '非最低分不能带最低分类型')
+expectError('重复指标', {
+  batches: [{ ...validBatch, metrics: [{ subjectName: '总分', value: 300 }, { subjectCode: 'total', value: 301 }] }]
+}, '同一科目和最低分类型重复')
+expectError('链接协议', { batches: [{ ...validBatch, sourceUrl: 'ftp://example.com' }] }, '来源链接需以')
+expectError('标题超长', { batches: [{ ...validBatch, title: 'x'.repeat(201) }] }, '标题最多 200')
+console.log('✓ 导入校验正反例')
 
-expectError('缺标题', { ...valid, title: '' }, '请填写标题')
-expectError('标题超长', { ...valid, title: 'x'.repeat(121) }, '标题最多 120 个字')
-expectError('未知类型', { ...valid, categoryId: 'unknown' }, '请选择分数线类型')
-expectError('年份越界', { ...valid, year: 1999 }, '年份需在 2000–2100 之间，或留空')
-expectError('年份非整数', { ...valid, year: 2026.5 }, '年份需在 2000–2100 之间，或留空')
-expectError('地区超长', { ...valid, region: 'x'.repeat(21) }, '地区最多 20 个字')
-expectError('缺来源', { ...valid, sourceName: '' }, '请填写来源')
-expectError('来源超长', { ...valid, sourceName: 'x'.repeat(81) }, '来源最多 80 个字')
-expectError('链接协议不对', { ...valid, sourceUrl: 'ftp://example.com' }, '来源链接需以 http:// 或 https:// 开头')
-expectError('说明超长', { ...valid, note: 'x'.repeat(501) }, '说明最多 500 个字')
-expectError('条目为空', { ...valid, entries: [] }, '至少填写一条分数线')
-expectError(
-  '条目超 100',
-  { ...valid, entries: Array.from({ length: 101 }, () => ({ label: '总分', value: 1 })) },
-  '最多 100 条分数线'
-)
-expectError('条目名为空', { ...valid, entries: [{ label: '', value: 1 }] }, '第 1 条：名称不能为空')
-expectError(
-  '条目名超长',
-  { ...valid, entries: [{ label: 'x'.repeat(41), value: 1 }] },
-  '第 1 条：名称最多 40 个字'
-)
-expectError('分数为 NaN', { ...valid, entries: [{ label: '总分', value: Number.NaN }] }, '第 1 条：分数需在 0–1000 之间')
-expectError('分数为负', { ...valid, entries: [{ label: '总分', value: -1 }] }, '第 1 条：分数需在 0–1000 之间')
-expectError('分数超 1000', { ...valid, entries: [{ label: '总分', value: 1001 }] }, '第 1 条：分数需在 0–1000 之间')
-expectError(
-  '满分小于分数',
-  { ...valid, entries: [{ label: '总分', value: 500, maxValue: 400 }] },
-  '第 1 条：分数不能大于满分'
-)
-expectError(
-  '满分为 0',
-  { ...valid, entries: [{ label: '总分', value: 0, maxValue: 0 }] },
-  '第 1 条：满分需大于 0 且不超过 1000'
-)
-expectError(
-  '备注超长',
-  { ...valid, entries: [{ label: '总分', value: 1, note: 'x'.repeat(101) }] },
-  '第 1 条：备注最多 100 个字'
-)
-expectError('非对象输入', null, '请求格式不对')
+const normalized = normalizeImportBatch(validBatch)
+assert.equal(normalized.province, '浙江')
+assert.equal(normalized.region, 'A区')
+assert.equal(normalized.metrics[0].subjectCode, 'total')
+assert.equal(normalized.metrics[1].subjectCode, 'politics')
+assert.equal(normalized.metrics[2].subjectCode, 'english1')
+assert.equal(normalized.metrics[3].isMinimum, 1)
+assert.equal(normalized.metrics[3].minimumType, 'admit')
+assert.equal(normalized.confidence, 1)
 
-const normalized = normalizeScoreLineInput({
-  categoryId: ' postgrad ',
-  title: ' 2026 考研国家线 ',
-  year: '2026',
-  sourceName: '教育部',
-  entries: [{ label: ' 总分 ', value: '273', maxValue: '500' }, { label: '英语一', value: 38 }]
-})
-assert.equal(normalized.categoryId, 'postgrad')
-assert.equal(normalized.title, '2026 考研国家线')
-assert.equal(normalized.year, 2026)
-assert.equal(normalized.region, '')
-assert.equal(normalized.entries[0].maxValue, 500)
-assert.equal(normalized.entries[1].maxValue, undefined)
+const checksumA = batchChecksum(normalized)
+const reordered = normalizeImportBatch({ ...validBatch, metrics: [...validBatch.metrics].reverse() })
+assert.equal(batchChecksum(reordered), checksumA, 'checksum 不应受指标顺序影响')
+assert.notEqual(
+  batchChecksum(normalizeImportBatch({ ...validBatch, year: 2026 })),
+  checksumA,
+  '年份变化应改变 checksum'
+)
+console.log('✓ 归一化与 checksum 稳定性')
 
-assert.ok(scoreLineCategories.length >= 5, '首批类型不少于 5 个')
-assert.equal(new Set(scoreLineCategories.map((item) => item.id)).size, scoreLineCategories.length, '类型 id 不能重复')
-
-console.log(`分数线校验用例通过：${scoreLineCategories.length} 个类型，合法 / 非法 / 归一化用例全部通过`)
+console.log('\n分数线 v3 共享用例全部通过')

@@ -6,7 +6,24 @@ import type {
   AdminSubmissionSummary,
   Overview
 } from './types'
-import type { ReportPayload, ReportTemplate, ScoreLineCategory, ScoreLineInput, ScoreLineSet, Survey } from './types'
+import type {
+  AdminCoverageResponse,
+  AdminCrawlQueueResponse,
+  AdminCrawlResult,
+  AdminCrawlRunDetail,
+  AdminImportInput,
+  AdminImportResult,
+  AdminReviewActionInput,
+  AdminReviewResponse,
+  AdminScoreLineSourceInput,
+  ReportPayload,
+  ReportTemplate,
+  SchoolProgram,
+  SchoolSearchItem,
+  ScoreLineQueryResult,
+  ScoreLineSource,
+  Survey
+} from './types'
 import { ApiError, getToken, query, request } from './request'
 
 export const adminApi = {
@@ -30,35 +47,166 @@ export const adminApi = {
   overview() {
     return request<Overview>('/api/admin/overview', { auth: true })
   },
-  scoreLines(params: { category?: string; year?: number } = {}) {
-    return request<{
-      categories: (ScoreLineCategory & { count: number })[]
-      sets: ScoreLineSet[]
-    }>(
-      `/api/admin/score-lines${query({
-        category: params.category,
-        year: params.year && params.year > 0 ? String(params.year) : undefined
+  scoreLineSchools(
+    params: {
+      q?: string
+      province?: string
+      level?: string
+      exam?: string
+      year?: number
+      limit?: number
+    } = {}
+  ) {
+    return request<{ schools: SchoolSearchItem[] }>(
+      `/api/admin/score-lines/schools${query({
+        q: params.q,
+        province: params.province,
+        level: params.level,
+        exam: params.exam,
+        year: params.year ? String(params.year) : undefined,
+        limit: params.limit ? String(params.limit) : undefined
       })}`,
       { auth: true }
     )
   },
-  createScoreLine(body: ScoreLineInput) {
-    return request<{ set: ScoreLineSet }>('/api/admin/score-lines', {
+  scoreLinePrograms(params: {
+    schoolId: string
+    year: number
+    exam: string
+    q?: string
+    limit?: number
+  }) {
+    return request<{ programs: SchoolProgram[] }>(
+      `/api/admin/score-lines/programs${query({
+        schoolId: params.schoolId,
+        year: String(params.year),
+        exam: params.exam,
+        q: params.q,
+        limit: params.limit ? String(params.limit) : undefined
+      })}`,
+      { auth: true }
+    )
+  },
+  scoreLineQuery(params: {
+    exam: string
+    year: number
+    province?: string
+    region?: string
+    schoolId?: string
+    programId?: string
+    category?: string
+    track?: string
+  }) {
+    return request<ScoreLineQueryResult>(
+      `/api/admin/score-lines/query${query({
+        exam: params.exam,
+        year: String(params.year),
+        province: params.province,
+        region: params.region,
+        schoolId: params.schoolId,
+        programId: params.programId,
+        category: params.category,
+        track: params.track
+      })}`,
+      { auth: true }
+    )
+  },
+  scoreLineCoverage(params: {
+    exam: string
+    year: number
+    province?: string
+    status?: string
+    page?: number
+  }) {
+    return request<AdminCoverageResponse>(
+      `/api/admin/score-lines/coverage${query({
+        exam: params.exam,
+        year: String(params.year),
+        province: params.province,
+        status: params.status,
+        page: params.page ? String(params.page) : undefined
+      })}`,
+      { auth: true }
+    )
+  },
+  scoreLineImport(body: AdminImportInput) {
+    return request<AdminImportResult>('/api/admin/score-lines/import', {
       method: 'POST',
       body,
       auth: true
     })
   },
-  updateScoreLine(id: string, body: ScoreLineInput) {
-    return request<{ set: ScoreLineSet }>(`/api/admin/score-lines/${encodeURIComponent(id)}`, {
-      method: 'PUT',
+  scoreLineCrawl(body: { province: string; years?: number[] }) {
+    return request<AdminCrawlResult>('/api/admin/score-lines/crawl', {
+      method: 'POST',
       body,
       auth: true
     })
   },
-  deleteScoreLine(id: string) {
-    return request<{ ok: true }>(`/api/admin/score-lines/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
+  scoreLineCrawlQueue() {
+    return request<AdminCrawlQueueResponse>('/api/admin/score-lines/crawl/queue', { auth: true })
+  },
+  scoreLineCrawlRun(id: string) {
+    return request<AdminCrawlRunDetail>(
+      `/api/admin/score-lines/crawl/runs/${encodeURIComponent(id)}`,
+      { auth: true }
+    )
+  },
+  cancelScoreLineCrawl(id: string) {
+    return request<{ ok: true }>(
+      `/api/admin/score-lines/crawl/queue/${encodeURIComponent(id)}`,
+      { method: 'DELETE', auth: true }
+    )
+  },
+  scoreLineReview(params: {
+    kind?: 'batch' | 'program'
+    province?: string
+    schoolId?: string
+    year?: number
+    page?: number
+  } = {}) {
+    return request<AdminReviewResponse>(
+      `/api/admin/score-lines/review${query({
+        kind: params.kind,
+        province: params.province,
+        schoolId: params.schoolId,
+        year: params.year ? String(params.year) : undefined,
+        page: params.page ? String(params.page) : undefined
+      })}`,
+      { auth: true }
+    )
+  },
+  scoreLineReviewCount(params: { province?: string; schoolId?: string; year?: number } = {}) {
+    return request<{ batches: number; programs: number; total: number }>(
+      `/api/admin/score-lines/review/count${query({
+        province: params.province,
+        schoolId: params.schoolId,
+        year: params.year ? String(params.year) : undefined
+      })}`,
+      { auth: true }
+    )
+  },
+  scoreLineReviewAction(body: AdminReviewActionInput) {
+    return request<{ ok: true; updated: number }>('/api/admin/score-lines/review', {
+      method: 'POST',
+      body,
+      auth: true
+    })
+  },
+  scoreLineSources(params: { exam?: string; province?: string; tier?: string } = {}) {
+    return request<{ sources: ScoreLineSource[] }>(
+      `/api/admin/score-lines/sources${query({
+        exam: params.exam,
+        province: params.province,
+        tier: params.tier
+      })}`,
+      { auth: true }
+    )
+  },
+  saveScoreLineSource(body: AdminScoreLineSourceInput) {
+    return request<{ source: ScoreLineSource }>('/api/admin/score-lines/sources', {
+      method: 'POST',
+      body,
       auth: true
     })
   },

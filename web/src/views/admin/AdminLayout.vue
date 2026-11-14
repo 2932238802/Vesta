@@ -487,7 +487,8 @@ async function logout() {
 
 @media (max-width: 900px) {
   .admin {
-    grid-template-columns: 1fr;
+    /* 单列时不允许内容把整条 grid 轨道撑宽，宽表格在自己的滚动容器里滚。 */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidebar {

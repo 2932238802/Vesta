@@ -26,9 +26,9 @@ import {
   isAiConfigured,
   isRetryableError,
   readStoredContent,
-  regenerateReport,
-  startReportGeneration
+  regenerateReport
 } from '../ai/generate'
+import { enqueueReport } from '../ai/report-queue'
 import { readDocContent } from '../ai/doc-generate'
 import { noStore } from '../auth'
 import { readDeployInfo } from '../deploy-info'
@@ -266,7 +266,7 @@ publicRouter.post(
       answerCount: Object.keys(answers).length,
       reportMode: survey.reportMode ?? 'default'
     })
-    startReportGeneration(id)
+    enqueueReport(id)
     res.json({ slug })
   })
 )

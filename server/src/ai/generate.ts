@@ -28,6 +28,7 @@ import { log } from '../log'
 import { searchWeb, type SearchResult } from './bocha'
 import { askDeepSeek, parseJsonObject } from './deepseek'
 import { generateDocContent } from './doc-generate'
+import { enqueueReport, isReportRunning } from './report-queue'
 
 export interface AiMeta {
   model: string
@@ -58,9 +59,7 @@ interface SubmissionRow {
 type StrengthsBlock = Extract<ReportBlock, { type: 'strengths' }>
 type GapsBlock = Extract<ReportBlock, { type: 'gaps' }>
 
-const running = new Set<string>()
-const retryTimers = new Map<string, NodeJS.Timeout>()
-const MAX_AI_ATTEMPTS = 4
+export const MAX_AI_ATTEMPTS = 4
 const RETRY_DELAYS_MS = [5_000, 15_000, 30_000]
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
@@ -508,7 +507,7 @@ ${searchError || (results.length ? `共 ${results.length} 条可用结果` : '�
   }
 }
 
-async function generate(submissionId: string): Promise<void> {
+export async function generateSubmission(submissionId: string): Promise<void> {
   const row = getSubmission(submissionId)
   if (!row || row.ai_status === 'ready') return
 
@@ -626,7 +625,7 @@ async function generate(submissionId: string): Promise<void> {
         delay,
         error: message
       })
-      scheduleReportGeneration(submissionId, delay)
+      enqueueReport(submissionId, delay)
       return
     }
 
@@ -646,39 +645,6 @@ async function generate(submissionId: string): Promise<void> {
   }
 }
 
-function scheduleReportGeneration(submissionId: string, delay: number): void {
-  if (retryTimers.has(submissionId)) return
-  const timer = setTimeout(() => {
-    retryTimers.delete(submissionId)
-    startReportGeneration(submissionId)
-  }, delay)
-  timer.unref?.()
-  retryTimers.set(submissionId, timer)
-}
-
-export function startReportGeneration(submissionId: string): void {
-  const timer = retryTimers.get(submissionId)
-  if (timer) {
-    clearTimeout(timer)
-    retryTimers.delete(submissionId)
-  }
-  if (running.has(submissionId)) {
-    log.debug('ai.skip_running', { submissionId })
-    return
-  }
-  log.debug('ai.queue', { submissionId })
-  running.add(submissionId)
-  void generate(submissionId)
-    .catch((error) =>
-      log.error('ai.unhandled', {
-        submissionId,
-        err: error,
-        error: errorMessage(error)
-      })
-    )
-    .finally(() => running.delete(submissionId))
-}
-
 export function ensureReportGeneration(input: {
   id: string
   status: string
@@ -692,7 +658,7 @@ export function ensureReportGeneration(input: {
   if (input.status === 'running') {
     const started = input.startedAt ? Date.parse(input.startedAt) : 0
     if (started && Date.now() - started < 4 * 60_000) return false
-    startReportGeneration(input.id)
+    enqueueReport(input.id)
     return true
   }
 
@@ -700,18 +666,18 @@ export function ensureReportGeneration(input: {
     if (input.attempts >= MAX_AI_ATTEMPTS) return false
     const finished = input.finishedAt ? Date.parse(input.finishedAt) : 0
     if (finished && Date.now() - finished < 5_000) return false
-    startReportGeneration(input.id)
+    enqueueReport(input.id)
     return true
   }
 
-  startReportGeneration(input.id)
+  enqueueReport(input.id)
   return true
 }
 
 export function regenerateReport(submissionId: string): boolean {
   const row = getSubmission(submissionId)
   if (!row) return false
-  if (row.ai_status === 'running' && running.has(submissionId)) return true
+  if (row.ai_status === 'running' && isReportRunning(submissionId)) return true
   db.prepare(
     `UPDATE submissions
      SET ai_status = 'pending', ai_error = '', ai_attempts = 0,
@@ -719,7 +685,7 @@ export function regenerateReport(submissionId: string): boolean {
      WHERE id = ?`
   ).run(submissionId)
   log.info('ai.regenerate', { submissionId })
-  startReportGeneration(submissionId)
+  enqueueReport(submissionId)
   return true
 }
 
