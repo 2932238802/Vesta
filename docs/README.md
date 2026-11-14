@@ -6,8 +6,8 @@ Vesta 是一套面向大学在读学生的问卷、报告与咨询辅助系统�
 
 - 产品版本基线 **v1.60**（2026-11-12 起算）。
 - 每完成一轮需求递增一个小版本：**v1.61、v1.62……**（两位数小版本，不进位到 v2）。
-- 已完成：v1.61 管理员界面交互优化、v1.62 前端拆包与巨型文件拆分、v1.63 检索届别改用当前年份、v1.64 仪表盘「每组完成」修复、v1.65 后台 doc 模式不再展示映射分数、v1.66 问卷题号重排、v1.67 英语块表述约束与生成校验、v1.68 英语块校验误伤与漏拦订正、v1.69 日志系统完善、v1.70 版本号同步与工程元数据规范、v1.71 文件规模约束与首批拆分、v1.72 文本响应 gzip 压缩、v1.73 events 保留与漏斗事实汇总、v1.74 学员名单按期次自动分组、v1.75 管理端查询效率与死接口、限长清理；后续从 **v1.76** 继续递增。
-- 根 `package.json` 的 `version` 是版本号的唯一事实源：产品 `v1.<n>` ↔ `1.<n>.0`（`major` 恒为 `1`、`patch` 恒为 `0`，当前为 `1.75.0`）。「已完成」这行写入当前最高版本后，`package.json` 必须与之相等；本轮已升版本、文档还没写完时最多领先 1 个版本。不一致时 `npm run check:version` 会让 `npm run verify` 失败。
+- 已完成：v1.61 管理员界面交互优化、v1.62 前端拆包与巨型文件拆分、v1.63 检索届别改用当前年份、v1.64 仪表盘「每组完成」修复、v1.65 后台 doc 模式不再展示映射分数、v1.66 问卷题号重排、v1.67 英语块表述约束与生成校验、v1.68 英语块校验误伤与漏拦订正、v1.69 日志系统完善、v1.70 版本号同步与工程元数据规范、v1.71 文件规模约束与首批拆分、v1.72 文本响应 gzip 压缩、v1.73 events 保留与漏斗事实汇总、v1.74 学员名单按期次自动分组、v1.75 管理端查询效率与死接口、限长清理、v1.76 后台栏目调整（新增分数线、设置下移、删除简历收集）；后续从 **v1.77** 继续递增。
+- 根 `package.json` 的 `version` 是版本号的唯一事实源：产品 `v1.<n>` ↔ `1.<n>.0`（`major` 恒为 `1`、`patch` 恒为 `0`，当前为 `1.76.0`）。「已完成」这行写入当前最高版本后，`package.json` 必须与之相等；本轮已升版本、文档还没写完时最多领先 1 个版本。不一致时 `npm run check:version` 会让 `npm run verify` 失败。
 - `server/package.json`、`web/package.json` 是 workspace 成员，保持 `private` 且不带 `version`，避免三处版本号打架。
 - `docs/archive/` 里单个方案的「v1.0 / v1.1」是方案文档自身版本，与产品版本分开编号；每轮改动对应的产品版本号要写进 `development-history.md`。
 
@@ -31,8 +31,9 @@ Vesta 是一套面向大学在读学生的问卷、报告与咨询辅助系统�
 | v1.73 | 2026-11-13 | `cd09143` | `events` 保留与清理：`event_facts` 漏斗汇总、180/365 天保留期、`check-events` |
 | v1.74 | 2026-11-13 | `cd09143` | 学员名单按咨询期次自动分组（周三起算），移除自定义分组与日期筛选 |
 | v1.75 | 2026-11-13 | `096b79d` | 管理端查询效率、死接口与限长清理（概览 / CSV / 咨询树与模板写接口） |
+| v1.76 | 2026-11-14 | 待提交 | 后台栏目调整：新增分数线、设置下移、删除简历收集 |
 
-（只回填能确认 commit 的版本；`—` 表示基线之前没有单独提交。）
+（只回填能确认 commit 的版本；`—` 表示基线之前没有单独提交，`待提交` 表示本地已实施、尚未入库。）
 
 ## 技术栈
 
@@ -49,7 +50,7 @@ server/src/        Express 服务、数据库、鉴权、AI 生成
 shared/src/        问卷、报告、咨询目的树等共享类型与算法
 web/src/           Vue 管理后台、问卷、报告页面
 deploy/            systemd、Nginx、安装与备份脚本
-scripts/           一次性导入与维护脚本；check-size.mjs + file-size-baseline.json 负责文件规模约束，check-version.mjs 负责版本号一致性，check-events.mjs 核对 events 与 event_facts
+scripts/           一次性导入与维护脚本；check-size.mjs + file-size-baseline.json 负责文件规模约束，check-version.mjs 负责版本号一致性，check-events.mjs 核对 events 与 event_facts；shared/src/score-line.cases.ts 由 check:score 执行
 docs/              架构、运行、历史、问卷口径与 Agent 交接文档
 docs/archive/      已作废的历史方案（只存档，不要照着实现）
 data/              本地数据库与备份（不提交 Git）
@@ -146,6 +147,7 @@ bash update.sh --mode=systemd  # 覆盖 DEPLOY_MODE
 - 当前 `/api/health` 返回 `{ ok, time, db, uptimeSec, commit, appVersion }`。`commit` / `appVersion` 从 `data/deploy-info.json` 读取（`update.sh` 重启前覆盖写入；文件不存在时两者为空串，L5 仍走“HTTP 200 + 重启后时间戳 + 前端构建指纹”的降级校验）。`appVersion` 故意不叫 `version`：L5 会把 `version` 当作 commit 比对，semver 会直接导致部署失败。
 - 服务器上如果还是很久以前的 `update.sh`（不认识上述参数、也不会自动拉取），先手动执行一次 `git pull`；之后日常只需 `bash update.sh`。
 - 文本响应（HTML / JS / CSS / JSON）默认由 Node 层 gzip（`compression`，阈值 1 KB，已压缩格式自动跳过）；`deploy/nginx.conf` 也同步开启了 gzip，两层同开是安全的。若前面已有网关负责压缩，可设 `COMPRESS=off` 省 Node CPU。
+- `client_max_body_size 25m` 原为简历图片上传调大；简历收集已于 v1.76 下线，保留 25m 兼容存量部署，暂不回调（下调需单独验证生产网关）。
 - 失败时脚本会打印失败阶段、日志命令、数据库备份路径和回滚命令；健康检查失败还会自动带出最近 60 行服务日志。
 
 ## 常用环境变量
@@ -250,14 +252,23 @@ npx tsx scripts/import-collections-docx.ts zxg --write
 
 ## 主要页面
 
-后台按四个栏目组织：
+后台按四个栏目组织（侧栏顺序）：
 
 - 问卷：概览、邀请链接、学员名单。
-- 设置：问卷设置、报告设置、AI 分析规则。
 - 咨询：写咨询稿、咨询树、收藏栏。
-- 简历：简历收集。
+- 分数线：分数线（仅管理后台内部查询，不进入报告）。
+- 设置：问卷设置、报告设置、AI 分析规则。
 
 学员名单按咨询期次自动分组：一期 = 周三 00:00 → 下周二 23:59:59（固定 Asia/Shanghai），归期看邀请链接创建时间；顶部只保留期次 chip（全部 / 本期 / 上期 / 更早），不再有自定义分组和日期筛选。导出 CSV 跟随当前期次与状态。
+
+### 分数线
+
+`/admin/score-lines` 用于管理员人工录入各类考试分数线（考研 / 四六级 / 专升本 / 教资 / 考公），仅后台查询，不接入 AI 报告、不预置任何真实数字。
+
+- **类型**：受控词表在 `shared/src/score-line.ts` 的 `scoreLineCategories`，新增类型只加一行常量，不改表结构；类型 id 上线后不要改。
+- **数据**：`score_line_sets` 存「某年 + 某地区 + 某来源」的一批线，`score_line_entries` 存每个具体数值（总分 / 单科 / 某专业线）；编辑时整组替换，删除数据集会同时删除条目。
+- **录入规则**：来源必填、来源链接可选但必须是 http(s)；条目至少 1 条、最多 100 条；分数 0–1000，填了满分时分数不能大于满分。
+- **校验**：`shared/src/score-line.ts` 的 `validateScoreLineInput()` 前后端共用，用例在 `shared/src/score-line.cases.ts`，由 `npm run check:score` 执行并接入 `verify`。
 
 公开页面：
 
@@ -269,11 +280,12 @@ npx tsx scripts/import-collections-docx.ts zxg --write
 
 ```bash
 npm run check:dates                     # 日历时间距离 + 咨询期次用例
+npm run check:score                     # 分数线输入校验用例
 npx tsx server/src/ai/doc-audit.cases.ts # 报告文本审计用例（考研 × 听力 / 口语 / 英语时长）
 npm run check:size                      # 文件规模检查（基线只减不增，新文件 ≤400 行）
 npm run check:version                   # 版本号一致性（package.json ↔ docs/README.md「已完成」）
 node scripts/check-events.mjs           # events 与 event_facts 漏斗事实一致性（只读，手动跑）
-npm run verify                          # check:docs + check:size + check:version + check:dates + check:audit + typecheck + build
+npm run verify                          # check:docs + check:size + check:version + check:dates + check:score + check:audit + typecheck + build
 ```
 
 修改后端后至少执行 `typecheck`；修改前端后还要执行 `build`。当前没有统一的自动化测试套件，验收以类型检查、构建、时间用例、报告文本审计、文件规模检查、版本号一致性和实际页面走查为准。
@@ -313,3 +325,4 @@ docker compose logs --tail=100
 - 不要清空或重置用户导入的咨询树。
 - 不要在本地测试时杀掉用户已经启动的服务，除非用户明确要求。
 - 数据库结构迁移由服务启动代码执行，修改表结构时要兼容已有数据。
+- 简历收集已于 v1.76 下线；`resume_images` 表与存量图片保留在库中，代码不再读写，确认清理前不要 `DROP`。

@@ -29,7 +29,12 @@ export type {
   ConsultCollectionItem,
   ConsultCollectionKind
 } from '@shared/consult-collection'
-export type { ResumeImageSummary } from '@shared/resume'
+export type {
+  ScoreLineCategory,
+  ScoreLineEntry,
+  ScoreLineInput,
+  ScoreLineSet
+} from '@shared/score-line'
 
 export interface InvitePayload {
   name: string

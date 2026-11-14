@@ -109,35 +109,3 @@ async function throwResponseError(response: Response): Promise<never> {
   }
   throw new ApiError(message, response.status)
 }
-
-export async function blobRequest(path: string): Promise<Blob> {
-  let response: Response
-  try {
-    response = await fetch(path, {
-      headers: { Authorization: `Bearer ${getToken()}` }
-    })
-  } catch {
-    throw new ApiError('连接失败，请稍后重试', 0)
-  }
-  if (!response.ok) return throwResponseError(response)
-  return response.blob()
-}
-
-export async function uploadResumeRequest<T>(path: string, file: File): Promise<T> {
-  let response: Response
-  try {
-    response = await fetch(path, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
-        'Content-Type': file.type,
-        'X-File-Name': encodeURIComponent(file.name)
-      },
-      body: file
-    })
-  } catch {
-    throw new ApiError('连接失败，请稍后重试', 0)
-  }
-  if (!response.ok) return throwResponseError(response)
-  return (await response.json()) as T
-}

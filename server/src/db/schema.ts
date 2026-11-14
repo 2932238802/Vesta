@@ -97,6 +97,8 @@ export function initSchema(): void {
     value TEXT NOT NULL
   );
 
+  -- 历史数据：简历收集已于 2026-11 下线，代码不再读写；
+  -- 存量图片保留在库中，便于回滚或人工导出。确认清理前不要 DROP。
   CREATE TABLE IF NOT EXISTS resume_images (
     id TEXT PRIMARY KEY,
     major TEXT NOT NULL,
@@ -183,5 +185,34 @@ export function initSchema(): void {
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_search_cache_created ON search_cache(created_at);
+
+  -- 分数线：类型（考研 / 四六级…）在 shared/src/score-line.ts 的注册表里，
+  -- 这里只存「数据集 → 条目」两层；新增类型不需要改表。
+  CREATE TABLE IF NOT EXISTS score_line_sets (
+    id          TEXT PRIMARY KEY,
+    category_id TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    year        INTEGER NOT NULL DEFAULT 0,
+    region      TEXT NOT NULL DEFAULT '',
+    source_name TEXT NOT NULL DEFAULT '',
+    source_url  TEXT NOT NULL DEFAULT '',
+    note        TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_score_line_sets_category
+    ON score_line_sets(category_id, year DESC, updated_at DESC);
+
+  CREATE TABLE IF NOT EXISTS score_line_entries (
+    id         TEXT PRIMARY KEY,
+    set_id     TEXT NOT NULL,
+    label      TEXT NOT NULL,
+    value      REAL NOT NULL,
+    max_value  REAL,
+    note       TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_score_line_entries_set
+    ON score_line_entries(set_id, sort_order);
 `)
 }

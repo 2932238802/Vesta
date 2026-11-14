@@ -22,7 +22,7 @@ const ConsultWorkspace = () => import('./views/admin/ConsultWorkspace.vue')
 const ConsultPurposes = () => import('./views/admin/ConsultPurposes.vue')
 const ConsultCollections = () => import('./views/admin/ConsultCollections.vue')
 const ConsultCollectionDetail = () => import('./views/admin/ConsultCollectionDetail.vue')
-const ResumeCollection = () => import('./views/admin/ResumeCollection.vue')
+const ScoreLines = () => import('./views/admin/ScoreLines.vue')
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -56,6 +56,7 @@ export const router = createRouter({
         { path: 'survey', name: 'admin-survey', component: SurveyEditor, meta: { settings: true } },
         { path: 'report', name: 'admin-report', component: ReportEditor, meta: { settings: true } },
         { path: 'skill', name: 'admin-skill', component: SkillEditor, meta: { settings: true } },
+        { path: 'score-lines', name: 'admin-score-lines', component: ScoreLines },
         { path: 'consult', name: 'admin-consult', component: ConsultWorkspace },
         { path: 'consult/tree', redirect: { name: 'admin-consult-purposes' } },
         { path: 'consult/purposes', name: 'admin-consult-purposes', component: ConsultPurposes },
@@ -64,8 +65,7 @@ export const router = createRouter({
           path: 'consult/collections/:id',
           name: 'admin-consult-collection',
           component: ConsultCollectionDetail
-        },
-        { path: 'resumes', name: 'admin-resumes', component: ResumeCollection }
+        }
       ]
     },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFound }
@@ -86,11 +86,11 @@ const PAGE_TITLES: Record<string, string> = {
   'admin-report': '报告设置 · 管理后台',
   'admin-report-preview': '报告预览 · 管理后台',
   'admin-skill': 'AI 分析规则 · 管理后台',
+  'admin-score-lines': '分数线 · 管理后台',
   'admin-consult': '写咨询稿 · 管理后台',
   'admin-consult-purposes': '咨询树 · 管理后台',
   'admin-consult-collections': '收藏栏 · 管理后台',
   'admin-consult-collection': '收藏详情 · 管理后台',
-  'admin-resumes': '简历收集 · 管理后台',
   'not-found': '页面不存在'
 }
 

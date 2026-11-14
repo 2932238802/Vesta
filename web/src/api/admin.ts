@@ -6,16 +6,8 @@ import type {
   AdminSubmissionSummary,
   Overview
 } from './types'
-import type { ReportPayload, ReportTemplate, Survey } from './types'
-import type { ResumeImageSummary } from './types'
-import {
-  ApiError,
-  blobRequest,
-  getToken,
-  query,
-  request,
-  uploadResumeRequest
-} from './request'
+import type { ReportPayload, ReportTemplate, ScoreLineCategory, ScoreLineInput, ScoreLineSet, Survey } from './types'
+import { ApiError, getToken, query, request } from './request'
 
 export const adminApi = {
   login(username: string, password: string) {
@@ -32,26 +24,43 @@ export const adminApi = {
   me() {
     return request<{ user: { username: string } }>('/api/admin/me', { auth: true })
   },
-  resumeImages() {
-    return request<{ items: ResumeImageSummary[] }>('/api/admin/resumes', { auth: true })
-  },
-  resumeImageBlob(id: string) {
-    return blobRequest(`/api/admin/resumes/${encodeURIComponent(id)}/file`)
-  },
-  downloadResumeImage(id: string) {
-    return blobRequest(`/api/admin/resumes/${encodeURIComponent(id)}/download`)
-  },
-  uploadResumeImage(major: string, file: File) {
-    return uploadResumeRequest<{ item: ResumeImageSummary }>(
-      `/api/admin/resumes${query({ major })}`,
-      file
-    )
-  },
   logout() {
     return request<{ ok: true }>('/api/admin/logout', { method: 'POST', auth: true })
   },
   overview() {
     return request<Overview>('/api/admin/overview', { auth: true })
+  },
+  scoreLines(params: { category?: string; year?: number } = {}) {
+    return request<{
+      categories: (ScoreLineCategory & { count: number })[]
+      sets: ScoreLineSet[]
+    }>(
+      `/api/admin/score-lines${query({
+        category: params.category,
+        year: params.year && params.year > 0 ? String(params.year) : undefined
+      })}`,
+      { auth: true }
+    )
+  },
+  createScoreLine(body: ScoreLineInput) {
+    return request<{ set: ScoreLineSet }>('/api/admin/score-lines', {
+      method: 'POST',
+      body,
+      auth: true
+    })
+  },
+  updateScoreLine(id: string, body: ScoreLineInput) {
+    return request<{ set: ScoreLineSet }>(`/api/admin/score-lines/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body,
+      auth: true
+    })
+  },
+  deleteScoreLine(id: string) {
+    return request<{ ok: true }>(`/api/admin/score-lines/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      auth: true
+    })
   },
   createInvites(body: {
     names?: string[]

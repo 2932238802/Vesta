@@ -2,6 +2,21 @@
 
 本文档记录已经确认或完成的需求，帮助后续 Agent 理解“为什么这样做”。代码与文档冲突时，以 `docs/` 文档为准修正代码，并同步更新本文档（见 `agent-rules.md` 的「文档优先」）。
 
+## 本轮（2026-11-14）
+
+### 后台栏目调整：新增分数线、设置下移、删除简历收集（2026-11-14，产品版本 v1.76）
+
+- 依据：`docs/archive/20261114/README.md` 及第 1–3 篇开发文档 v1.0。三项同属一轮「后台栏目调整」，按「删除简历 → 新增分数线 → 设置下移」实施，保证任何中间状态导航自洽。
+- **删除简历收集**：删除 `web/src/views/admin/ResumeCollection.vue`、`server/src/routes/admin/resumes.ts`、`shared/src/resume.ts`；移除 `/admin/resumes` 路由与页面标题、侧栏「简历」组、`NavGroup` 类型 / 折叠状态 / 高亮分支、`web/src/api` 的 4 个简历方法与上传 helper、`@shared/resume` 类型导出；`scripts/file-size-baseline.json` 删除 `ResumeCollection.vue` 的两条基线（18 → 16 条）。**`resume_images` 表与存量图片保留**，只在 `schema.ts` 补下线注释，不 `DROP`、不迁移；`deploy/nginx.conf` 的 `client_max_body_size 25m` 本轮不动，只在 `docs/README.md` 注明历史原因。`/admin/resumes` 现在落到 404 页面；`/api/admin/resumes` 不带令牌仍先 401、带令牌 404。
+- **新增分数线栏目**：新增 `shared/src/score-line.ts`（类型注册表 + `ScoreLineSet` / `ScoreLineInput` + `validateScoreLineInput()` / `normalizeScoreLineInput()`）与 `shared/src/score-line.cases.ts`（合法、非法、归一化共 20+ 组断言）；新增 `npm run check:score` 并接入 `verify`。类型清单为考研 / 四六级 / 专升本 / 教资 / 考公，放代码常量，新增类型不改表。
+- **分数线数据**：`server/src/db/schema.ts` 新增 `score_line_sets`（某年 + 某地区 + 某来源的一批线）与 `score_line_entries`（一个具体数值，`sort_order` 保序），均为 `CREATE TABLE IF NOT EXISTS`，启动自动建表；**不预置任何真实分数线**。
+- **分数线接口**：新增 `server/src/routes/admin/score-lines.ts`，在 `requireAdmin()` 之后挂载 `GET/POST/PUT/DELETE /api/admin/score-lines`；`GET` 返回注册表全部类型（count 只受年份过滤影响）与按「类型注册表顺序 → 年份倒序（0 最后）→ 更新时间」排好的数据集；POST/PUT 整组重建条目并包事务；DELETE 先删条目再删数据集；成功写 `scoreline.saved` / `scoreline.deleted` 结构化日志（不记正文）。
+- **分数线页面**：`/admin/score-lines`（`ScoreLines.vue` + `score-lines/ScoreLineCard.vue` + `score-lines/ScoreLineEditor.vue`）。类型 tab、年份筛选、前端搜索按已加载数据过滤；新增 / 编辑弹窗复用 `Modal`，删除走 `confirmAction`；来源必填且链接可点；加载失败显示真实错误与「重新加载」，不拿空列表冒充成功；390px 下 tab 横向滚动、卡片不溢出、条目表内部横向滚动。
+- **设置下移**：`AdminLayout.vue` 把「设置」整段 `<section>` 从第二位移到 `<nav>` 最后（DOM 移动，不用 CSS `order`，保证 Tab / 读屏顺序）；最终侧栏顺序为 **问卷 → 咨询 → 分数线 → 设置**。折叠状态 key 未变，`localStorage` 记忆不受影响。
+- **文档**：`docs/README.md` 更新版本、栏目顺序、分数线说明、验证命令、25m 说明与简历表保留说明；`docs/archive/20261114/` 三份方案补实施记录与状态。
+- **验证**：`npm run verify` 全绿（check:docs / check:size / check:version / check:dates / check:score / check:audit / typecheck / build）。临时 `DATA_DIR=/tmp/vesta-score-test` + 8891 端口做接口断言：未带令牌四个接口均 401；空表 5 类型 0 数据集；新增 / 筛选 / 更新整组替换 / 删除 / 删除后 404；7 组非法输入 400 且文案与文档一致；`resume_images` 删除后孤儿条目 0；简历接口 401/404。Playwright 走查（桌面 + 390px）：侧栏顺序、空状态、新增 / 编辑 / 删除、tab 计数、年份筛选、搜索、`/admin/resumes` 404、设置页高亮与折叠记忆、无横向溢出、控制台零错误。未调用真实 AI、未写仓库 `data/`、未重新生成旧报告。
+- **未做 / 已知**：分数线不做自动抓取、批量导入、公开页、报告注入或权限分级；从注册表移除类型不会删数据，加回常量即可恢复；简历图片未导出 / 未 `DROP`，`client_max_body_size` 未下调；本轮尚未提交（本地 `main` 工作区改动）。
+
 ## 本轮（2026-11-13）
 
 ### 管理端查询效率、死接口与限长清理（2026-11-13，产品版本 v1.75）

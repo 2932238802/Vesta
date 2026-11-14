@@ -55,34 +55,6 @@
           <button
             class="nav-toggle"
             type="button"
-            :class="{ active: activeGroup === 'settings' }"
-            :aria-expanded="groups.settings"
-            @click="toggleGroup('settings')"
-          >
-            <span>设置</span>
-            <span class="chev" :class="{ closed: !groups.settings }" aria-hidden="true">
-              <svg viewBox="0 0 14 14" fill="none">
-                <path
-                  d="M3.5 5.5 7 9l3.5-3.5"
-                  stroke="currentColor"
-                  stroke-width="1.6"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </span>
-          </button>
-          <div class="nav-links" :class="{ closed: !groups.settings }">
-            <RouterLink to="/admin/survey" active-class="on">问卷设置</RouterLink>
-            <RouterLink to="/admin/report" active-class="on">报告设置</RouterLink>
-            <RouterLink to="/admin/skill" active-class="on">AI 分析规则</RouterLink>
-          </div>
-        </section>
-
-        <section class="nav-group">
-          <button
-            class="nav-toggle"
-            type="button"
             :class="{ active: activeGroup === 'consult' }"
             :aria-expanded="groups.consult"
             @click="toggleGroup('consult')"
@@ -115,12 +87,12 @@
           <button
             class="nav-toggle"
             type="button"
-            :class="{ active: activeGroup === 'resume' }"
-            :aria-expanded="groups.resume"
-            @click="toggleGroup('resume')"
+            :class="{ active: activeGroup === 'score' }"
+            :aria-expanded="groups.score"
+            @click="toggleGroup('score')"
           >
-            <span>简历</span>
-            <span class="chev" :class="{ closed: !groups.resume }" aria-hidden="true">
+            <span>分数线</span>
+            <span class="chev" :class="{ closed: !groups.score }" aria-hidden="true">
               <svg viewBox="0 0 14 14" fill="none">
                 <path
                   d="M3.5 5.5 7 9l3.5-3.5"
@@ -132,8 +104,36 @@
               </svg>
             </span>
           </button>
-          <div class="nav-links" :class="{ closed: !groups.resume }">
-            <RouterLink to="/admin/resumes" active-class="on">简历收集</RouterLink>
+          <div class="nav-links" :class="{ closed: !groups.score }">
+            <RouterLink to="/admin/score-lines" active-class="on">分数线</RouterLink>
+          </div>
+        </section>
+
+        <section class="nav-group">
+          <button
+            class="nav-toggle"
+            type="button"
+            :class="{ active: activeGroup === 'settings' }"
+            :aria-expanded="groups.settings"
+            @click="toggleGroup('settings')"
+          >
+            <span>设置</span>
+            <span class="chev" :class="{ closed: !groups.settings }" aria-hidden="true">
+              <svg viewBox="0 0 14 14" fill="none">
+                <path
+                  d="M3.5 5.5 7 9l3.5-3.5"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+          </button>
+          <div class="nav-links" :class="{ closed: !groups.settings }">
+            <RouterLink to="/admin/survey" active-class="on">问卷设置</RouterLink>
+            <RouterLink to="/admin/report" active-class="on">报告设置</RouterLink>
+            <RouterLink to="/admin/skill" active-class="on">AI 分析规则</RouterLink>
           </div>
         </section>
       </nav>
@@ -169,7 +169,7 @@ import SettingsNav from '@/components/SettingsNav.vue'
 const SIDEBAR_KEY = 'vesta.admin.sidebar'
 const GROUPS_KEY = 'vesta.admin.navGroups'
 
-type NavGroup = 'survey' | 'settings' | 'consult' | 'resume'
+type NavGroup = 'survey' | 'settings' | 'consult' | 'score'
 
 const route = useRoute()
 const router = useRouter()
@@ -179,13 +179,13 @@ const groups = ref<Record<NavGroup, boolean>>({
   survey: true,
   settings: true,
   consult: true,
-  resume: true
+  score: true
 })
 
 const activeGroup = computed<NavGroup | null>(() => {
   const path = route.path
   if (path.startsWith('/admin/consult')) return 'consult'
-  if (path.startsWith('/admin/resumes')) return 'resume'
+  if (path.startsWith('/admin/score-lines')) return 'score'
   if (
     path.startsWith('/admin/survey') ||
     path.startsWith('/admin/report') ||
@@ -217,7 +217,7 @@ function restoreLayout() {
       survey: saved.survey !== false,
       settings: saved.settings !== false,
       consult: saved.consult !== false,
-      resume: saved.resume !== false
+      score: saved.score !== false
     }
   } catch {
     // 本地存储不可用时保持默认展开

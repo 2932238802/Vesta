@@ -6,8 +6,8 @@ import { consultRouter } from '../consult/index'
 import { rateLimit } from '../../util'
 import { invitesRouter } from './invites'
 import { overviewRouter } from './overview'
-import { resumesRouter } from './resumes'
 import { rosterRouter } from './roster'
+import { scoreLinesRouter } from './score-lines'
 import { settingsRouter } from './settings'
 import { submissionsRouter } from './submissions'
 
@@ -61,9 +61,9 @@ adminRouter.post('/logout', (req, res) => {
 
 // 子路由按模块划分；各模块内部保持原文件中的路由顺序。
 // /submissions/export.csv 在 /submissions/:id 之前，/roster 的具体路径在参数路径之前。
-adminRouter.use(resumesRouter)
 adminRouter.use(overviewRouter)
 adminRouter.use(invitesRouter)
 adminRouter.use(rosterRouter)
 adminRouter.use(submissionsRouter)
+adminRouter.use(scoreLinesRouter)
 adminRouter.use(settingsRouter)
