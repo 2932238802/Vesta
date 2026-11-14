@@ -4,17 +4,39 @@
 
 ## 本轮（2026-11-14）
 
+### 依赖版本漂移 S0–S1：类型对齐与 check:deps 护栏（2026-11-14，产品版本 v1.85）
+
+- 依据：`docs/archive/20261114/5-依赖版本漂移-修复方案.md` v1.0。用户确认本轮只做 **S0–S1 + `check:deps`**：对齐 `@types/node`、建立离线依赖不变量护栏；Express 5 / Vite 8 / TypeScript 7 / vue-router 5 / xlsx 换库不在本轮。
+- **S0 基线**：Node v24.22.1、npm 11.19.1、`lockfileVersion: 3`、npmmirror registry；`npm ls --depth=0` 健康，`@types/node@22.20.5`、`express@4.22.3`、`vite@6.4.5`、`typescript@5.9.3`、`vue-router@4.6.4`。官方 registry 审计 `npm audit --omit=dev --registry=https://registry.npmjs.org` 退出码 1：`compression@1.7.4`（含 `on-headers`）high 级 DoS、`xlsx@0.18.5` high 级原型污染 / ReDoS（npm 无修复版）。npmmirror 的 `npm audit` 仍是 `NOT_IMPLEMENTED`。
+- **S1 类型对齐**：`server/package.json` 的 `@types/node` `^22.10.5` → `^24.19.2`；lockfile 同步 `@types/node@24.19.2` / `undici-types@7.24.6`，并把遗留的锁文件根版本 `1.78.0` 同步到 `1.85.0`。`npm run typecheck` 全绿，没有出现需要 `as any` 绕过的 Node 24 API 报错。
+- **check:deps 护栏**：新增 `scripts/check-deps.mjs`（离线、零依赖），校验 `.node-version` ↔ 根 `engines.node`、当前 Node ↔ `.node-version`、`@types/node` ↔ 运行时 major、`express` ↔ `@types/express` major（声明与已安装各一次），并打印 concurrently / tsx / express / @types / typescript / compression / xlsx / vite / plugin-vue / vue / vue-router 的 declared / installed 一览。已接入根 `package.json` 的 `check:deps` 与 `verify`；`AGENTS.md`、`docs/README.md` 验证清单同步。失败态实测：临时把 `@types/node` 改回 `^22`，`check:deps` 退出码 1 并点名应写 `^24`；恢复后退出码 0。
+- **验证**：`npm run check:deps`、`npm run typecheck`、`npm run verify` 全绿；`npm ls --depth=0` 无 missing / invalid。未升级大版本，所以没有跑 Express / Vite / vue-router 的迁移冒烟。
+- **未做 / 已知**：S2 工具链（TS / concurrently）、S3 Vite 8 + plugin-vue 6、S4 Express 5、S5 vue-router 5、S6 xlsx（保持 0.18.5 或换 `exceljs`）均待单独排期；`compression` 1.7.4 的 high 级 DoS 公告需要产品拍板——接受现状，还是升到 1.8.2 并显式关掉 Brotli 保持 v1.72 的压缩行为。
+
+### 分数线链路复核修复：维度、索引、覆盖失败与导入查重（2026-11-14，产品版本 v1.84）
+
+- 依据：`docs/archive/20261114/11-分数线链路复核-根因定位与分层修复方案.md` v1.1（用户确认按推荐方案实施 P0-1 → P0-3 → P0-2 → P1；附录 A 的 AI 报告链路另立第 12 篇 / 下一轮，不在本轮）。问题不在「抓不到」，而在抓到了之后怎么判定、怎么落库、怎么把失败讲出来。
+- **P0-1 维度误标（落库）**：标题推断从「子串命中」改为严格白名单。新增 `server/src/score-lines/dimension-infer.ts`（89 行，纯函数）：只接受长度 ≥ 3 或带业务后缀（类 / 考生 / 计划 / 专项 / 学位 / 硕士 / 门类 / 学科）的 token；3 字短词要求前后不是汉字；2 字泛词（如 `普通`）不参与标题推断，但字典里保留给解析器显式值归一。实测「2026年浙江省普通高校专升本招生各类别最低控制分数线通告」不再推出 `category=普通类` / `track=教育`；「文史类」「经管类」「学术学位」「退役大学生士兵」仍能归一。`normalizeBatchDimensions()` 改为返回 `{ batch, issues }`，人工导入也降置信度并写 note。
+- **P0-3 索引吞失败（选链 / 解析）**：`crawl.ts` 只在解析器显式 `index: true` 时记 `index`；`html-table@1` / `html-category@1` 仅在「0 张表 + ≥3 条链接」时显式置位，有表但形状不认的页面保留 `unsupported_table`。解析失败计入 `stats.failed`，run / source 的 `failed` 不再只统计网络异常。PDF / Excel / JSON 补齐 `failure.code`（新增 `no_text_layer` / `parse`）。`CrawlStatus` 增加 `index`，只有索引页的 run / source 不再误判 `failed`。
+- **P0-2 覆盖 failed（落库 / 取页）**：`coverage.ts` 的 `lastRun()` 同时读 `status` 与 `message`（考研看全国 run，专升本看本省 run，只取已结束任务）；无数据且最近一次失败 → `failed`，失败原因以 `last_error` 保存；有 pending / approved 数据时不被 `failed` 覆盖；人工 `not_offered` 不被自动刷新覆盖。`crawl.ts` 在 run 结束统一刷新覆盖（失败运行也刷新），省级 / 全国不再按每条批次重算全省。
+- **P1 取页与来源**：引导页跟随后，`crawl_documents` 的 `http_status / content_type / 快照扩展名` 改用第二跳；页面级 context 带上当前 URL 和从 URL / 文件名推断的 `publishedAt`（`20260506` → `2026-05-06`），国家线批次不再回填专题页。种子 UPSERT 不再覆盖管理员补的 `entry_url / verified`。
+- **P1 落库与查询**：anomaly note 与维度 note 合并（`mergeNotes()`），不再互相覆盖；导入先把维度归一化再按唯一键查重，`学硕 / 学术学位` 这类别名等价批次返回 400 而不是静默覆盖；`dryRun` 条数与实际写入一致。无院校查询只有 pending 时返回 `pending`；考研国家线 pending 按 `scope='national' + region` 计入；`ambiguity()` 不再丢弃空 `category`，空值与「学硕」并存时提示补选。人工导入模板的国家线示例改为 `category: ''`。
+- **文档**：第 11 篇状态改为「已确认并实施」，补 §9 确认记录与 §10 实施记录；`docs/README.md` 分数线段与版本记录同步；`docs/archive/20261114/README.md` 索引同步。
+- **验证**：`npm run check:score` 新增维度严格匹配、`unsupported_table` 不被导航链接吞成 index、纯索引页 `index:true`、PDF / Excel / JSON 失败码用例；`npm run typecheck` / `check:size` 通过。临时 `DATA_DIR` + 本地 HTTP fixture 端到端验证（不碰 `data/vesta.db`）：失败运行刷新覆盖 `failed` 且 `last_error` 带失败码；只有 pending 返回 `pending`、approved 后主线可见；国家线 pending 按 region 计入；导入别名重复 400、未知维度 confidence 0.7；有表失败页 run `failed` / document `unsupported_table`；引导页第二跳 xlsx 的 document 元数据、快照扩展名、`source_url`、`published_at` 全部对齐实际文件；索引页 run 记 `index`、覆盖 `no_data`。临时 `DATA_DIR` + 本地 dev server 用 Playwright 走查：覆盖看板 `failed` chip 标红、失败码翻译为「表格形状未适配：需补解析器…」、人工导入示例 `category` 留空、控制台零错误。`npm run verify` 全绿。
+- **未做 / 已知**：facets 接口与页面 chips、复核「修正后通过」、退避 / 自动禁用（Phase 2）、附录 A 的 AI 报告链路不在本轮；`not_offered` 仍没有管理员设置入口（保留状态语义，自动刷新不覆盖）；国家线 `category` 仍为空。无表结构变更，部署按常规 `bash update.sh`，回滚 `git revert` 即可。
+
 ### AI 报告审校硬失败：事实去矛盾、质量类放行、落库前清洗（2026-11-14，产品版本 v1.83）
 
 - 依据：`docs/archive/20261114/10-AI报告审校硬失败-根因与修复方案.md` v1.1。触发：生产报告 `/r/<slug>` 返回 `数字核对未通过：模块 scorecard 的 school 写了 5 分，但系统给这一项的分数是 2.5 分`，另一条是 `gap 第 2 段出现内部检索信息`。两条都不是 AI 没返回，而是**系统喂给 AI 的事实与落库前审校互相矛盾**：scorecard 的 `rule` 原样带「封顶 5 分 / 6 分」，gap 行标签「关键时间窗」又命中内部信息黑名单；审校失败即整份报告 `throw`，重试拿同一份上下文重跑。用户已确认失败下限：只有 AI 不可用 / 无可解析正文才失败，质量类问题一律清洗 + 放行。
 - **L1 事实层（去掉根因）**：`server/src/ai/doc-prompts.ts` 的 scorecard item 不再把 `item.note` 原样给 AI，`封顶 / 最高 / 上限 / 按 N 分封顶` 统一写成「有上限」；`benchmark` 不再传 `6.0—8.0` 这类端点，改成相对结论 `benchmarkState`（低于 / 在 / 高于常规入场线、背景项不设门槛）。`outputContract()` 明确 item text 只解释分数来源，不写封顶值、入场线数字、区间端点，直接引用 `benchmarkState`。`shared/src/doc.ts` 的 gap 行标签「关键时间窗」改为「关键节点」。`doc-generate.ts` 的 user prompt 删除「检索词：…」，只保留「本次是否执行外部检索、采用几条原文」；原始 `queries` 继续留在 `ai_meta.search.queries` 与后台日志。
 - **L2 审校精度**：`server/src/ai/doc-audit.ts` 的 `isScoreDimension()` 补「封顶 / 最高 / 上限 / 至多 / 不超过 / 入场线 / 区间」前缀和区间连接词「到」；内部信息黑名单删除「时间窗」（这是报告页自己展示的词），保留 `检索词 / 检索参数 / freshness / site: / BOCHA / 博查 / 届拼写`；`N 天` 在「到岗 / 工作 / 上班 / 每周 / 工作日 / 实习」上下文放行，`N 年` 后跟「经验 / 以上 / 起 / 工龄 / 学制」放行。重复审计的提示改成「只在系统展示的 gap『关键节点』行和路线图副标题出现」，与实现一致。
-- **L3 生成层（保证报告出来）**：`doc-generate.ts` 把审校拆成「质量」与「阻断」两类：重写一次后仍有 `contentProblems / crossModuleIssues / repetitionIssues / findTextIssues / auditNumbers`，只记 `audit.issues` 并继续落库，日志记 `doc.audit_waived`；只有 AI 调用失败、JSON 修复后仍不可解析、或 `modules` 与 `sections` 全空才 `throw`（禁止模板兜底）。新增 `server/src/ai/doc-sanitize.ts`（101 行，纯函数）：按整句删除 `检索词 / 检索参数 / 博查 / BOCHA / freshness / site:`，删空则跳过该段；「关键时间窗 / 时间窗」收口成「关键节点」；scorecard item 里不等于该项分数的 `N 分`，前有「封顶 / 最高 / 上限」时整句改成「这一项有上限」，前有「得分 / 分数 / 实际」时替换成系统分数。`DocAiMeta.audit` 扩展为 `{ passed, repaired, issues? }`。
+- **L3 生成层（保证报告出来）**：`doc-generate.ts` 把审校拆成「质量」与「阻断」两类：重写一次后仍有 `contentProblems / crossModuleIssues / repetitionIssues / findTextIssues / auditNumbers`，只记 `audit.issues` 并继续落库，日志记 `doc.audit_waived`；只有 AI 调用失败、JSON 修复后仍不可解析、或 `modules` 与 `sections` 全空才 `throw`（禁止模板兜底）。新增 `server/src/ai/doc-sanitize.ts`（104 行，纯函数）：按整句删除 `检索词 / 检索参数 / 博查 / BOCHA / freshness / site:`，删空则跳过该段；「关键时间窗 / 时间窗」收口成「关键节点」；scorecard item 里不等于该项分数的 `N 分`，前有「封顶 / 最高 / 上限」时整句改成「这一项有上限」，前有「得分 / 分数 / 实际」时替换成系统分数。`DocAiMeta.audit` 扩展为 `{ passed, repaired, issues? }`。
 - **L4 展示与重试**：`server/src/routes/public.ts` 的失败态不再把 `ai_error` 原样返回学生：可重试时固定「这次报告没有生成完，可以点重新生成。」，配置 / 规则问题返回「这是服务端配置或规则问题，请把这段提示发给发链接的人。」；真实 error 仍写 `ai_error` / 日志。`ReportView.vue` 删除重复的配置提示段。`isRetryableError()` 与 `MAX_AI_ATTEMPTS=4` 不改。`AGENTS.md` / `docs/agent-rules.md` 的「显示真实原因」同步改为「给出可操作的真实结论，不暴露内部 key」。
 - **L1-4 静态文案**：`shared/src/docScore.ts` 的 `schoolParts()` / `cityParts()` 记录封顶是否真的生效；`school=2.5` 时 note 只说「学校层级 + 专业是否对口」，不再解释一个没生效的「封顶 5 分」。分数计算逻辑与结果不变。
 - **文档**：`docs/README.md` 报告生成段改为「重写一次 → 残余问题清洗 + 放行」；`docs/规划自测问卷-设计文档.md` §6.2 / §6.3 同步；第 10 篇状态与实施记录、`docs/archive/20261114/README.md` 索引同步；`scripts/file-size-baseline.json` 随 `public.ts` / `doc.ts` / `ReportView.vue` 行数下调。
 - **验证**：`npm run check:audit` 新增分数量纲（`封顶 5 分`、`6 到 8 分`、错误分数仍拦）、gap 标签、岗位时间（`3 年经验`、`每周到岗 3 天`、真距离仍拦）、`sanitizeDocContent()`（内部词整句删除不补写、封顶分值改写）用例；本地只读脚本确认 `school=2.5` 的 moduleSpecs 已无「封顶 5 分 / 6.0—8.0」、`benchmarkState=低于常规入场线`，且 note 不再解释未生效封顶、封顶生效时仍写「封顶 5 分」。本地假 AI 网关（临时 `DATA_DIR`，不调用真实 AI）复现生产故障：`school=2.5`、gap 段落含「关键时间窗」与「检索词」时，第 1 轮审校不过 → 重写 1 次 → 仍不过则 `doc.audit_waived` 放行（`audit.passed=false`、16 条 issues）；落库内容 gap 段只剩「关键节点还很长…」，scorecard 变成「这一项有上限。…实际 2.5 分。」，正文不含内部词；首轮 prompt 不含「封顶 5 分 / 6.0—8.0 / 检索词：/ 关键时间窗」。临时 `DATA_DIR` + 本地构建走查报告页：正常报告 gap 系统标签为「关键节点」，失败页只显示固定文案与重试按钮、390px 不溢出、控制台零错误；旧报告正文里的历史用词不在本次清洗范围。`npm run verify` 全绿。未调用真实 AI / 博查，未写仓库 `data/`，未重新生成旧报告。
 - **未做 / 已知**：生产回放（对当前失败链接调用一次 `retry`）是面向学生的外部动作，等用户确认后再做；后台自定义 Skill 的正文仍可能带「封顶 X 分 / 时间窗」，由 L2 / L3 兜底，建议运营自查当前启用模板；旧报告不重新生成。部署需 `bash update.sh`，回滚 `git revert` 即可（无表结构、无新依赖）。
+- **提交**：`9b6f15c`。
 
 ### 分数线维度字典与研招网国家线解析（2026-11-14，产品版本 v1.82）
 
@@ -26,8 +48,8 @@
 - **研招网两个解析器（9.1 第 8 项）**：`parsers/yz-topic.ts` 从专题页内联脚本 `var yearList` 抽出 2022–2026 五篇文章（链接文字不带 4 位年份，避免发现队列只留最新一年）；文章页优先取「初试成绩基本要求」公告页，没有再退回 PDF。`parsers/national-line.ts` 解析公告 HTML 表与 PDF 文本：14 学科门类 × A/B 区 ×（总分 / 单科满分=100 / 单科满分>100），多行门类（教育学 / 工学 / 管理学）取「其他学科专业」总行，PDF 文本按「其他学科专业」出现顺序补行。种子源 `src_postgrad_national` 的 `parser_id` 改为 `yz-topic@1`（URL 仍为 `lnfsx.shtml`，站点改版时幂等更新）。中间页（专题 / 文章）在 `ParserResult.index` 显式标记，`crawl_documents.parse_status` 记 `index`，不再因为只有 1 条公告链接而被误记为 `failed`。
 - **科目字典**：新增 `single100` / `single150` 两个科目 code（单科满分=100 / >100）；为不突破 `score-line.ts` 600 行软线，先单独提交 `refactor: 拆分分数线科目注册表（行为不变）`，把科目表移到 `shared/src/score-line-subject.ts`，原导出路径保持不变。
 - **验证**：`npm run check:score` 全绿（字典正反例、类别表批次维度、Content-Type 分派、专题页 5 年链接、文章页公告优先、国家线 HTML 28 条、国家线 PDF 文本 28 条）；`npm run typecheck` 通过。只读回归真实站点：2026 专题页抽出 5 条年度文章，2025/2026 公告表均解析出 28 条（哲学 A 类 2025 = 321/39/59、2026 = 326/41/62），2025 国家线 PDF 文本解析出 28 条且教育学 341/45/135、工学 260/34/51、管理学 333/41/62 与公告一致。`npm run verify` 全绿。
-- **未做 / 已知**：9.1 的 4（`parseStatus` 失败可见性）、6（facets 接口）、7（DimensionPicker / 页面）、9（院校名单脚本）、10（抓取导出脚本）不在本轮；筛选栏仍是自由文本输入，要等 facets + 页面层落地后才出现选项。考研表头「学硕 / 专硕」拆列（原 L2b）仍未做，国家线 `category` 暂为空。`data/` 与抓取快照未提交。
-- **提交**：`feaef68`（前置拆分 `6fbe705`）。
+- **未做 / 已知**：9.1 的 4（`parseStatus` 失败可见性）仅完成研招网中间页的 `index` 标记（补丁 `99a2d67`），`tables>0 && batches==0 → failed + unsupported_table`、`index` 时不清空 `error` 仍未做；6（facets 接口）、7（DimensionPicker / 页面）、9（院校名单脚本）、10（抓取导出脚本）不在本轮；筛选栏仍是自由文本输入，要等 facets + 页面层落地后才出现选项。考研表头「学硕 / 专硕」拆列（原 L2b）仍未做，国家线 `category` 暂为空。`data/` 与抓取快照未提交。
+- **提交**：`feaef68`（前置拆分 `6fbe705`；中间页索引标记补丁 `99a2d67`）。
 
 ### 问卷报告模式落库：读路径不再解析问卷 JSON（2026-11-14，产品版本 v1.81）
 
@@ -90,8 +112,6 @@
 - **验证**：`npm run verify` 全绿（check:docs / check:size / check:version / check:dates / check:score / check:audit / typecheck / build）。临时 `DATA_DIR=/tmp/vesta-score-test` + 8891 端口做接口断言：未带令牌四个接口均 401；空表 5 类型 0 数据集；新增 / 筛选 / 更新整组替换 / 删除 / 删除后 404；7 组非法输入 400 且文案与文档一致；`resume_images` 删除后孤儿条目 0；简历接口 401/404。Playwright 走查（桌面 + 390px）：侧栏顺序、空状态、新增 / 编辑 / 删除、tab 计数、年份筛选、搜索、`/admin/resumes` 404、设置页高亮与折叠记忆、无横向溢出、控制台零错误。未调用真实 AI、未写仓库 `data/`、未重新生成旧报告。
 - **未做 / 已知**：分数线不做自动抓取、批量导入、公开页、报告注入或权限分级；从注册表移除类型不会删数据，加回常量即可恢复；简历图片未导出 / 未 `DROP`，`client_max_body_size` 未下调；本轮已提交 `ba57bb6`，尚未推送 `origin/main`。
 
-## 本轮（2026-11-14）
-
 ### 分数线 v3 Phase 1：查询、图表、全国院校主表与抓取框架（2026-11-14，产品版本 v1.77）
 
 - 依据：`docs/archive/20261114/1-分数线模块-综合设计-开发文档.md` v3.3 第 15 节 Phase 1。v1.76 的人工录入页只支持「类型 + 数据集 + 条目」，无法表达全国院校、专业、各科目单科、计划/学费和自动抓取；本轮按 v3.3 重写。
@@ -102,7 +122,7 @@
 - **前端**：`ScoreLines.vue` 重写为查询页；新增 `score-lines/ScoreLineFilters.vue`、`SchoolPicker.vue`、`ProgramPicker.vue`、`LineCard.vue`、`ChartCard.vue`、`ScoreLineTable.vue`、`PlanTable.vue`、`CoverageView.vue`、`ReviewView.vue`、`ImportDialog.vue`、`types.ts` 与通用 `components/LineChart.vue`（手写 SVG，无新前端依赖）。v1 的 `ScoreLineCard.vue` / `ScoreLineEditor.vue` 删除。
 - **脚本**：新增 `scripts/import-schools.ts`（教育部名单 CSV/XLSX，`--dry-run` 只统计，按 `(name, province)` upsert，不删旧校）与 `scripts/seed-sources.ts`（幂等写入 33 个源）。`package.json` 的 `check:score` 现在同时跑共享用例与解析器 fixture；server 新增 `cheerio` / `xlsx` / `pdfjs-dist`。
 - **验证**：`npm run verify` 全绿（check:docs / check:size / check:version / check:dates / check:score / check:audit / typecheck / build）。临时 `DATA_DIR=/tmp/vesta-score-v3` + 8891/8892 端口：院校导入 dry-run 不写库、重复导入不重复；院校搜索（校名/城市/别名）、专业搜索；国家线 + 校线 + 专业线 + 录取最低分 + coverage + series；多批次缺 `category` 返回 `requires`；覆盖看板；本地 fixture 源跑通「触发 → 抓取 → HTML 解析 → pending → 复核通过后查询可见」；复核拒绝不进入查询；非法导入 400；所有新接口未带令牌 401。Playwright 桌面 + 390px 走查：查询、选院校/专业、三线图表与显隐、科目切换、覆盖看板、抓取、复核通过、人工导入 dry-run、无横向溢出、控制台零错误。未访问真实考试院站点、未调用 AI。
-- **未做 / 已知**：Phase 1 只注册 31 省源并用通用表格解析器，**各站点选择器和真实页面回归仍需逐源适配**；抓不到会在覆盖看板标 `failed`，用人工导入兜底。T1/T2/T3 院校线铺开、更多解析器样本（尤其 PDF fixture）、批量导入 Excel、学员带入、报告引用、OCR、学生端均留 Phase 2/3。`data/crawl/` 快照需单独备份。本轮尚未提交。
+- **未做 / 已知**：Phase 1 只注册 31 省源并用通用表格解析器，**各站点选择器和真实页面回归仍需逐源适配**；抓不到会在覆盖看板标 `failed`，用人工导入兜底。T1/T2/T3 院校线铺开、更多解析器样本（尤其 PDF fixture）、批量导入 Excel、学员带入、报告引用、OCR、学生端均留 Phase 2/3。`data/crawl/` 快照需单独备份。提交：`2395033`（与 v1.78 同一次提交）。
 
 ## 本轮（2026-11-13）
 

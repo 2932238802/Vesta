@@ -11,7 +11,11 @@ export const xlsxParser: Parser = {
     try {
       workbook = XLSX.read(data, { type: 'buffer' })
     } catch (error) {
-      return { batches: [], issues: [`Excel 无法解析：${(error as Error).message}`] }
+      return {
+        batches: [],
+        issues: [`Excel 无法解析：${(error as Error).message}`],
+        failure: { code: 'parse', detail: (error as Error).message }
+      }
     }
     const metrics: ParsedMetric[] = []
     const issues: string[] = []
@@ -27,7 +31,11 @@ export const xlsxParser: Parser = {
       issues.push(...result.issues.map((issue) => `${name}：${issue}`))
     }
     if (metrics.length === 0) {
-      return { batches: [], issues: ['Excel 里没有识别到科目分数', ...issues.slice(0, 5)] }
+      return {
+        batches: [],
+        issues: ['Excel 里没有识别到科目分数', ...issues.slice(0, 5)],
+        failure: { code: 'unsupported_table', detail: 'Excel 里没有识别到科目分数' }
+      }
     }
     return { batches: [batchFromMetrics(metrics, context)], issues: [] }
   }

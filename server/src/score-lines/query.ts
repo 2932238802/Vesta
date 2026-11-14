@@ -74,8 +74,9 @@ function loadBatches(filter: BatchFilter): ScoreLineBatch[] {
 
 function ambiguity(batches: ScoreLineBatch[], selection: QuerySelection): string[] {
   const requires: string[] = []
-  const categories = new Set(batches.map((batch) => batch.category).filter(Boolean))
-  const tracks = new Set(batches.map((batch) => batch.track).filter(Boolean))
+  // 空串也参与比较：国家线 category='' 与导入的「学硕」并存时要提示补选。
+  const categories = new Set(batches.map((batch) => batch.category))
+  const tracks = new Set(batches.map((batch) => batch.track))
   if (!selection.category && categories.size > 1) requires.push('category')
   if (!selection.track && tracks.size > 1) requires.push('track')
   return requires
@@ -267,16 +268,22 @@ export function queryScoreLines(input: QueryInput): ScoreLineQueryResult {
   }
 
   const allBatches = [...mainBatches, ...schoolBatches, ...programBatches]
+  const mainPending = mainPendingCount(input.exam, input.year, schoolProvince, region)
   const pendingCount = school
-    ? pendingBatchCount({ schoolId: school.id, year: input.year }) +
-      pendingProgramCount(school.id, input.exam, input.year)
-    : pendingBatchCount({ province: schoolProvince, year: input.year })
+    ? pendingBatchCount({
+        schoolId: school.id,
+        year: input.year,
+        exam: input.exam
+      }) +
+      pendingProgramCount(school.id, input.exam, input.year) +
+      mainPending
+    : mainPending
 
   const hasMain = mainBatches.length > 0
   const coverage = school
     ? coverageFor(school.id, input.exam, input.year, pendingCount)
     : {
-        status: hasMain ? ('covered' as const) : ('no_data' as const),
+        status: hasMain ? ('covered' as const) : pendingCount > 0 ? ('pending' as const) : ('no_data' as const),
         missing: ['school_line', 'program_line'],
         lastUpdatedAt: '',
         pendingCount
@@ -319,6 +326,19 @@ function normalizeRegion(value: string | undefined): string {
   if (/^a区$/i.test(raw) || raw === 'A') return 'A区'
   if (/^b区$/i.test(raw) || raw === 'B') return 'B区'
   return ''
+}
+
+/** 主线 pending：专升本看省控线，考研看国家线 A/B 区（国家线 province 为空）。 */
+function mainPendingCount(
+  exam: ExamType,
+  year: number,
+  province: string,
+  region: string
+): number {
+  if (exam === 'upgrade') {
+    return pendingBatchCount({ exam, year, scope: 'provincial', province })
+  }
+  return pendingBatchCount({ exam, year, scope: 'national', region })
 }
 
 function pendingProgramCount(schoolId: string, exam: ExamType, year: number): number {

@@ -270,6 +270,8 @@ export type CrawlFailureCode =
   | 'entry_redirect'
   | 'no_table'
   | 'unsupported_table'
+  | 'no_text_layer'
+  | 'parse'
   | 'decode'
   | 'needs_seed'
 
@@ -278,6 +280,8 @@ export const CRAWL_FAILURE_HINTS: Record<CrawlFailureCode, { label: string; next
   entry_redirect: { label: '入口是引导页', next: '请补该省专升本栏目 URL，再重新抓取' },
   no_table: { label: '没有可解析的表格', next: '疑似前端渲染或入口错，需人工补源' },
   unsupported_table: { label: '表格形状未适配', next: '需补解析器（类别 × 分数）后重新抓取' },
+  no_text_layer: { label: 'PDF 没有文本层', next: '扫描件需人工补录，不做 OCR' },
+  parse: { label: '文件无法解析', next: '检查文件是否损坏或格式不受支持，必要时人工补录' },
   decode: { label: '页面编码异常', next: '需要补 charset 检测或换用编码正确的入口' },
   needs_seed: { label: '栏目入口未核验', next: '人工核验该省专升本栏目 URL 后再抓' }
 }
@@ -286,15 +290,16 @@ export const CRAWL_FAILURE_HINTS: Record<CrawlFailureCode, { label: string; next
 export function crawlFailureHint(
   error: string
 ): { code: CrawlFailureCode; label: string; next: string } | null {
-  const match = /^(network|entry_redirect|no_table|unsupported_table|decode|needs_seed)\s*[:：]/.exec(
-    String(error ?? '').trim()
-  )
+  const match =
+    /^(network|entry_redirect|no_table|unsupported_table|no_text_layer|parse|decode|needs_seed)\s*[:：]/.exec(
+      String(error ?? '').trim()
+    )
   if (!match) return null
   const code = match[1] as CrawlFailureCode
   return { code, ...CRAWL_FAILURE_HINTS[code] }
 }
 
-export type CrawlStatus = 'queued' | 'running' | 'success' | 'partial' | 'failed'
+export type CrawlStatus = 'queued' | 'running' | 'success' | 'partial' | 'index' | 'failed'
 
 export interface CrawlRun {
   id: string

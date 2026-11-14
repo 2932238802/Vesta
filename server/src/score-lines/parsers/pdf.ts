@@ -29,14 +29,26 @@ export const pdfTextParser: Parser = {
     try {
       text = await extractPdfText(content)
     } catch (error) {
-      return { batches: [], issues: [`PDF 解析失败：${(error as Error).message}`] }
+      return {
+        batches: [],
+        issues: [`PDF 解析失败：${(error as Error).message}`],
+        failure: { code: 'parse', detail: (error as Error).message }
+      }
     }
     if (!text.trim()) {
-      return { batches: [], issues: ['该 PDF 无文本层（扫描件），需人工导入'] }
+      return {
+        batches: [],
+        issues: ['该 PDF 无文本层（扫描件），需人工导入'],
+        failure: { code: 'no_text_layer', detail: '扫描件 PDF 没有可读取的文本层' }
+      }
     }
     const metrics = metricsFromText(text)
     if (metrics.length === 0) {
-      return { batches: [], issues: ['PDF 文本里没有识别到科目分数'] }
+      return {
+        batches: [],
+        issues: ['PDF 文本里没有识别到科目分数'],
+        failure: { code: 'unsupported_table', detail: 'PDF 文本里没有识别到科目分数' }
+      }
     }
     return { batches: [batchFromMetrics(metrics, context)], issues: [] }
   }

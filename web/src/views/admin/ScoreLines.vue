@@ -346,7 +346,9 @@ async function pollRun(runId: string) {
       crawlHint.value =
         detail.run.status === 'failed'
           ? `抓取失败：${detail.run.message || '未知原因'}`
-          : `抓取完成：保存 ${detail.run.saved} 条，失败 ${detail.run.failed} 条`
+          : detail.run.status === 'index'
+            ? '抓取完成：只发现索引页，没有可写库数据；请补栏目 URL 或人工导入。'
+            : `抓取完成：保存 ${detail.run.saved} 条，失败 ${detail.run.failed} 条`
       if (detail.run.status !== 'failed' && result.value) await search()
       return
     }

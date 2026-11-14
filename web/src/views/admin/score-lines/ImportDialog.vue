@@ -2,7 +2,7 @@
   <Modal :open="open" title="人工导入" eyebrow="兜底入口" wide @close="$emit('close')">
     <p class="hint">
       粘贴 JSON 后先「预览」校验，不写库；确认无误再「导入」。导入默认标记为已通过（人工负责）。
-      抓取失败或 PDF 扫描件时用这里补数据。
+      抓取失败或 PDF 扫描件时用这里补数据；国家线不区分学硕 / 专硕时，<code>category</code> 留空。
     </p>
     <textarea
       v-model="text"
@@ -42,9 +42,9 @@ const sample = {
       exam: 'postgrad',
       year: 2025,
       region: 'A区',
-      category: '学硕',
+      category: '',
       track: '工学',
-      title: '2025 考研国家线（A 区 / 工学 / 学硕）',
+      title: '2025 考研国家线（A 区 / 工学）',
       sourceName: '研招网',
       sourceUrl: 'https://example.com/line',
       metrics: [

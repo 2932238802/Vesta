@@ -203,10 +203,13 @@ export function seedScorelineSources(): number {
      VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, 2, '', ?, 1, '', '', '', ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name, publisher = excluded.publisher, url = excluded.url,
-       entry_url = excluded.entry_url, exam = excluded.exam, province = excluded.province,
+       exam = excluded.exam, province = excluded.province,
        parser_id = excluded.parser_id, tier = excluded.tier,
        interval_hours = excluded.interval_hours, discover_depth = excluded.discover_depth,
-       url_include = excluded.url_include, verified = excluded.verified,
+       url_include = excluded.url_include,
+       -- entry_url / verified 以库内管理员值为准：种子重启不覆盖人工补的入口。
+       entry_url = CASE WHEN scoreline_sources.entry_url = '' THEN excluded.entry_url ELSE scoreline_sources.entry_url END,
+       verified = CASE WHEN scoreline_sources.entry_url = '' THEN excluded.verified ELSE scoreline_sources.verified END,
        updated_at = excluded.updated_at`
   )
   let count = 0

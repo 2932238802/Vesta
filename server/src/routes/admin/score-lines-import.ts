@@ -1,5 +1,10 @@
 import { Router } from 'express'
-import type { BatchInput, ExamType, ReviewStatus } from '../../../../shared/src/score-line'
+import type {
+  BatchInput,
+  ExamType,
+  NormalizedBatch,
+  ReviewStatus
+} from '../../../../shared/src/score-line'
 import {
   batchChecksum,
   isExamType,
@@ -68,14 +73,47 @@ function validatePrograms(input: unknown): { errors: string[]; programs: Program
   return { errors, programs }
 }
 
+function batchKey(batch: NormalizedBatch): string {
+  return [
+    batch.scope,
+    batch.exam,
+    batch.year,
+    batch.province,
+    batch.region,
+    batch.schoolId,
+    batch.programId,
+    batch.category,
+    batch.track
+  ].join('~')
+}
+
 scoreLineImportRouter.post('/score-lines/import', (req, res) => {
   noStore(res)
   const body = req.body ?? {}
   const hasBatches = Array.isArray(body.batches) && body.batches.length > 0
   const programCheck = validatePrograms(body.programs)
-  const batchErrors =
+  const rawBatchErrors =
     hasBatches || programCheck.programs.length === 0 ? validateImportPayload(body) : []
-  const errors = [...batchErrors, ...programCheck.errors]
+  const errors = [...rawBatchErrors, ...programCheck.errors]
+  let batches: NormalizedBatch[] = []
+  if (errors.length === 0 && hasBatches) {
+    const seen = new Map<string, number>()
+    ;(body.batches as BatchInput[]).forEach((rawBatch, index) => {
+      const dimensions = normalizeBatchDimensions(normalizeImportBatch(rawBatch))
+      batches.push(dimensions.batch)
+      const key = batchKey(dimensions.batch)
+      const previous = seen.get(key)
+      if (previous !== undefined) {
+        errors.push(
+          `第 ${index + 1} 条与第 ${previous + 1} 条归一化后是同一批次（范围 / 年份 / 省份 / 院校 / 专业 / 批次 / 科类相同），会互相覆盖`
+        )
+        return
+      }
+      seen.set(key, index)
+    })
+    // 归一化后的值也要过一次校验，避免截断 / 维度归一化后出现新的非法组合。
+    errors.push(...validateImportPayload({ batches }))
+  }
   if (errors.length || (!hasBatches && programCheck.programs.length === 0)) {
     res.status(400).json({
       error: errors[0] ?? '至少导入一条分数线或招生计划',
@@ -83,9 +121,6 @@ scoreLineImportRouter.post('/score-lines/import', (req, res) => {
     })
     return
   }
-  const batches = hasBatches
-    ? (body.batches as BatchInput[]).map(normalizeImportBatch).map(normalizeBatchDimensions)
-    : []
   const dryRun = body.dryRun === true
   if (dryRun) {
     res.json({

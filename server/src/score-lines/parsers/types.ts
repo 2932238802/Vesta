@@ -4,6 +4,8 @@ export interface ParserContext {
   sourceId: string
   sourceName: string
   sourceUrl: string
+  /** 当前页面的发布 / 更新日期（从 URL 或文件名推断）；国家线等批次写进 published_at。 */
+  publishedAt?: string
   exam: ExamType
   province: string
   schoolId?: string
@@ -46,6 +48,8 @@ export interface ParsedBatch {
 export type ParserFailureCode =
   | 'no_table'
   | 'unsupported_table'
+  | 'no_text_layer'
+  | 'parse'
   | 'decode'
   | 'entry_redirect'
 

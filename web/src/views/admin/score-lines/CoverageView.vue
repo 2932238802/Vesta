@@ -17,7 +17,7 @@
     </div>
 
     <div class="summary">
-      <span v-for="(label, key) in COVERAGE_LABELS" :key="key" class="chip" :class="{ accent: key === 'covered' }">
+      <span v-for="(label, key) in COVERAGE_LABELS" :key="key" class="chip" :class="{ accent: key === 'covered', danger: key === 'failed' }">
         {{ label }} {{ data?.summary[key] ?? 0 }}
       </span>
     </div>
@@ -35,7 +35,7 @@
             <td>{{ item.name }}</td>
             <td>{{ item.province }}</td>
             <td>{{ item.year || '—' }}</td>
-            <td><span class="chip" :class="{ accent: item.status === 'covered' }">{{ coverageLabel(item.status) }}</span></td>
+            <td><span class="chip" :class="{ accent: item.status === 'covered', danger: item.status === 'failed' }">{{ coverageLabel(item.status) }}</span></td>
             <td class="quiet">{{ item.missing.map(missingLabel).join('、') || '—' }}</td>
             <td class="quiet tiny">{{ formatDate(item.updatedAt) }}</td>
             <td class="error-cell">{{ failureText(item.lastError) || '—' }}</td>

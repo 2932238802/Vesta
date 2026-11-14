@@ -7,9 +7,11 @@ import { htmlTableParser } from './html'
 import { decodeHtml, extractRedirect } from './html-shape'
 import { categoryBatchesFromRows } from './category-table'
 import { followTarget, selectCandidates } from '../discovery'
+import { inferCategory, inferTrack } from '../dimension-infer'
 import { parseContent, resolveParserId } from './index'
 import { jsonParser } from './json'
 import { nationalLinesFromText } from './national-line'
+import { pdfTextParser } from './pdf'
 import { metricsFromText, parseScore, rowsToMetrics } from './table'
 import type { ParsedMetric, ParserContext } from './types'
 import { xlsxParser } from './xlsx'
@@ -439,5 +441,76 @@ const managementA = nationalText.batches.find(
 )
 assert.equal(metric(managementA!, 'total')?.value, 333)
 console.log('✓ 国家线 PDF 文本：多行门类按「其他学科专业」补行')
+
+// 标题维度推断：普通词不误标，显式维度词仍命中
+const zhejiangTitle = '2026年浙江省普通高校专升本招生各类别最低控制分数线通告'
+assert.equal(inferCategory(zhejiangTitle, 'upgrade'), '', '「普通高校」不应标成普通类')
+assert.equal(inferTrack(zhejiangTitle, 'upgrade'), '', '「教育考试院」不应标成教育')
+assert.equal(
+  inferCategory('2026年浙江省退役大学生士兵专升本招生简章', 'upgrade'),
+  '退役士兵'
+)
+assert.equal(inferTrack('2026年浙江省专升本经管类最低控制分数线', 'upgrade'), '经管')
+assert.equal(inferCategory('2025年硕士研究生招生考试学术学位分数线', 'postgrad'), '学硕')
+console.log('✓ 标题维度推断：严格白名单，普通词不误标')
+
+// 有表但形状不认 + 3 条导航链接：仍保留 unsupported_table，不被 index 吞掉
+const nav = [1, 2, 3].map((index) => `<a href="/notice-${index}.html">2025 分数线公告</a>`).join('')
+const unsupported = await htmlTableParser.parse({
+  parserId: 'html-table@1',
+  content: `<html><body>${nav}<table><tr><td>甲</td><td>乙</td></tr></table></body></html>`,
+  contentType: 'text/html',
+  url: context.sourceUrl,
+  context
+})
+assert.ok((unsupported.linkItems?.length ?? 0) >= 3)
+assert.equal(unsupported.index, undefined, '有表页不应被标成索引页')
+assert.equal(unsupported.failure?.code, 'unsupported_table')
+console.log('✓ 解析失败不被导航链接吞成 index')
+
+// 0 表 + 3 条链接：显式索引页
+const indexPage = await htmlTableParser.parse({
+  parserId: 'html-table@1',
+  content: `<html><body>${nav}</body></html>`,
+  contentType: 'text/html',
+  url: context.sourceUrl,
+  context
+})
+assert.equal(indexPage.index, true)
+assert.equal(indexPage.failure, undefined)
+console.log('✓ 纯索引页显式 index:true')
+
+// PDF / Excel / JSON 失败均带机读码
+const pdfFailure = await pdfTextParser.parse({
+  parserId: 'pdf-text@1',
+  content: new TextEncoder().encode('not a pdf'),
+  contentType: 'application/pdf',
+  url: context.sourceUrl,
+  context
+})
+assert.ok(
+  ['parse', 'no_text_layer', 'unsupported_table'].includes(pdfFailure.failure?.code ?? ''),
+  'PDF 失败必须有码'
+)
+const xlsxFailure = await xlsxParser.parse({
+  parserId: 'xlsx@1',
+  content: new TextEncoder().encode('not excel'),
+  contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  url: context.sourceUrl,
+  context
+})
+assert.ok(
+  ['parse', 'unsupported_table'].includes(xlsxFailure.failure?.code ?? ''),
+  'Excel 失败必须有码'
+)
+const jsonFailure = await jsonParser.parse({
+  parserId: 'json@1',
+  content: '{bad json',
+  contentType: 'application/json',
+  url: context.sourceUrl,
+  context
+})
+assert.equal(jsonFailure.failure?.code, 'parse')
+console.log('✓ PDF / Excel / JSON 失败带机读码')
 
 console.log('\n分数线解析器用例全部通过')

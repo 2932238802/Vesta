@@ -31,14 +31,24 @@ export const jsonParser: Parser = {
     try {
       parsed = JSON.parse(typeof content === 'string' ? content : new TextDecoder().decode(content))
     } catch (error) {
-      return { batches: [], issues: [`JSON 无法解析：${(error as Error).message}`] }
+      return {
+        batches: [],
+        issues: [`JSON 无法解析：${(error as Error).message}`],
+        failure: { code: 'parse', detail: (error as Error).message }
+      }
     }
     const list = Array.isArray(parsed)
       ? parsed
       : parsed && typeof parsed === 'object' && Array.isArray((parsed as { batches?: unknown }).batches)
         ? ((parsed as { batches: unknown[] }).batches)
         : []
-    if (list.length === 0) return { batches: [], issues: ['JSON 里没有 batches'] }
+    if (list.length === 0) {
+      return {
+        batches: [],
+        issues: ['JSON 里没有 batches'],
+        failure: { code: 'unsupported_table', detail: 'JSON 里没有 batches' }
+      }
+    }
     const batches = list
       .map((item) =>
         asBatch(item, {
@@ -49,7 +59,13 @@ export const jsonParser: Parser = {
         })
       )
       .filter((item): item is ParsedBatch => Boolean(item))
-    if (batches.length === 0) return { batches: [], issues: ['JSON 批次缺少 metrics'] }
+    if (batches.length === 0) {
+      return {
+        batches: [],
+        issues: ['JSON 批次缺少 metrics'],
+        failure: { code: 'unsupported_table', detail: 'JSON 批次缺少 metrics' }
+      }
+    }
     return { batches, issues: [] }
   }
 }

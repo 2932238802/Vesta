@@ -240,10 +240,13 @@ export function pendingBatchCount(where: {
   province?: string
   schoolId?: string
   year?: number
+  exam?: string
+  scope?: string
+  region?: string
 }): number {
   const conditions = ["review_status = 'pending'"]
   const params: (string | number)[] = []
-  if (where.province) {
+  if (where.province !== undefined) {
     conditions.push('province = ?')
     params.push(where.province)
   }
@@ -254,6 +257,18 @@ export function pendingBatchCount(where: {
   if (where.year) {
     conditions.push('year = ?')
     params.push(where.year)
+  }
+  if (where.exam) {
+    conditions.push('exam = ?')
+    params.push(where.exam)
+  }
+  if (where.scope) {
+    conditions.push('scope = ?')
+    params.push(where.scope)
+  }
+  if (where.region) {
+    conditions.push('region = ?')
+    params.push(where.region)
   }
   const row = db
     .prepare(`SELECT COUNT(*) AS count FROM scoreline_batches WHERE ${conditions.join(' AND ')}`)

@@ -133,6 +133,7 @@ function toBatches(rows: LineRow[], context: ParserContext, year: number): Parse
       title: `${year} 全国硕士研究生招生考试国家线 ${row.track}`,
       sourceName,
       sourceUrl: context.sourceUrl,
+      publishedAt: context.publishedAt ?? '',
       confidence: 0.9,
       metrics: metricsOf(row.a)
     },
@@ -147,6 +148,7 @@ function toBatches(rows: LineRow[], context: ParserContext, year: number): Parse
       title: `${year} 全国硕士研究生招生考试国家线 ${row.track}`,
       sourceName,
       sourceUrl: context.sourceUrl,
+      publishedAt: context.publishedAt ?? '',
       confidence: 0.9,
       metrics: metricsOf(row.b)
     }
@@ -259,14 +261,14 @@ export const nationalLineParser: Parser = {
         return {
           batches: [],
           issues: [`PDF 解析失败：${(error as Error).message}`],
-          failure: { code: 'unsupported_table', detail: '国家线 PDF 解析失败' }
+          failure: { code: 'parse', detail: '国家线 PDF 解析失败' }
         }
       }
       if (!text.trim()) {
         return {
           batches: [],
           issues: ['该 PDF 无文本层（扫描件），需人工导入'],
-          failure: { code: 'unsupported_table', detail: '国家线 PDF 无文本层' }
+          failure: { code: 'no_text_layer', detail: '国家线 PDF 无文本层' }
         }
       }
       const parsed = nationalLinesFromText(text, context)

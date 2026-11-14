@@ -114,6 +114,8 @@ export interface AdminCrawlRunDetail {
     content_type: string
     parse_status: string
     error: string
+    note: string
+    shape: string
     fetched_at: string
   }[]
 }

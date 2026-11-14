@@ -13,14 +13,21 @@ function scalar(sql: string, ...params: (string | number)[]): number {
   return Number(row?.count ?? 0)
 }
 
-function lastRun(province: string): { id: string; error: string } {
+/** 最近一次已结束的抓取；考研主线看全国 run，专升本看本省 run。 */
+function lastRun(exam: ExamType, province: string): {
+  id: string
+  status: string
+  error: string
+} {
+  const runProvince = exam === 'postgrad' ? '全国' : province
   const row = db
     .prepare(
-      `SELECT id, message FROM crawl_runs
-       WHERE province = ? ORDER BY created_at DESC LIMIT 1`
+      `SELECT id, status, message FROM crawl_runs
+       WHERE province = ? AND status NOT IN ('queued', 'running')
+       ORDER BY created_at DESC LIMIT 1`
     )
-    .get(province) as { id: string; message: string } | undefined
-  return { id: row?.id ?? '', error: row?.message ?? '' }
+    .get(runProvince) as { id: string; status: string; message: string } | undefined
+  return { id: row?.id ?? '', status: row?.status ?? '', error: row?.message ?? '' }
 }
 
 /** 按 approved 数据重算某校某年某考试的覆盖状态；pending 单独计数。 */
@@ -68,24 +75,58 @@ export function refreshCoverage(schoolId: string, exam: ExamType, year: number):
     year,
     schoolId
   )
-  const pending = scalar(
-    `SELECT COUNT(*) AS count FROM scoreline_batches
-     WHERE review_status = 'pending' AND exam = ? AND year = ?
-       AND (school_id = ? OR (school_id = '' AND province = ?))`,
+  const pending =
+    exam === 'postgrad'
+      ? scalar(
+          `SELECT COUNT(*) AS count FROM scoreline_batches
+           WHERE review_status = 'pending' AND exam = ? AND year = ?
+             AND (
+               (scope = 'national' AND region = ?)
+               OR school_id = ?
+               OR (school_id = '' AND province = ?)
+             )`,
+          exam,
+          year,
+          region,
+          schoolId,
+          school.province
+        )
+      : scalar(
+          `SELECT COUNT(*) AS count FROM scoreline_batches
+           WHERE review_status = 'pending' AND exam = ? AND year = ?
+             AND (
+               (scope = 'provincial' AND province = ?)
+               OR school_id = ?
+             )`,
+          exam,
+          year,
+          school.province,
+          schoolId
+        )
+  const pendingPrograms = scalar(
+    `SELECT COUNT(*) AS count FROM school_programs
+     WHERE review_status = 'pending' AND exam = ? AND year = ? AND school_id = ?`,
     exam,
     year,
-    schoolId,
-    school.province
+    schoolId
   )
+  const existing = db
+    .prepare('SELECT status FROM school_coverage WHERE school_id = ? AND exam = ? AND year = ?')
+    .get(schoolId, exam, year) as { status: string } | undefined
+  const run = lastRun(exam, school.province)
   let status: CoverageStatus
   if (schoolLine > 0 || programLine > 0 || mainLine > 0 || plans > 0) {
     status = mainLine > 0 && (schoolLine > 0 || programLine > 0) && plans > 0 ? 'covered' : 'partial'
-  } else if (pending > 0) {
+  } else if (pending + pendingPrograms > 0) {
     status = 'pending'
+  } else if (existing?.status === 'not_offered') {
+    // 人工确认过「该省 / 校该年不招」时不被自动刷新覆盖。
+    status = 'not_offered'
+  } else if (run.status === 'failed') {
+    status = 'failed'
   } else {
     status = 'no_data'
   }
-  const run = lastRun(school.province)
   const at = now()
   db.prepare(
     `INSERT INTO school_coverage
@@ -305,8 +346,13 @@ export function coverageFor(
       pendingCount
     }
   }
+  // 覆盖表可能是上次刷新前写下的；有 pending 时不要继续显示 no_data / failed。
+  const status =
+    pendingCount > 0 && (row.status === 'no_data' || row.status === 'failed')
+      ? 'pending'
+      : (row.status as CoverageStatus)
   return {
-    status: row.status as CoverageStatus,
+    status,
     missing: coverageMissing({
       mainLine: Number(row.main_line),
       schoolLine: Number(row.school_line),

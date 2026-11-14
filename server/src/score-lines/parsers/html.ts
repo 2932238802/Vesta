@@ -56,6 +56,10 @@ export const htmlTableParser: Parser = {
         return { batches: categoryBatches, issues: [], ...base }
       }
       const detail = `${title || url}：没有识别到分数线表格`
+      // 只有「0 张表 + 足够多链接」才是纯索引页；有表但形状不认必须保留失败码。
+      if (shape.tables === 0 && items.length >= 3) {
+        return { batches: [], issues: [], index: true, ...base }
+      }
       return {
         batches: [],
         issues: [detail, ...issues.slice(0, 5)],
