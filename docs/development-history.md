@@ -15,7 +15,7 @@
 - **设置下移**：`AdminLayout.vue` 把「设置」整段 `<section>` 从第二位移到 `<nav>` 最后（DOM 移动，不用 CSS `order`，保证 Tab / 读屏顺序）；最终侧栏顺序为 **问卷 → 咨询 → 分数线 → 设置**。折叠状态 key 未变，`localStorage` 记忆不受影响。
 - **文档**：`docs/README.md` 更新版本、栏目顺序、分数线说明、验证命令、25m 说明与简历表保留说明；`docs/archive/20261114/` 三份方案补实施记录与状态。
 - **验证**：`npm run verify` 全绿（check:docs / check:size / check:version / check:dates / check:score / check:audit / typecheck / build）。临时 `DATA_DIR=/tmp/vesta-score-test` + 8891 端口做接口断言：未带令牌四个接口均 401；空表 5 类型 0 数据集；新增 / 筛选 / 更新整组替换 / 删除 / 删除后 404；7 组非法输入 400 且文案与文档一致；`resume_images` 删除后孤儿条目 0；简历接口 401/404。Playwright 走查（桌面 + 390px）：侧栏顺序、空状态、新增 / 编辑 / 删除、tab 计数、年份筛选、搜索、`/admin/resumes` 404、设置页高亮与折叠记忆、无横向溢出、控制台零错误。未调用真实 AI、未写仓库 `data/`、未重新生成旧报告。
-- **未做 / 已知**：分数线不做自动抓取、批量导入、公开页、报告注入或权限分级；从注册表移除类型不会删数据，加回常量即可恢复；简历图片未导出 / 未 `DROP`，`client_max_body_size` 未下调；本轮尚未提交（本地 `main` 工作区改动）。
+- **未做 / 已知**：分数线不做自动抓取、批量导入、公开页、报告注入或权限分级；从注册表移除类型不会删数据，加回常量即可恢复；简历图片未导出 / 未 `DROP`，`client_max_body_size` 未下调；本轮已提交 `ba57bb6`，尚未推送 `origin/main`。
 
 ## 本轮（2026-11-13）
 
