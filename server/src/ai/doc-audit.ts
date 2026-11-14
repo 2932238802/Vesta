@@ -367,6 +367,9 @@ export function findTextIssues(content: DocAiContent, planPeriods: string[] = []
     if (/(天坑|野鸡|垃圾专业|最差专业)/.test(text)) {
       issues.push(`${where} 出现贬低专业的说法`)
     }
+    if (/检索词|检索参数|时间窗|freshness|site:|BOCHA|届拼写|博查/.test(text)) {
+      issues.push(`${where} 出现内部检索信息，报告里只能写结果和原文来源`)
+    }
     if (/\d+(?:\.\d+)?\s*天/.test(text)) {
       issues.push(`${where} 使用了「天」作为时间距离，必须换成粗粒度表达`)
     }

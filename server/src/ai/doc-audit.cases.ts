@@ -87,6 +87,11 @@ export function runDocAuditCases(): void {
     )
   }
 
+  // 内部检索规则不外露：报告正文不能出现检索词、博查等后台信息。
+  for (const text of ['检索词是「上海 工程师 应届 招聘」', '博查返回的结果里没有合适的岗位']) {
+    expectBlocked(`内部检索信息「${text}」`, findTextIssues(contentOf('gap', [text])), true)
+  }
+
   const repetitionContext = {
     distance: '三年',
     cityLabel: '',
@@ -129,6 +134,6 @@ const directRun = process.argv[1]
 if (directRun) {
   runDocAuditCases()
   console.log(
-    `报告文本审计用例通过：考研 × 听力 ${CROSS_MODULE_CASES.length} 组 + 口语 ${SPEAKING_CASES.length} 组 + 英语时长 ${ENGLISH_TIME_CASES.length} 组 + 2 组模块 / 数字边界`
+    `报告文本审计用例通过：考研 × 听力 ${CROSS_MODULE_CASES.length} 组 + 口语 ${SPEAKING_CASES.length} 组 + 英语时长 ${ENGLISH_TIME_CASES.length} 组 + 2 组模块 / 数字边界 + 2 组内部信息`
   )
 }

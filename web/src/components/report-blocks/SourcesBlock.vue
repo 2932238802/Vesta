@@ -1,23 +1,9 @@
 <template>
   <SectionHead :index="index" :title="block.title" :subtitle="block.subtitle" />
 
-  <div v-if="block.queries?.length" class="source-queries">
-    <p class="source-label">本次实际检索词</p>
-    <ul>
-      <li v-for="query in block.queries" :key="query">{{ query }}</li>
-    </ul>
-  </div>
-
   <div v-if="block.error" class="source-error" role="status">
     <p class="source-label">检索状态</p>
     <p class="source-error-text">{{ block.error }}</p>
-    <p v-if="block.configured === false" class="source-error-hint">
-      这是服务端配置问题，不是报告内容判断。{{
-        allowRetry === false
-          ? '配置修复后，新建报告即可重新检索。'
-          : '配置修复后可以重新生成。'
-      }}
-    </p>
     <button
       v-if="block.retryable && allowRetry !== false"
       class="source-retry"
@@ -26,7 +12,7 @@
     >
       重新检索并生成
     </button>
-    <p v-else-if="block.error && allowRetry === false" class="source-error-hint">
+    <p v-else-if="allowRetry === false" class="source-error-hint">
       报告已经生成；要重新检索需要新建一份报告。
     </p>
   </div>
@@ -43,12 +29,7 @@
       </div>
     </li>
   </ul>
-  <p v-else-if="!block.error && !block.queries?.length" class="source-empty">
-    本次没有调用外部检索，报告只依据问卷回答和系统计算。
-  </p>
-  <p v-else-if="!block.error" class="source-empty">
-    检索已执行，但没有返回可用的原文链接。
-  </p>
+  <p v-else-if="!block.error" class="source-empty">本次没有可核对的原文。</p>
   <p v-if="block.searchedAt" class="source-time">
     检索时间：{{ block.searchedAt.replace('T', ' ').slice(0, 16) }}
   </p>
@@ -169,36 +150,10 @@ const emit = defineEmits<{ retry: [] }>()
   font-size: 13px;
 }
 
-.source-queries {
-  margin-top: 22px;
-  padding: 18px 20px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--ink) 3%, var(--surface));
-}
-
 .source-label {
   font-size: var(--report-label);
   letter-spacing: 0.08em;
   color: var(--ink-3);
-}
-
-.source-queries ul {
-  margin: 10px 0 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.source-queries li {
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
-  color: var(--ink-2);
-  font-size: 13.5px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
 }
 
 .source-error {
@@ -265,13 +220,8 @@ const emit = defineEmits<{ retry: [] }>()
     grid-template-columns: 22px minmax(0, 1fr);
   }
 
-  .source-queries,
   .source-error {
     padding: 16px 16px;
-  }
-
-  .source-queries li {
-    font-size: 14px;
   }
 
   .source-error-hint {
@@ -282,7 +232,6 @@ const emit = defineEmits<{ retry: [] }>()
 
 <style scoped>
 @media print {
-  .source-queries,
   .source-error,
   .source-retry {
     display: none;

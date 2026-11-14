@@ -12,7 +12,7 @@ import type {
   Tier
 } from './types'
 import { computeDocScores, type DocScores } from './docScore'
-import { inferDirectionKey, jobDirections } from './job-map'
+import { cleanRole, inferDirectionKey, jobDirections } from './job-map'
 import {
   addCalendarMonths,
   describeDistance,
@@ -35,7 +35,7 @@ export function cityInText(value: string): string {
 }
 
 export interface TargetCity {
-  /** 能落到检索词里的具体城市；为空表示本次不限定城市 */
+  /** 能落到查询词里的具体城市；为空表示本次不限定城市 */
   city: string
   /** 城市是怎么定下来的，用来在报告里说明依据 */
   basis: 'explicit' | 'school' | 'home' | 'label' | 'none'
@@ -484,6 +484,8 @@ function usedForJob(job: JobCard, directionName?: string): string {
 export function friendlySearchError(message: string): string {
   const text = message.trim()
   if (!text) return ''
+  // 已经是给答卷人看的结果性说明，不再二次翻译。
+  if (/近期没有可核对|没能获取招聘原文|部分原文暂时|可稍后重试/.test(text)) return text
   if (
     /fetch failed|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up|network|aborted|timeout|timed out/i.test(
       text
@@ -494,10 +496,10 @@ export function friendlySearchError(message: string): string {
   if (/429|request limit|rate limit|频率|限流|too many/i.test(text)) {
     return '检索服务繁忙（触发限流），稍后可重试'
   }
-  if (/401|403|unauthorized|forbidden|invalid.*(?:key|token)|api.?key|无权限|鉴权/i.test(text)) {
-    return '检索服务鉴权失败，请检查 BOCHA_API_KEY / BOCHA_BASE_URL'
+  if (/401|403|unauthorized|forbidden|invalid.*(?:key|token)|api.?key|无权限|鉴权|bocha/i.test(text)) {
+    return '检索服务暂时不可用，可稍后重试'
   }
-  return text
+  return '本次没能获取招聘原文，可稍后重试'
 }
 
 /** 学校档位换算成学历层次：专科 / 本科（C9 到民办本科都按本科算）。 */
@@ -768,7 +770,7 @@ function withJobMatch(
 
 /** 招聘原文是否已过期；旧报告可能只有日期没有 stale 标记，所以两处都看。 */
 function isStaleJob(job: JobCard): boolean {
-  return Boolean(job.stale) || Boolean(job.date && isOlderThanMonths(job.date, 18))
+  return Boolean(job.stale) || Boolean(job.date && isOlderThanMonths(job.date, 12))
 }
 
 /** 把同一方向的多条原文汇总成门槛事实，避免只靠单条招聘下结论。 */
@@ -1029,12 +1031,12 @@ function gapBlock(survey: Survey, answers: Answers, jobs: JobCard[] = []): Repor
   }
 }
 
-/** 核对清单只给检索词和固定 key；具体查什么、怎么查由 AI 依据回答写。 */
+/** 核对清单只给查询词和固定 key；具体查什么、怎么查由 AI 依据回答写。 */
 function checklistBlock(survey: Survey, answers: Answers): ReportBlock {
   const first = label(survey, answers, 'q6')
-  // 核对清单里的检索词也要用具体城市；「新一线」这类档位词不能直接拿去搜。
+  // 核对清单里的查询词也要用具体城市；「新一线」这类档位词不能直接拿去搜。
   const city = resolveTargetCity(survey, answers).city
-  const role = text(answers, 'q5a') || text(answers, 'q2')
+  const role = cleanRole(text(answers, 'q5a')) || text(answers, 'q2')
   const place = city ? `${city} ` : ''
   const target = role || '目标岗位'
   const path = first && first !== '还没确定' ? first : '方向'
@@ -1320,9 +1322,8 @@ function sourcesBlock(input: {
         site: job.company || job.city,
         date: job.date
       }))
-  const queries = search?.queries ?? []
   const error = friendlySearchError(search?.error ?? '')
-  if (!sources.length && !queries.length && !error) return null
+  if (!sources.length && !error) return null
   const jobByUrl = new Map((input.jobs ?? []).map((job) => [job.url.replace(/\/$/, ''), job]))
   const usedForOf = (source: { url: string; date?: string }): string => {
     const job = jobByUrl.get(source.url.replace(/\/$/, ''))
@@ -1332,21 +1333,17 @@ function sourcesBlock(input: {
       : '用于核对：报告里的岗位原文'
     return source.date ? `${base} · 发布于 ${source.date.slice(0, 10)}` : base
   }
-  const yearNote = search?.searchYear ? `检索词按 ${search.searchYear} 届拼写` : ''
 
   return {
     type: 'sources',
     title: '检索记录与原文',
-    subtitle: ['服务器实际发送的检索词和返回的原文链接，点开可核对', yearNote]
-      .filter(Boolean)
-      .join('；'),
+    subtitle: '报告引用的原文来源，点开可核对',
     items: sources.slice(0, 12).map((source) => ({
       title: source.title,
       url: source.url,
       site: source.site,
       usedFor: usedForOf(source)
     })),
-    queries,
     error,
     retryable: Boolean(error || search?.configured === false),
     searchedAt: search?.searchedAt ?? '',

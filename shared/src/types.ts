@@ -90,7 +90,7 @@ export interface JobCard {
   meets?: string[]
   /** 对照填卷人答卷：这条招聘里你还缺、需要补的条件 */
   missing?: string[]
-  /** 发布日期超过约 18 个月：只用于看要求结构，不能当投递入口 */
+  /** 发布日期超过 12 个月：只用于看要求结构，不能当投递入口 */
   stale?: boolean
   /** 主检索不足时用更宽时间窗补来的原文：只作要求结构参考，不参与门槛统计 */
   fallback?: boolean
@@ -380,9 +380,7 @@ export type ReportBlock =
       title: string
       subtitle: string
       items: { title: string; url: string; site: string; usedFor: string }[]
-      /** 服务端实际发给检索服务的查询词 */
-      queries?: string[]
-      /** 检索失败/未配置时的真实原因 */
+      /** 检索失败/未配置时的结果性说明（不展示内部检索词与配置） */
       error?: string
       /** 是否允许用户重试 */
       retryable?: boolean
@@ -470,7 +468,7 @@ export interface ReportSearchMeta {
   resultCount: number
   searchedAt: string
   sources: ReportSearchSource[]
-  /** 检索词里拼的年份：固定为发起检索的当年，不按年级推算；旧报告的历史字段名为 `cohortYear`。 */
+  /** 旧报告的历史字段：检索词里拼过的届别年份；v1.79 起新报告不再拼届，也不新写这个值。 */
   searchYear?: number
 }
 
