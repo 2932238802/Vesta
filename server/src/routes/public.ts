@@ -13,14 +13,7 @@ import { buildReport } from '../../../shared/src/report'
 import { buildAiReport } from '../../../shared/src/ai'
 import { buildDocReportWithAi, docPriority } from '../../../shared/src/doc'
 import { validateAnswers } from '../../../shared/src/validate'
-import {
-  db,
-  getActiveSurvey,
-  getSurvey,
-  getTemplate,
-  now,
-  recordEvent
-} from '../db'
+import { db, getActiveSurvey, getSurvey, getTemplate, now, recordEvent, surveyReportMode } from '../db'
 import {
   ensureReportGeneration,
   isAiConfigured,
@@ -227,14 +220,15 @@ publicRouter.post(
     try {
       db.prepare(
         `INSERT INTO submissions
-         (id, slug, invite_id, survey_id, answers, scores, total, tier, timing, overrides,
-          contact_status, admin_notes, claimed_at, wechat_enc, slots, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, slug, invite_id, survey_id, report_mode, answers, scores, total, tier, timing,
+          overrides, contact_status, admin_notes, claimed_at, wechat_enc, slots, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         id,
         slug,
         invite.id,
         survey.id,
+        surveyReportMode(survey),
         JSON.stringify(answers),
         JSON.stringify(scores),
         scores.total,

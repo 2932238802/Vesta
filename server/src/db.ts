@@ -12,7 +12,14 @@ export {
   deleteAdminSession,
   clearExpiredAdminSessions
 } from './db/sessions'
-export { getSurvey, getActiveSurvey, publishSurvey } from './db/surveys'
+export {
+  getSurvey,
+  getActiveSurvey,
+  publishSurvey,
+  normalizeReportMode,
+  surveyReportMode
+} from './db/surveys'
+export type { ReportMode } from './db/surveys'
 export { getTemplate, saveTemplate } from './db/templates'
 export {
   DEFAULT_REPORT_SKILL_ID,

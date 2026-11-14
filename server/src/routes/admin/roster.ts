@@ -1,15 +1,9 @@
 import { Router } from 'express'
 import { currentCycleKey, cycleLabel, cycleRange, cycleStartKey } from '../../../../shared/src/cycle'
 import { noStore } from '../../auth'
-import { db } from '../../db'
+import { db, normalizeReportMode } from '../../db'
 import { clampString, parseJson } from '../../util'
-import {
-  ROSTER_CATEGORIES,
-  reportModeOf,
-  rosterCategoryMatches,
-  rosterStage,
-  surveyReportModes
-} from './shared'
+import { ROSTER_CATEGORIES, rosterCategoryMatches, rosterStage } from './shared'
 import type { RosterRow } from './shared'
 
 export const rosterRouter = Router()
@@ -28,8 +22,8 @@ rosterRouter.get('/roster', (req, res) => {
     .prepare(
       `SELECT i.id AS invite_id, i.token, i.name, i.note, i.channel,
               i.created_at AS invite_created_at, i.opened_at, i.submitted_at, i.expires_at,
-              s.id AS submission_id, s.survey_id, s.slug, s.total, s.tier, s.claimed_at, s.slots,
-              s.contact_status, s.created_at AS submission_created_at
+              s.id AS submission_id, s.survey_id, s.report_mode, s.slug, s.total, s.tier,
+              s.claimed_at, s.slots, s.contact_status, s.created_at AS submission_created_at
        FROM invites i
        LEFT JOIN submissions s ON s.invite_id = i.id
        ORDER BY COALESCE(s.created_at, i.created_at) DESC LIMIT 1000`
@@ -41,8 +35,6 @@ rosterRouter.get('/roster', (req, res) => {
     stage: rosterStage(row),
     week: cycleStartKey(row.invite_created_at)
   }))
-
-  const reportModes = surveyReportModes()
 
   const needle = q.toLocaleLowerCase()
   const queryFiltered = needle
@@ -118,7 +110,7 @@ rosterRouter.get('/roster', (req, res) => {
       expiresAt: row.expires_at,
       total: row.total,
       tier: row.tier,
-      reportMode: row.submission_id ? reportModeOf(reportModes, row.survey_id) : null,
+      reportMode: row.submission_id ? normalizeReportMode(row.report_mode) : null,
       claimed: Boolean(row.claimed_at),
       slots: parseJson<string[]>(row.slots, []),
       contactStatus: row.contact_status,

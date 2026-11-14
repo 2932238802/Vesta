@@ -3,6 +3,18 @@ import type { Survey } from '../../../shared/src/types'
 import { db } from './connection'
 import { getSetting, newId, now, setSetting } from './core'
 
+export type ReportMode = 'doc' | 'ai'
+
+/** 提交答卷时按当时问卷固化报告模式，读路径只读 submissions.report_mode。 */
+export function surveyReportMode(survey: Survey): ReportMode {
+  return survey.reportMode === 'doc' ? 'doc' : 'ai'
+}
+
+/** 历史行没有固化值（空串）时按 legacy 口径当 ai，与旧 reportModeOf() 的默认值一致。 */
+export function normalizeReportMode(value: string | null | undefined): ReportMode {
+  return value === 'doc' ? 'doc' : 'ai'
+}
+
 export function getSurvey(id: string): Survey | null {
   const row = db.prepare('SELECT data FROM surveys WHERE id = ?').get(id) as
     | { data: string }

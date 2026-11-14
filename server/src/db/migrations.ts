@@ -41,13 +41,33 @@ function ensureSubmissionColumns(): void {
     ['ai_attempts', 'INTEGER NOT NULL DEFAULT 0'],
     ['ai_meta', "TEXT NOT NULL DEFAULT '{}'"],
     ['ai_started_at', 'TEXT'],
-    ['ai_finished_at', 'TEXT']
+    ['ai_finished_at', 'TEXT'],
+    ['report_mode', "TEXT NOT NULL DEFAULT ''"]
   ]
   for (const [name, definition] of additions) {
     if (!columns.has(name)) {
       db.exec(`ALTER TABLE submissions ADD COLUMN ${name} ${definition}`)
     }
   }
+}
+
+/**
+ * 答卷报告模式固化（v1.81）：历史行按当年问卷的 reportMode 回填，
+ * 语义与旧 reportModeOf() 一致（doc → doc，其余 → ai）。可重复执行：
+ * 回填后不再有空串，第二次执行改动 0 行。
+ */
+function backfillSubmissionReportModes(): void {
+  const result = db
+    .prepare(
+      `UPDATE submissions SET report_mode = CASE
+         WHEN (SELECT json_extract(s.data, '$.reportMode')
+                 FROM surveys s WHERE s.id = submissions.survey_id) = 'doc'
+         THEN 'doc' ELSE 'ai' END
+       WHERE report_mode = ''`
+    )
+    .run()
+  const rows = Number(result.changes)
+  if (rows > 0) log.info('db.submission_report_mode_backfilled', { rows })
 }
 
 function ensureConsultColumns(): void {
@@ -516,6 +536,8 @@ export function runMigrations(): void {
   clearExpiredAdminSessions()
   seed()
   migrate()
+  // 放在 migrate() 之后：回填读的是问卷当前落库的数据，和旧读路径在同一时刻看到的一致。
+  backfillSubmissionReportModes()
   migrateScoreLineV1()
   ensureScoreLineColumns()
   seedScorelineSources()

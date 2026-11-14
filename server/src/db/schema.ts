@@ -48,6 +48,8 @@ export function initSchema(): void {
     slug TEXT NOT NULL UNIQUE,
     invite_id TEXT NOT NULL UNIQUE,
     survey_id TEXT NOT NULL,
+    -- 报告模式在提交时按当时的问卷固化（doc / ai），读路径不再解析问卷 JSON。
+    report_mode TEXT NOT NULL DEFAULT '',
     answers TEXT NOT NULL,
     scores TEXT NOT NULL,
     total REAL NOT NULL,

@@ -4,17 +4,15 @@ import { answerLabel } from '../../../../shared/src/report'
 import { computeScores } from '../../../../shared/src/scoring'
 import { cycleStartKey } from '../../../../shared/src/cycle'
 import { noStore } from '../../auth'
-import { db, getActiveSurvey, getSurvey, recordEvent } from '../../db'
+import { db, getActiveSurvey, getSurvey, normalizeReportMode, recordEvent } from '../../db'
 import { regenerateReport } from '../../ai/generate'
 import { clampString, decryptText, parseJson, toCsv } from '../../util'
 import {
   CONTACT_STATUSES,
   ROSTER_CATEGORIES,
-  reportModeOf,
   rosterCategoryMatches,
   rosterStage,
-  surveyCache,
-  surveyReportModes
+  surveyCache
 } from './shared'
 import type { InviteRow, SubmissionRow } from './shared'
 
@@ -64,8 +62,8 @@ submissionsRouter.get('/submissions/export.csv', (req, res) => {
     done: '已完成'
   }
 
-  // 问卷数据一次读入，导出时按 survey_id 查缓存，避免每行一次查库。
-  const surveys = surveyCache()
+  // 问卷数据一次读入，只取本页答卷用到的版本，避免全表扫描 / 逐行重复解析。
+  const surveys = surveyCache(rows.map((row) => row.survey_id))
 
   const csv = toCsv([
     [
@@ -103,7 +101,7 @@ submissionsRouter.get('/submissions/export.csv', (req, res) => {
         row.note,
         row.channel,
         row.created_at,
-        survey.reportMode === 'doc' ? '' : row.total,
+        normalizeReportMode(row.report_mode) === 'doc' ? '' : row.total,
         row.tier,
         row.wechat_enc ? decryptText(row.wechat_enc) : '',
         parseJson<string[]>(row.slots, []).join(' / '),
@@ -131,8 +129,8 @@ submissionsRouter.get('/submissions', (req, res) => {
   const contactStatus = clampString(req.query.contactStatus, 20)
   const rows = db
     .prepare(
-      `SELECT s.id, s.slug, s.survey_id, s.total, s.tier, s.contact_status, s.created_at, s.claimed_at,
-              s.slots, i.name, i.note, i.channel
+      `SELECT s.id, s.slug, s.survey_id, s.report_mode, s.total, s.tier, s.contact_status,
+              s.created_at, s.claimed_at, s.slots, i.name, i.note, i.channel
        FROM submissions s JOIN invites i ON i.id = s.invite_id
        WHERE (? = '' OR i.name LIKE ? OR i.note LIKE ? OR i.channel LIKE ?)
          AND (? = '' OR s.contact_status = ?)
@@ -143,8 +141,6 @@ submissionsRouter.get('/submissions', (req, res) => {
     unknown
   >[]
 
-  const reportModes = surveyReportModes()
-
   res.json({
     submissions: rows.map((row) => ({
       id: row.id,
@@ -153,7 +149,7 @@ submissionsRouter.get('/submissions', (req, res) => {
       channel: row.channel,
       total: row.total,
       tier: row.tier,
-      reportMode: reportModeOf(reportModes, row.survey_id as string),
+      reportMode: normalizeReportMode(row.report_mode as string),
       claimed: Boolean(row.claimed_at),
       slots: parseJson<string[]>(row.slots, []),
       contactStatus: row.contact_status,
@@ -188,7 +184,7 @@ submissionsRouter.get('/submissions/:id', (req, res) => {
     reportPath: `/r/${row.slug}`,
     total: row.total,
     tier: row.tier,
-    reportMode: reportModeOf(surveyReportModes(), row.survey_id),
+    reportMode: normalizeReportMode(row.report_mode),
     scores,
     answers: survey.questions.map((question) => ({
       id: question.id,

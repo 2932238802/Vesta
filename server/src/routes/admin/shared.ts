@@ -1,20 +1,26 @@
 import type { Survey } from '../../../../shared/src/types'
 import { db, getActiveSurvey, now } from '../../db'
 
-export type ReportMode = 'doc' | 'ai'
-
 /**
  * 一次请求内复用问卷数据，避免 CSV 导出按行重复查库 / 解析 JSON。
- * `active` 只在找不到对应 survey_id 时作为回退，与原来的
- * `getSurvey(row.survey_id) ?? getActiveSurvey()` 行为一致。
+ * 只按调用方用到的 survey_id 取数（不再全表扫描）；`active` 只在找不到对应
+ * survey_id 时作为回退，与原来的 `getSurvey(row.survey_id) ?? getActiveSurvey()` 行为一致。
  */
 export interface SurveyCache {
   byId: Map<string, Survey>
   active: Survey
 }
 
-export function surveyCache(): SurveyCache {
-  const rows = db.prepare('SELECT id, data FROM surveys').all() as { id: string; data: string }[]
+export function surveyCache(ids: Iterable<string | null | undefined>): SurveyCache {
+  const wanted = [...new Set(ids)].filter((id): id is string => Boolean(id))
+  const rows =
+    wanted.length === 0
+      ? []
+      : (db
+          .prepare(
+            `SELECT id, data FROM surveys WHERE id IN (${wanted.map(() => '?').join(',')})`
+          )
+          .all(...wanted) as { id: string; data: string }[])
   const byId = new Map<string, Survey>()
   for (const row of rows) {
     try {
@@ -23,32 +29,15 @@ export function surveyCache(): SurveyCache {
       // 问卷数据损坏时跳过；需要的行会回退到当前问卷。
     }
   }
-  return { byId, active: getActiveSurvey() }
-}
-
-/**
- * 一次请求内建答卷模式的缓存：surveys 表很小，按 survey_id 判断这份答卷是不是 doc 模式。
- * 答卷写库时只存了 survey_id，报告模式在问卷的 data 里。
- */
-export function surveyReportModes(): Map<string, ReportMode> {
-  const rows = db.prepare('SELECT id, data FROM surveys').all() as { id: string; data: string }[]
-  const map = new Map<string, ReportMode>()
-  for (const row of rows) {
-    let mode: ReportMode = 'ai'
-    try {
-      const survey = JSON.parse(row.data) as { reportMode?: string }
-      if (survey.reportMode === 'doc') mode = 'doc'
-    } catch {
-      // 问卷数据损坏时按 legacy 处理，不影响答卷本身
+  // 懒加载：调用方不缺问卷行时不必为「回退用」的当前问卷付一次解析。
+  let active: Survey | null = null
+  return {
+    byId,
+    get active() {
+      active ??= getActiveSurvey()
+      return active
     }
-    map.set(row.id, mode)
   }
-  return map
-}
-
-export function reportModeOf(map: Map<string, ReportMode>, surveyId: string | null | undefined): ReportMode {
-  if (!surveyId) return 'ai'
-  return map.get(surveyId) ?? 'ai'
 }
 
 export interface InviteRow {
@@ -70,6 +59,7 @@ export interface SubmissionRow {
   slug: string
   invite_id: string
   survey_id: string
+  report_mode: string
   answers: string
   scores: string
   total: number
@@ -103,6 +93,7 @@ export interface RosterRow {
   expires_at: string | null
   submission_id: string | null
   survey_id: string | null
+  report_mode: string | null
   slug: string | null
   total: number | null
   tier: string | null

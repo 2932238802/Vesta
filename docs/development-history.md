@@ -4,6 +4,16 @@
 
 ## 本轮（2026-11-14）
 
+### 问卷报告模式落库：读路径不再解析问卷 JSON（2026-11-14，产品版本 v1.81）
+
+- 依据：`docs/archive/20261114/8-问卷JSON每请求重复解析-根因与修复方案.md` v1.0。根因不是解析慢，而是 `submissions` 没存「这份答卷属于 doc 还是 ai」，每个列表 / 详情 / 名单 / CSV 请求都得回读 `surveys` 全表并逐行 `JSON.parse`；成本随问卷保存次数线性增长（实测 0.072 ms / 版本 / 请求，400 版 28.6 ms / 请求）。
+- **数据契约（L0）**：`submissions` 新增 `report_mode TEXT NOT NULL DEFAULT ''`，提交答卷时按当时问卷固化（`surveyReportMode()`）；启动迁移 `backfillSubmissionReportModes()` 按 `json_extract(surveys.data, '$.reportMode')` 回填历史行（`doc → doc`，其余 → `ai`），可重复执行、二次启动 0 行。回填放在 `migrate()` 之后，保证与旧读路径同一时刻看到的问卷数据一致。
+- **读路径（L1）**：删除 `surveyReportModes()` / `reportModeOf()`；`GET /admin/submissions`、`/admin/roster`、`/admin/submissions/:id`、CSV 导出全部直接读 `report_mode`。`surveyCache()` 改为只按本页用到的 `survey_id` 取数（`WHERE id IN (...)`），`active` 懒加载，不再全表扫描。历史空串按 `ai` 处理（与旧 `reportModeOf()` 对问卷缺失 / JSON 损坏的默认值一致），读接口不写库。
+- **不改的部分**：详情页仍按 `survey_id` 取单行问卷渲染题目（这是它本来的职责）；报告页、问卷页、AI 生成链路的行为不变。L2 进程缓存、L3 学生端 404/409 文案、L4 ETag 均未做（范围见方案 §5.7 / §8）。
+- **验证**：本机副本上迁移回填 6 行、`ai` 问卷与问卷缺失都回填为 `ai`、二次启动 0 行、空库启动无副作用；四个读接口 `reportMode` 与修复前一致，CSV 总分列为空，新提交答卷落库 `report_mode='doc'`；造 1 / 101 / 401 个问卷版本后四个接口 p50 0.59–0.99 ms（修复前 100 版 7.36 ms、400 版 28.6 ms），曲线与版本数无关；请求路径上不再有 `SELECT id, data FROM surveys` 全表查询。`npm run verify` 全绿。
+- **文档**：方案第 8 节补实施记录与两处取舍；`docs/archive/20261114/README.md` 状态同步。
+- **未做 / 已知**：生产实际问卷版本数仍建议在服务器上核对一次；历史行只在启动时回填，运行期被外部改空的 `report_mode` 会按 `ai` 展示。
+
 ### 分数线抓取失败修复：入口、发现与类别表（2026-11-14，产品版本 v1.80）
 
 - 依据：`docs/archive/20261114/7-分数线模块抓取失败-根因与修复方案.md` v1.0。现象：浙江 T0 源抓到的是「点击进入」引导页（0 表、0 `<a>`，跳转写在 `onclick`），报文「没有识别到分数线表格」；即使换成真实公告页也解析不出，因为专升本省控线是「类别 × 分数」转置表。
