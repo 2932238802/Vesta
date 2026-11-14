@@ -54,6 +54,8 @@ export interface ParserResult {
   issues: string[]
   /** 实际执行的解析器；委托（如 yz-topic → national-line）时覆盖来源配置。 */
   parserId?: string
+  /** 本页只用于发现下一层链接（即使只有 1 条），抓取器应记 index 而不是 failed。 */
+  index?: boolean
   /** HTML 索引页里发现的候选链接，交给抓取器继续抓取。 */
   links?: string[]
   /** 候选链接的可见文字，用于判断列表页和选最新年份。 */

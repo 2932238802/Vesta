@@ -378,6 +378,7 @@ const topicPage = await yzTopicParser.parse({
   context
 })
 assert.equal(topicPage.batches.length, 0)
+assert.equal(topicPage.index, true, '专题页是索引页，不能记成解析失败')
 assert.equal(topicPage.linkItems?.length, 5, '2022–2026 五年的国家线文章都要保留')
 assert.ok(
   topicPage.linkItems?.every((item) => !/20\d{2}/.test(item.text)),
@@ -394,6 +395,7 @@ const articlePage = await yzTopicParser.parse({
   context
 })
 assert.equal(articlePage.batches.length, 0)
+assert.equal(articlePage.index, true, '文章页只有 1 条公告链接，也应记索引页')
 assert.equal(articlePage.linkItems?.length, 1, '有公告页时不再抓同一份 PDF')
 assert.ok(articlePage.linkItems?.[0].url.includes('/kyzx/kp/202502/20250224/2293352975.html'))
 console.log('✓ 研招网文章页：优先公告页，PDF 作兜底')

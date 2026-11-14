@@ -293,7 +293,7 @@ async function processPage(input: PageInput): Promise<string[]> {
     }
 
     const snapshot = saveSnapshot(content, fetched.contentType, finalUrl)
-    const isIndex = (result.linkItems?.length ?? 0) >= 3
+    const isIndex = result.index === true || (result.linkItems?.length ?? 0) >= 3
     const parseStatus = result.batches.length ? 'parsed' : isIndex ? 'index' : 'failed'
     const error = result.batches.length || isIndex ? '' : codedError(result)
     insertDocument({

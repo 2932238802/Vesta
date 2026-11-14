@@ -80,7 +80,14 @@ export const yzTopicParser: Parser = {
     const yearLinks = extractYearLinks(html)
     const links = yearLinks.length ? yearLinks : extractNoticeLinks(html, url || context.sourceUrl)
     if (links.length) {
-      return { batches: [], issues: [], links: links.map((item) => item.url), linkItems: links, shape }
+      return {
+        batches: [],
+        issues: [],
+        links: links.map((item) => item.url),
+        linkItems: links,
+        index: true,
+        shape
+      }
     }
     const detail = '研招网页面没有可跟进的年度国家线链接或表格'
     return {
