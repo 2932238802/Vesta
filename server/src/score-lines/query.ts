@@ -16,7 +16,8 @@ import {
   MINIMUM_TYPE_LABELS,
   subjectNameOf
 } from '../../../shared/src/score-line'
-import { normalizeProvince, provinceRegion } from '../../../shared/src/score-line-region'
+import { normalizeDimension, DIMENSION_UNLABELED } from '../../../shared/src/score-line-dimension'
+import { normalizeProvince, normalizeRegion, provinceRegion } from '../../../shared/src/score-line-region'
 import { db } from '../db/connection'
 import { getBatch, pendingBatchCount } from './batch-store'
 import { coverageFor } from './coverage'
@@ -56,11 +57,11 @@ function loadBatches(filter: BatchFilter): ScoreLineBatch[] {
   }
   if (filter.category) {
     conditions.push('b.category = ?')
-    params.push(filter.category)
+    params.push(filter.category === DIMENSION_UNLABELED ? '' : filter.category)
   }
   if (filter.track) {
     conditions.push('b.track = ?')
-    params.push(filter.track)
+    params.push(filter.track === DIMENSION_UNLABELED ? '' : filter.track)
   }
   const rows = db
     .prepare(
@@ -206,8 +207,8 @@ export function queryScoreLines(input: QueryInput): ScoreLineQueryResult {
     region,
     schoolId: school?.id ?? '',
     programId: program?.id ?? '',
-    category: (input.category ?? '').trim(),
-    track: (input.track ?? '').trim()
+    category: dimensionInput('category', input.exam, input.category),
+    track: dimensionInput('track', input.exam, input.track)
   }
   const yearFrom = Math.max(2000, input.year - SCORELINE_HISTORY_YEARS + 1)
   const yearTo = input.year
@@ -320,12 +321,16 @@ export function queryScoreLines(input: QueryInput): ScoreLineQueryResult {
   }
 }
 
-function normalizeRegion(value: string | undefined): string {
-  const raw = String(value ?? '').trim().replace(/\s+/g, '')
-  if (!raw) return ''
-  if (/^a区$/i.test(raw) || raw === 'A') return 'A区'
-  if (/^b区$/i.test(raw) || raw === 'B') return 'B区'
-  return ''
+/** 查询入参兼容旧别名（如「文史类」）；认不出的原样保留，不猜成字典值。 */
+function dimensionInput(
+  kind: 'category' | 'track',
+  exam: ExamType,
+  raw: string | undefined
+): string {
+  const value = String(raw ?? '').trim()
+  if (!value || value === DIMENSION_UNLABELED) return value
+  const normalized = normalizeDimension(kind, exam, value)
+  return normalized.matched ? normalized.value : value
 }
 
 /** 主线 pending：专升本看省控线，考研看国家线 A/B 区（国家线 province 为空）。 */

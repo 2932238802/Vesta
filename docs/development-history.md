@@ -2,6 +2,19 @@
 
 本文档记录已经确认或完成的需求，帮助后续 Agent 理解“为什么这样做”。代码与文档冲突时，以 `docs/` 文档为准修正代码，并同步更新本文档（见 `agent-rules.md` 的「文档优先」）。
 
+## 本轮（2026-11-18）
+
+### 分数线筛选栏候选：facets 接口与可搜索下拉（2026-11-18，产品版本 v1.89）
+
+- 背景：用户反馈「批次 / 学位类型」「科类 / 学科门类」是自由文本输入，咨询师不知道有哪些值；问「输入年份、省份后能不能把后两个变成 ComboBox」。依据 `docs/archive/20261114/9-分数线筛选栏批次与科类无选项-根因与修复方案.md` 的 6 / 7（L3 facets + L4 页面），v1.82 已完成字典与落库归一化，本轮补上取数通道与控件。
+- **facets 接口（L3）**：新增 `server/src/score-lines/facets.ts` 与 `GET /api/admin/score-lines/facets`。只统计 `review_status='approved'` 的主线：专升本 `scope='provincial'` + 省，考研 `scope='national'` + A/B 区（由省份反查）；年份窗与查询一致（`year-9 … year`）。`category` / `track` 互相级联，自身维度不受自身过滤影响；`count` 为批次条数。空串维度返回 `value="__unlabeled__"`、`label="未标注"`。
+- **查询口径**：`query.ts` 收到 `__unlabeled__` 时翻译成 `category=''` / `track=''`，所以「未标注」可以显式选中，且不会被 `ambiguity()` 再要求补选；入参仍兼容旧别名（如 `文史类 → 文史`），认不出的值原样保留，不猜。`normalizeRegion()` 移到 `shared/src/score-line-region.ts`，查询与 facets 共用同一套 A/B 区判定。
+- **页面（L4）**：新增 `web/src/views/admin/score-lines/DimensionPicker.vue`：0 个候选不渲染该字段，1 个候选显示只读 chip，≥2 个显示可搜索下拉（「全部」= 不筛选，「未标注」= 只看空维度）。`ScoreLineFilters.vue` 删除两个自由文本 `<input>`；`ScoreLines.vue` 在年份 / 省份 / 考试变化时重置并重拉 facets，用户点选维度后级联重拉并立即重查；级联后已不存在的旧选择自动清空，避免「选了 0 条」的假选项。
+- **为什么先做 facets 再做控件**：查询是等值匹配，前端硬编码字典或先做下拉都会出现「选了一个库里没有的写法 → 静默空结果」。v1.82 的 canonical 落库是本轮的前提。
+- **验证**：`npm run check:score`、`typecheck`、`build` 通过；临时 `DATA_DIR` 造 4 条 approved + 1 条 pending，断言 facets 只统计 approved、计数、级联、未标注、考研 A/B 区、别名查询，全部通过；Playwright 走查专升本筛选栏（省份前不渲染、选省后 2 个字段、选科类后提示补批次、选批次后出线、未标注可查）与 390px（无横向溢出、控制台零错误）；`npm run verify` 全绿。
+- **未做 / 已知**：本地 `data/vesta.db` 的 `scoreline_batches=0`，所以本地选完省份后两个字段不会出现；需要先人工导入或抓取复核产生 approved 数据。这是「没有可选值」的正确表现，不是控件丢失。9.1 的 4（`parseStatus` 失败可见性）、9（院校名单脚本）、10（抓取导出脚本）仍未做；复核「修正后通过」仍后置。
+- **部署**：无表结构变更，`bash update.sh` 即可；回滚 `git revert` 对应提交。
+
 ## 本轮（2026-11-17）
 
 ### 学员名单：分组与归档（2026-11-17，产品版本 v1.88）

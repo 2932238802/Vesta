@@ -54,6 +54,7 @@ export type {
   ScoreLineScope,
   ScoreLineSource
 } from '@shared/score-line'
+export type { DimensionFacetOption, ScoreLineFacets } from '@shared/score-line-dimension'
 
 export interface AdminCoverageResponse {
   summary: Record<CoverageStatus, number>

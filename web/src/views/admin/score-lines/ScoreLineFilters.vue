@@ -31,27 +31,23 @@
         </select>
       </label>
 
-      <label class="field">
-        <span>批次 / 学位类型</span>
-        <input
-          class="input"
-          :value="filters.category"
-          maxlength="40"
-          :placeholder="filters.exam === 'postgrad' ? '学硕 / 专硕' : '普通类 / 建档立卡'"
-          @input="onCategory"
-        >
-      </label>
+      <DimensionPicker
+        v-if="facets"
+        :model-value="filters.category"
+        label="批次 / 学位类型"
+        :options="facets.category"
+        :loading="facetsLoading"
+        @update:model-value="setCategory"
+      />
 
-      <label class="field">
-        <span>科类 / 学科门类</span>
-        <input
-          class="input"
-          :value="filters.track"
-          maxlength="60"
-          :placeholder="filters.exam === 'postgrad' ? '工学 / 理学…' : '文史 / 理工…'"
-          @input="onTrack"
-        >
-      </label>
+      <DimensionPicker
+        v-if="facets"
+        :model-value="filters.track"
+        label="科类 / 学科门类"
+        :options="facets.track"
+        :loading="facetsLoading"
+        @update:model-value="setTrack"
+      />
 
       <div class="field">
         <span>院校</span>
@@ -118,16 +114,23 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ExamType, School, SchoolProgram } from '@/api'
+import type { ExamType, School, SchoolProgram, ScoreLineFacets } from '@/api'
 import { provinceNames, provinceRegion } from '@shared/score-line-region'
+import DimensionPicker from './DimensionPicker.vue'
 import type { ScoreLineFilterState } from './types'
 import { yearOptions } from './types'
 
-const props = defineProps<{ loading?: boolean; canQuery?: boolean }>()
+const props = defineProps<{
+  loading?: boolean
+  canQuery?: boolean
+  facets?: ScoreLineFacets | null
+  facetsLoading?: boolean
+}>()
 const filters = defineModel<ScoreLineFilterState>({ required: true })
 const emit = defineEmits<{
   (event: 'open-school'): void
   (event: 'open-program'): void
+  (event: 'dimension-change'): void
   (event: 'search'): void
 }>()
 
@@ -160,12 +163,14 @@ function onProvince(event: Event) {
   update({ province: (event.target as HTMLSelectElement).value })
 }
 
-function onCategory(event: Event) {
-  update({ category: (event.target as HTMLInputElement).value })
+function setCategory(value: string) {
+  update({ category: value })
+  emit('dimension-change')
 }
 
-function onTrack(event: Event) {
-  update({ track: (event.target as HTMLInputElement).value })
+function setTrack(value: string) {
+  update({ track: value })
+  emit('dimension-change')
 }
 
 function clearSchool() {

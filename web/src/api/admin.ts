@@ -23,6 +23,7 @@ import type {
   ReportTemplate,
   SchoolProgram,
   SchoolSearchItem,
+  ScoreLineFacets,
   ScoreLineQueryResult,
   ScoreLineSource,
   Survey
@@ -108,6 +109,26 @@ export const adminApi = {
         region: params.region,
         schoolId: params.schoolId,
         programId: params.programId,
+        category: params.category,
+        track: params.track
+      })}`,
+      { auth: true }
+    )
+  },
+  scoreLineFacets(params: {
+    exam: string
+    year: number
+    province?: string
+    region?: string
+    category?: string
+    track?: string
+  }) {
+    return request<ScoreLineFacets>(
+      `/api/admin/score-lines/facets${query({
+        exam: params.exam,
+        year: String(params.year),
+        province: params.province,
+        region: params.region,
         category: params.category,
         track: params.track
       })}`,

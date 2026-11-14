@@ -2,7 +2,9 @@ import { Router } from 'express'
 import type { ExamType } from '../../../../shared/src/score-line'
 import { isExamType } from '../../../../shared/src/score-line'
 import { noStore } from '../../auth'
+import { log } from '../../log'
 import { listCoverage } from '../../score-lines/coverage'
+import { scoreLineFacets } from '../../score-lines/facets'
 import { getProgram, listPrograms } from '../../score-lines/program-store'
 import { queryScoreLines } from '../../score-lines/query'
 import { getSchool, listSchools } from '../../score-lines/store'
@@ -108,6 +110,34 @@ scoreLinesRouter.get('/score-lines/query', (req, res) => {
       track: clampString(req.query.track, 60)
     })
   )
+})
+
+scoreLinesRouter.get('/score-lines/facets', (req, res) => {
+  noStore(res)
+  const exam = examOf(req.query.exam)
+  const year = yearOf(req.query.year)
+  if (!exam || !year) {
+    res.status(400).json({ error: '请选择考试类型和年份' })
+    return
+  }
+  const facets = scoreLineFacets({
+    exam,
+    year,
+    province: clampString(req.query.province, 20),
+    region: clampString(req.query.region, 10),
+    category: clampString(req.query.category, 40),
+    track: clampString(req.query.track, 60)
+  })
+  log.debug('scoreline.facets', {
+    exam,
+    scope: facets.scope,
+    year,
+    province: facets.scope === 'provincial' ? clampString(req.query.province, 20) : '',
+    region: facets.region,
+    categoryCount: facets.category.length,
+    trackCount: facets.track.length
+  })
+  res.json(facets)
 })
 
 scoreLinesRouter.get('/score-lines/coverage', (req, res) => {

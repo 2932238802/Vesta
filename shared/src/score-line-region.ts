@@ -123,6 +123,15 @@ export function provinceRegion(province: string): 'A区' | 'B区' | '' {
   return ''
 }
 
+/** 显式 A/B 区优先（`A` / `A区` / `B` / `B区`）；认不出返回空串，交给省份反查。 */
+export function normalizeRegion(value: string | null | undefined): 'A区' | 'B区' | '' {
+  const raw = String(value ?? '').trim().replace(/\s+/g, '')
+  if (!raw) return ''
+  if (/^a区$/i.test(raw) || raw === 'A') return 'A区'
+  if (/^b区$/i.test(raw) || raw === 'B') return 'B区'
+  return ''
+}
+
 export function isProvince(value: string): boolean {
   return normalizeProvince(value) !== ''
 }

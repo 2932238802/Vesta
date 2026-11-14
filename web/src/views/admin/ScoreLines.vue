@@ -26,8 +26,11 @@
       v-model="filters"
       :loading="querying"
       :can-query="Boolean(filters.province)"
+      :facets="facets"
+      :facets-loading="facetsLoading"
       @open-school="schoolOpen = true"
       @open-program="programOpen = true"
+      @dimension-change="onDimensionChange"
       @search="search"
     />
 
@@ -41,7 +44,7 @@
         <p class="require-title">请补选后再查询</p>
         <p class="quiet">
           {{ result.requires.map(requireLabel).join('、') }}
-          有多条同类分数线，系统不会自动混在一起画。
+          有多条同类分数线，系统不会自动混在一起画。在上方选择后会自动重查。
         </p>
       </div>
 
@@ -197,13 +200,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type {
   AdminCrawlQueueResponse,
   CoverageStatus,
   SchoolProgram,
   SchoolSearchItem,
+  ScoreLineFacets,
   ScoreLineQueryResult
 } from '@/api'
 import { COVERAGE_LABELS } from '@shared/score-line'
@@ -225,6 +229,8 @@ import type { ScoreLineFilterState } from './score-lines/types'
 
 const filters = ref<ScoreLineFilterState>(emptyFilters())
 const result = ref<ScoreLineQueryResult | null>(null)
+const facets = ref<ScoreLineFacets | null>(null)
+const facetsLoading = ref(false)
 const schools = ref<SchoolSearchItem[]>([])
 const querying = ref(false)
 const error = ref('')
@@ -240,6 +246,7 @@ const crawlHint = ref('')
 const toast = ref('')
 const queue = ref<AdminCrawlQueueResponse>({ running: null, queue: [] })
 let toastTimer: ReturnType<typeof setTimeout> | undefined
+let facetsSeq = 0
 
 const schoolList = computed(() =>
   filters.value.exam === 'upgrade' || !filters.value.school ? schools.value : []
@@ -269,6 +276,58 @@ function flash(message: string) {
   toastTimer = setTimeout(() => {
     toast.value = ''
   }, 2400)
+}
+
+async function loadFacets(retry = true) {
+  if (!filters.value.province) {
+    facets.value = null
+    facetsLoading.value = false
+    return
+  }
+  const seq = ++facetsSeq
+  facetsLoading.value = true
+  try {
+    const response = await api.scoreLineFacets({
+      exam: filters.value.exam,
+      year: filters.value.year,
+      province: filters.value.province,
+      category: filters.value.category || undefined,
+      track: filters.value.track || undefined
+    })
+    if (seq !== facetsSeq) return
+    facets.value = response
+    if (resetMissingDimensions() && retry) await loadFacets(false)
+  } catch {
+    if (seq === facetsSeq) facets.value = null
+  } finally {
+    if (seq === facetsSeq) facetsLoading.value = false
+  }
+}
+
+/** 级联后旧选择可能已不在候选里；清空它，避免「选了 0 条」的假选项。 */
+function resetMissingDimensions(): boolean {
+  if (!facets.value) return false
+  const patch: Partial<ScoreLineFilterState> = {}
+  if (
+    filters.value.category &&
+    !facets.value.category.some((option) => option.value === filters.value.category)
+  ) {
+    patch.category = ''
+  }
+  if (
+    filters.value.track &&
+    !facets.value.track.some((option) => option.value === filters.value.track)
+  ) {
+    patch.track = ''
+  }
+  if (Object.keys(patch).length === 0) return false
+  filters.value = { ...filters.value, ...patch }
+  return true
+}
+
+async function onDimensionChange() {
+  await loadFacets()
+  if (filters.value.province) await search()
 }
 
 async function search() {
@@ -387,17 +446,30 @@ async function loadReviewCount() {
 function onReviewed() {
   flash('已复核')
   void loadReviewCount()
+  void loadFacets()
   if (result.value) void search()
 }
 
 function onImported() {
   flash('已导入')
+  void loadFacets()
   void search()
 }
+
+watch(
+  () => `${filters.value.exam}|${filters.value.year}|${filters.value.province}`,
+  () => {
+    if (filters.value.category || filters.value.track) {
+      filters.value = { ...filters.value, category: '', track: '' }
+    }
+    void loadFacets()
+  }
+)
 
 onMounted(() => {
   void loadQueue()
   void loadReviewCount()
+  void loadFacets()
 })
 </script>
 

@@ -16,6 +16,29 @@ export interface DimensionValue {
   aliases: string[]
 }
 
+/**
+ * 查询 / facets 里代表「该维度为空」的哨兵值，不是写库值。
+ * 前端选它 = 显式只看 `category=''` / `track=''`；与「全部（不筛选）」区分。
+ */
+export const DIMENSION_UNLABELED = '__unlabeled__'
+
+/** facets 接口的候选项；count 是批次条数。 */
+export interface DimensionFacetOption {
+  value: string
+  label: string
+  count: number
+}
+
+/** facets 接口的返回结构。 */
+export interface ScoreLineFacets {
+  scope: 'national' | 'provincial'
+  year: number
+  yearFrom: number
+  region: string
+  category: DimensionFacetOption[]
+  track: DimensionFacetOption[]
+}
+
 function dim(value: string, aliases: string[] = []): DimensionValue {
   return { value, label: value, aliases }
 }
@@ -120,4 +143,18 @@ export function normalizeDimension(
     if (again) return { value: again.value, matched: true }
   }
   return { value: '', matched: false }
+}
+
+/** 展示用标签：字典内取 label，字典外保留原值；空值显示「未标注」。 */
+export function dimensionLabel(kind: DimensionKind, exam: ExamType, value: string): string {
+  if (value === DIMENSION_UNLABELED) return '未标注'
+  if (!value) return '全部'
+  const matched = tableFor(kind, exam).find((item) => item.value === value)
+  return matched?.label ?? value
+}
+
+/** 排序用：字典顺序在前，字典外值排后；「未标注」由调用方放到最后。 */
+export function dimensionSortIndex(kind: DimensionKind, exam: ExamType, value: string): number {
+  const index = tableFor(kind, exam).findIndex((item) => item.value === value)
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index
 }
