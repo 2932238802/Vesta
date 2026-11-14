@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio'
+import { normalizeDimension } from '../../../../shared/src/score-line-dimension'
 import type { Parser, ParsedBatch, ParserContext } from './types'
 import { batchFromMetrics, normalizeCell, parseScore } from './table'
 import { candidateLinks, decodeHtml, extractRedirect, pageShape } from './html-shape'
@@ -48,6 +49,46 @@ function categoryName(value: unknown): string {
 }
 
 const SCORE_LABEL = /分数线|控制线|最低控制|录取线/
+const BATCH_LABEL = /批次|计划类别|考生类别|招生类别/
+
+/** 批次列 / 行：先走维度字典，认不出保留原文（交给复核）。 */
+function dimensionValue(
+  kind: 'category' | 'track',
+  exam: ParserContext['exam'],
+  value: unknown
+): string {
+  const text = normalizeCell(value).replace(/\s+/g, '')
+  if (!text || text.length > 40) return ''
+  const normalized = normalizeDimension(kind, exam, text)
+  return normalized.matched ? normalized.value : text
+}
+
+/** 在类别行附近找「批次 / 计划类别」行；找不到返回 null。 */
+function batchRowAround(rows: string[][], index: number): string[] | null {
+  for (let cursor = Math.min(index, rows.length - 1); cursor >= 0; cursor -= 1) {
+    if (BATCH_LABEL.test(normalizeCell(rows[cursor][0]))) return rows[cursor]
+  }
+  for (let cursor = index + 1; cursor < rows.length; cursor += 1) {
+    if (BATCH_LABEL.test(normalizeCell(rows[cursor][0]))) return rows[cursor]
+  }
+  return null
+}
+
+/** 取某一列对应的批次；整行只有一个批次值时适用于所有类别。 */
+function batchForColumn(
+  row: string[] | null,
+  index: number,
+  exam: ParserContext['exam']
+): string {
+  if (!row) return ''
+  const direct = dimensionValue('category', exam, row[index])
+  if (direct) return direct
+  const values = row
+    .slice(1)
+    .map((cell) => dimensionValue('category', exam, cell))
+    .filter(Boolean)
+  return values.length === 1 ? values[0] : ''
+}
 
 function scoreOf(value: unknown): number | null {
   return parseScore(value)?.value ?? null
@@ -69,20 +110,26 @@ function categoryCells(row: string[]): CategoryRow[] {
 
 /** 转置表：上一行是类别，下一行首列是「分数线」，其余格是同一列的分数。 */
 function transposed(
-  rows: string[][]
-): { name: string; value: number }[] {
+  rows: string[][],
+  exam: ParserContext['exam']
+): { name: string; value: number; category: string }[] {
   for (let index = 0; index < rows.length - 1; index += 1) {
     const categories = categoryCells(rows[index])
     if (categories.length < 3) continue
-    const scoreRow = rows.slice(index + 1).find((row) => row.some(Boolean))
-    if (!scoreRow || !SCORE_LABEL.test(normalizeCell(scoreRow[0]))) continue
+    const scoreRow = rows
+      .slice(index + 1)
+      .find((row) => SCORE_LABEL.test(normalizeCell(row[0])))
+    if (!scoreRow) continue
+    const batchRow = batchRowAround(rows, index)
     const aligned = categories.map((category) => ({
       name: category.name,
-      value: scoreOf(scoreRow[category.index])
+      value: scoreOf(scoreRow[category.index]),
+      category: batchForColumn(batchRow, category.index, exam)
     }))
     const shifted = categories.map((category) => ({
       name: category.name,
-      value: scoreOf(scoreRow[category.index + 1])
+      value: scoreOf(scoreRow[category.index + 1]),
+      category: batchForColumn(batchRow, category.index + 1, exam)
     }))
     const values = aligned.every((item) => item.value !== null)
       ? aligned
@@ -90,15 +137,26 @@ function transposed(
         ? shifted
         : []
     if (values.length) {
-      return values.map((item) => ({ name: item.name, value: item.value as number }))
+      return values.map((item) => ({
+        name: item.name,
+        value: item.value as number,
+        category: item.category
+      }))
     }
   }
   return []
 }
 
-/** 正置表：一列连续 ≥3 个类别，另一列是分数。 */
-function upright(rows: string[][]): { name: string; value: number }[] {
+/** 正置表：一列连续 ≥3 个类别，另一列是分数；有「批次」列时一并写入 category。 */
+function upright(
+  rows: string[][],
+  exam: ParserContext['exam']
+): { name: string; value: number; category: string }[] {
   const width = rows.reduce((max, row) => Math.max(max, row.length), 0)
+  const header = rows.find((row) => row.some((cell) => BATCH_LABEL.test(normalizeCell(cell))))
+  const batchColumn = header
+    ? header.findIndex((cell) => BATCH_LABEL.test(normalizeCell(cell)))
+    : -1
   for (let nameColumn = 0; nameColumn < width; nameColumn += 1) {
     const matched = rows
       .map((row) => ({ name: categoryName(row[nameColumn]), row }))
@@ -108,10 +166,16 @@ function upright(rows: string[][]): { name: string; value: number }[] {
       if (scoreColumn === nameColumn) continue
       const values = matched.map((item) => ({
         name: item.name,
-        value: scoreOf(item.row[scoreColumn])
+        value: scoreOf(item.row[scoreColumn]),
+        category:
+          batchColumn >= 0 ? dimensionValue('category', exam, item.row[batchColumn]) : ''
       }))
       if (values.every((item) => item.value !== null)) {
-        return values.map((item) => ({ name: item.name, value: item.value as number }))
+        return values.map((item) => ({
+          name: item.name,
+          value: item.value as number,
+          category: item.category
+        }))
       }
     }
   }
@@ -126,8 +190,8 @@ export function categoryBatchesFromRows(
   const table = rows
     .map((row) => (Array.isArray(row) ? row.map((cell) => normalizeCell(cell)) : []))
     .filter((row) => row.some(Boolean))
-  const values = transposed(table)
-  const found = values.length ? values : upright(table)
+  const values = transposed(table, context.exam)
+  const found = values.length ? values : upright(table, context.exam)
   if (!found.length) return []
   return found.map((item) => {
     const batch = batchFromMetrics(
@@ -138,7 +202,7 @@ export function categoryBatchesFromRows(
     return {
       ...batch,
       track: item.name,
-      category: '',
+      category: item.category,
       title: title ? `${title} ${item.name}` : `${batch.year} ${context.sourceName} ${item.name}`,
       confidence: 0.9
     }

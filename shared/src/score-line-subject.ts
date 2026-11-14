@@ -8,6 +8,16 @@ export interface SubjectDefinition {
 
 export const subjectDefinitions: SubjectDefinition[] = [
   { code: 'total', name: '总分', aliases: ['总分', '总成绩', '总分线', '总成绩线', '合计'] },
+  {
+    code: 'single100',
+    name: '单科（满分=100分）',
+    aliases: ['单科（满分=100分）', '单科（满分=100）', '单科满分100', '单科100']
+  },
+  {
+    code: 'single150',
+    name: '单科（满分>100分）',
+    aliases: ['单科（满分>100分）', '单科（满分>100）', '单科满分超过100', '单科150']
+  },
   { code: 'politics', name: '政治', aliases: ['政治', '思想政治', '思想政治理论'] },
   { code: 'english1', name: '英语一', aliases: ['英语一', '英语1', '英语（一）'] },
   { code: 'english2', name: '英语二', aliases: ['英语二', '英语2', '英语（二）'] },

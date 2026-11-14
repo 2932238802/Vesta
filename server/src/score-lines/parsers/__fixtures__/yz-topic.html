@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head><title>近五年研考分数线及趋势图</title></head>
+<body>
+  <div class="gjx-year-list">
+    <a v-for="(item, index) in yearList" :key="index" :href="item.url" target="_blank">{{item.year}}年</a>
+  </div>
+  <script>
+    var yearList = [
+      { year: '2026', url: 'https://yz.chsi.com.cn/kyzx/kydt/202602/20260228/2293449091.html' },
+      { year: '2025', url: 'https://yz.chsi.com.cn/kyzx/kydt/202502/20250224/2293352961.html' },
+      { year: '2024', url: 'https://yz.chsi.com.cn/kyzx/kydt/202403/20240312/2293269479.html' },
+      { year: '2023', url: 'https://yz.chsi.com.cn/kyzx/kydt/202303/20230310/2265487748.html' },
+      { year: '2022', url: 'https://yz.chsi.com.cn/kyzx/kydt/202203/20220311/2172338979.html' }
+    ];
+  </script>
+</body>
+</html>

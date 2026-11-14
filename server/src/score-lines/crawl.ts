@@ -239,6 +239,8 @@ interface PageInput {
 /** 取一页 → 跟引导页 → 解析 → 落 document → 写批次；返回下一层候选链接。 */
 async function processPage(input: PageInput): Promise<string[]> {
   const { source, runId, url, context, years, stats } = input
+  const sourceParserId = source.parserId || 'html-table@1'
+  let actualParserId = sourceParserId
   let fetched: Awaited<ReturnType<typeof fetchResource>> | null = null
   try {
     fetched = await fetchResource(url)
@@ -247,12 +249,13 @@ async function processPage(input: PageInput): Promise<string[]> {
     let finalUrl = url
     let note = ''
     let result = await parseContent({
-      parserId: source.parserId || 'html-table@1',
+      parserId: sourceParserId,
       content,
       contentType: fetched.contentType,
       url: finalUrl,
       context
     })
+    actualParserId = result.parserId ?? actualParserId
 
     // 入口是「点击进入」引导页：跟 1 跳同域，仍没内容才标 entry_redirect。
     if (result.redirect && !result.batches.length) {
@@ -267,12 +270,13 @@ async function processPage(input: PageInput): Promise<string[]> {
           finalUrl = target
           note = `entry → ${target}`
           result = await parseContent({
-            parserId: source.parserId || 'html-table@1',
+            parserId: sourceParserId,
             content,
             contentType: second.contentType,
             url: finalUrl,
             context
           })
+          actualParserId = result.parserId ?? actualParserId
           if (!result.batches.length && (result.linkItems?.length ?? 0) < 3) {
             result.failure = {
               code: 'entry_redirect',
@@ -300,7 +304,7 @@ async function processPage(input: PageInput): Promise<string[]> {
       contentType: fetched.contentType,
       checksum: snapshot.checksum,
       storagePath: snapshot.storagePath,
-      parserId: source.parserId,
+      parserId: actualParserId,
       parseStatus,
       error,
       note,
@@ -321,7 +325,7 @@ async function processPage(input: PageInput): Promise<string[]> {
       contentType: fetched?.contentType ?? '',
       checksum: '',
       storagePath: '',
-      parserId: source.parserId,
+      parserId: actualParserId,
       parseStatus: 'failed',
       error: coded,
       note: '',

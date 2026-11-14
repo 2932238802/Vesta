@@ -52,6 +52,8 @@ export type ParserFailureCode =
 export interface ParserResult {
   batches: ParsedBatch[]
   issues: string[]
+  /** 实际执行的解析器；委托（如 yz-topic → national-line）时覆盖来源配置。 */
+  parserId?: string
   /** HTML 索引页里发现的候选链接，交给抓取器继续抓取。 */
   links?: string[]
   /** 候选链接的可见文字，用于判断列表页和选最新年份。 */

@@ -7,6 +7,13 @@ import {
   resolveSubject,
   validateImportPayload
 } from './score-line'
+import type { ExamType } from './score-line'
+import {
+  POSTGRAD_TRACKS,
+  UPGRADE_TRACKS,
+  normalizeDimension
+} from './score-line-dimension'
+import type { DimensionKind } from './score-line-dimension'
 import { normalizeProvince, provinceRegion, provinces } from './score-line-region'
 
 // 31 个省级地区 + A/B 区
@@ -51,6 +58,47 @@ for (const [input, expected] of subjects) {
 }
 assert.equal(resolveSubject('不存在的科目'), null)
 console.log('✓ 科目 code 归一化')
+
+// 批次 / 科类字典：按考试分表，别名归一，认不出不猜
+assert.equal(POSTGRAD_TRACKS.length, 14, '考研 14 个学科门类')
+assert.equal(UPGRADE_TRACKS.length, 13, '专升本 13 个科类')
+const dimensionCases: [DimensionKind, ExamType, string, string][] = [
+  ['category', 'postgrad', '学硕', '学硕'],
+  ['category', 'postgrad', '学术学位', '学硕'],
+  ['category', 'postgrad', '学硕类', '学硕'],
+  ['category', 'postgrad', '专业学位', '专硕'],
+  ['category', 'upgrade', '建档立卡', '建档立卡'],
+  ['category', 'upgrade', '退役大学生士兵', '退役士兵'],
+  ['category', 'upgrade', '免试生', '免试'],
+  ['track', 'upgrade', '文史类', '文史'],
+  ['track', 'upgrade', '经济管理类', '经管'],
+  ['track', 'upgrade', '教育学', '教育'],
+  ['track', 'postgrad', '工学（学硕）', '工学'],
+  ['track', 'postgrad', '医学[10]⑥', '医学'],
+  ['track', 'postgrad', '交叉学科', '交叉学科']
+]
+for (const [kind, exam, input, expected] of dimensionCases) {
+  assert.deepEqual(
+    normalizeDimension(kind, exam, input),
+    { value: expected, matched: true },
+    `${exam} ${kind}：${input} → ${expected}`
+  )
+}
+const dimensionMisses: [DimensionKind, ExamType, string][] = [
+  ['track', 'postgrad', '文史'],
+  ['track', 'upgrade', '理学'],
+  ['category', 'postgrad', '普通类'],
+  ['track', 'postgrad', '认不出的词'],
+  ['category', 'upgrade', '']
+]
+for (const [kind, exam, input] of dimensionMisses) {
+  assert.deepEqual(
+    normalizeDimension(kind, exam, input),
+    { value: '', matched: false },
+    `${exam} ${kind}：${input || '(空)'} 不应猜`
+  )
+}
+console.log('✓ 批次 / 科类字典与归一化（含考试分表、正反例）')
 
 const validBatch = {
   scope: 'program',

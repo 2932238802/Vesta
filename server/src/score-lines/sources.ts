@@ -237,7 +237,7 @@ export function seedScorelineSources(): number {
     '',
     'postgrad',
     '全国',
-    'html-table@1',
+    'yz-topic@1',
     'T0',
     24,
     1,

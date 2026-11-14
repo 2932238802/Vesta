@@ -1,9 +1,17 @@
-import type { NormalizedBatch, School } from '../../../shared/src/score-line'
+import type { ExamType, NormalizedBatch, School } from '../../../shared/src/score-line'
 import {
   normalizeImportBatch,
   resolveSubject,
   validateImportPayload
 } from '../../../shared/src/score-line'
+import {
+  POSTGRAD_CATEGORIES,
+  POSTGRAD_TRACKS,
+  UPGRADE_CATEGORIES,
+  UPGRADE_TRACKS,
+  normalizeDimension
+} from '../../../shared/src/score-line-dimension'
+import type { DimensionKind, DimensionValue } from '../../../shared/src/score-line-dimension'
 import { normalizeProvince } from '../../../shared/src/score-line-region'
 import { db } from '../db/connection'
 import type { ParsedBatch, ParserContext } from './parsers/types'
@@ -40,40 +48,80 @@ export function matchSchoolName(name: string): School | null {
   return (matched as School | undefined) ?? null
 }
 
-/** 从标题里认学硕 / 专硕 / 普通类 / 建档立卡，避免同一唯一键互相覆盖。 */
-export function inferCategory(title: string): string {
+function inferFrom(table: DimensionValue[], text: string): string {
+  let best: { value: string; length: number } | null = null
+  for (const item of table) {
+    for (const token of [item.value, item.label, ...item.aliases]) {
+      const key = token.replace(/\s+/g, '')
+      if (!key || !text.includes(key)) continue
+      if (!best || key.length > best.length) best = { value: item.value, length: key.length }
+    }
+  }
+  return best?.value ?? ''
+}
+
+function tablesFor(kind: DimensionKind, exam?: ExamType): DimensionValue[][] {
+  if (kind === 'category') {
+    return exam === 'postgrad'
+      ? [POSTGRAD_CATEGORIES]
+      : exam === 'upgrade'
+        ? [UPGRADE_CATEGORIES]
+        : [POSTGRAD_CATEGORIES, UPGRADE_CATEGORIES]
+  }
+  return exam === 'postgrad'
+    ? [POSTGRAD_TRACKS]
+    : exam === 'upgrade'
+      ? [UPGRADE_TRACKS]
+      : [POSTGRAD_TRACKS, UPGRADE_TRACKS]
+}
+
+/** 从标题里认学硕 / 专硕 / 普通类 / 建档立卡，避免同一唯一键互相覆盖；认不出留空。 */
+export function inferCategory(title: string, exam?: ExamType): string {
   const text = String(title ?? '')
-  for (const value of ['学硕', '专硕', '普通类', '建档立卡', '退役士兵', '免试']) {
-    if (text.includes(value)) return value
+  for (const table of tablesFor('category', exam)) {
+    const found = inferFrom(table, text)
+    if (found) return found
   }
   return ''
 }
 
-/** 从标题里认学科门类 / 科类；认不出留空。 */
-export function inferTrack(title: string): string {
+/** 从标题里认学科门类 / 科类；按考试分表，取最长命中，认不出留空。 */
+export function inferTrack(title: string, exam?: ExamType): string {
   const text = String(title ?? '')
-  const tracks = [
-    '哲学',
-    '经济学',
-    '法学',
-    '教育学',
-    '文学',
-    '历史学',
-    '理学',
-    '工学',
-    '农学',
-    '医学',
-    '军事学',
-    '管理学',
-    '艺术学',
-    '交叉学科',
-    '文史',
-    '理工',
-    '经管',
-    '艺术',
-    '医药'
-  ]
-  return tracks.find((track) => text.includes(track)) ?? ''
+  for (const table of tablesFor('track', exam)) {
+    const found = inferFrom(table, text)
+    if (found) return found
+  }
+  return ''
+}
+
+const DIMENSION_LABELS: Record<DimensionKind, string> = {
+  category: '批次 / 学位类型',
+  track: '科类 / 学科门类'
+}
+
+/** canonical 化维度值；认不出保留原文并记 issue（不猜）。 */
+function canonicalDimension(
+  kind: DimensionKind,
+  exam: ExamType,
+  value: string,
+  issues: string[]
+): string {
+  const text = String(value ?? '').trim()
+  if (!text) return ''
+  const normalized = normalizeDimension(kind, exam, text)
+  if (normalized.matched) return normalized.value
+  issues.push(`${DIMENSION_LABELS[kind]}认不出：${text}`)
+  return text
+}
+
+/** 人工导入 / 旧数据补写时也走同一套维度字典；认不出保留原文。 */
+export function normalizeBatchDimensions(batch: NormalizedBatch): NormalizedBatch {
+  return {
+    ...batch,
+    category: canonicalDimension('category', batch.exam, batch.category, []),
+    track: canonicalDimension('track', batch.exam, batch.track, [])
+  }
 }
 
 /** 旧数据里认不出的科目名给一个稳定 code，避免每次迁移都变。 */
@@ -140,6 +188,22 @@ export function normalizeParsedBatch(
     return { batch: null, issues }
   }
 
+  const dimensionIssues: string[] = []
+  const category = canonicalDimension(
+    'category',
+    raw.exam,
+    raw.category || inferCategory(title, raw.exam),
+    dimensionIssues
+  )
+  const track = canonicalDimension(
+    'track',
+    raw.exam,
+    raw.track || inferTrack(title, raw.exam),
+    dimensionIssues
+  )
+  const confidence = dimensionIssues.length
+    ? Math.min(raw.confidence ?? 0.7, 0.7)
+    : raw.confidence ?? 0.7
   const input = {
     scope: raw.scope,
     exam: raw.exam,
@@ -148,14 +212,14 @@ export function normalizeParsedBatch(
     region: raw.region ?? '',
     schoolId,
     programId: raw.programId ?? '',
-    category: raw.category || inferCategory(title),
-    track: raw.track || inferTrack(title),
+    category,
+    track,
     title,
     sourceName: raw.sourceName || context.sourceName,
     sourceUrl: raw.sourceUrl || context.sourceUrl,
     publishedAt: raw.publishedAt ?? '',
-    confidence: raw.confidence ?? 0.7,
-    note: issues.slice(0, 5).join('；'),
+    confidence,
+    note: [...issues, ...dimensionIssues].slice(0, 5).join('；'),
     metrics
   }
   const errors = validateImportPayload({ batches: [input] })

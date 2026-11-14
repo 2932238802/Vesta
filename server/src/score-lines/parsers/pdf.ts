@@ -1,30 +1,33 @@
 import type { Parser } from './types'
 import { batchFromMetrics, metricsFromText } from './table'
 
+/** 抽 PDF 文本层；扫描件返回空串，由调用方决定如何报错。 */
+export async function extractPdfText(content: string | Uint8Array): Promise<string> {
+  const data =
+    typeof content === 'string' ? new TextEncoder().encode(content) : new Uint8Array(content)
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  const document = await pdfjs.getDocument({
+    data,
+    useSystemFonts: true,
+    disableFontFace: true
+  }).promise
+  const pages: string[] = []
+  for (let index = 1; index <= document.numPages; index += 1) {
+    const page = await document.getPage(index)
+    const pageContent = await page.getTextContent()
+    pages.push(
+      pageContent.items.map((item) => ('str' in item ? item.str : '')).join(' ')
+    )
+  }
+  return pages.join('\n')
+}
+
 export const pdfTextParser: Parser = {
   id: 'pdf-text@1',
   async parse({ content, context }) {
-    const data =
-      typeof content === 'string' ? new TextEncoder().encode(content) : new Uint8Array(content)
     let text = ''
     try {
-      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
-      const document = await pdfjs.getDocument({
-        data,
-        useSystemFonts: true,
-        disableFontFace: true
-      }).promise
-      const pages: string[] = []
-      for (let index = 1; index <= document.numPages; index += 1) {
-        const page = await document.getPage(index)
-        const pageContent = await page.getTextContent()
-        pages.push(
-          pageContent.items
-            .map((item) => ('str' in item ? item.str : ''))
-            .join(' ')
-        )
-      }
-      text = pages.join('\n')
+      text = await extractPdfText(content)
     } catch (error) {
       return { batches: [], issues: [`PDF 解析失败：${(error as Error).message}`] }
     }

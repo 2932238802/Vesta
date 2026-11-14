@@ -4,6 +4,19 @@
 
 ## 本轮（2026-11-14）
 
+### 分数线维度字典与研招网国家线解析（2026-11-14，产品版本 v1.82）
+
+- 依据：`docs/archive/20261114/9-分数线筛选栏批次与科类无选项-根因与修复方案.md` v1.2。本轮按用户确认的范围实施 **9.1 的 1 → 2 → 3 → 5 → 8**：先立字典与归一化，再让解析 / 落库落到口径上，同时补 Content-Type 分派与研招网国家线解析；facets 接口、页面 chips、复核「修正后通过」、抓取/导出脚本不在本轮。
+- **L1 字典（`shared/src/score-line-dimension.ts`，新）**：`POSTGRAD_CATEGORIES`（学硕 / 专硕）、`UPGRADE_CATEGORIES`（普通类 / 建档立卡 / 退役士兵 / 免试）、`POSTGRAD_TRACKS`（14 学科门类）、`UPGRADE_TRACKS`（13 科类），按 `exam` 分表。`normalizeDimension(kind, exam, raw)` 顺序为「精确 → 别名 → 去尾部『类』再精确 / 别名」，去空格 / 括号 / 脚注编号；认不出返回 `{ value:'', matched:false }`，不猜。`shared/src/score-line.cases.ts` 增加 13 组正例与 5 组反例（含「文史」不能用于考研、「理学」不能用于专升本、「艺术」与「艺术学」分表）。
+- **L2a 落库归一化（`server/src/score-lines/normalize.ts`）**：`inferCategory` / `inferTrack` 改为按 `exam` 查同一份字典并取最长命中；`normalizeParsedBatch()` 在写库前 canonical 化 `category` / `track`，认不出保留原文、写入 `note` 并把 `confidence` 降到 0.7。人工导入路径（`routes/admin/score-lines-import.ts`）也调用 `normalizeBatchDimensions()`，保证两条写库通道同一口径。
+- **L2a 类别表批次维度（`parsers/category-table.ts`）**：正置表识别「批次 / 计划类别 / 考生类别」列、转置表识别同名行，按列写入 `category`；整行只有一个批次值时适用于所有列。保留原有「认不出类别就返回空、不猜」的行为。新增 3 组用例（正置批次列、转置批次行、单一批次值）。
+- **C0-1 Content-Type 分派（`parsers/index.ts`、`crawl.ts`）**：PDF → `pdf-text@1`、Excel → `xlsx@1`、JSON → `json@1`，其余用来源 `parser_id`；研招网来源（`yz-topic@1` / `national-line@1`）的 PDF 交给 `national-line@1`。`ParserResult` 新增可选 `parserId`，`crawl_documents.parser_id` 记实际执行的解析器（`yz-topic@1` 委托后记 `national-line@1`）。
+- **研招网两个解析器（9.1 第 8 项）**：`parsers/yz-topic.ts` 从专题页内联脚本 `var yearList` 抽出 2022–2026 五篇文章（链接文字不带 4 位年份，避免发现队列只留最新一年）；文章页优先取「初试成绩基本要求」公告页，没有再退回 PDF。`parsers/national-line.ts` 解析公告 HTML 表与 PDF 文本：14 学科门类 × A/B 区 ×（总分 / 单科满分=100 / 单科满分>100），多行门类（教育学 / 工学 / 管理学）取「其他学科专业」总行，PDF 文本按「其他学科专业」出现顺序补行。种子源 `src_postgrad_national` 的 `parser_id` 改为 `yz-topic@1`（URL 仍为 `lnfsx.shtml`，站点改版时幂等更新）。
+- **科目字典**：新增 `single100` / `single150` 两个科目 code（单科满分=100 / >100）；为不突破 `score-line.ts` 600 行软线，先单独提交 `refactor: 拆分分数线科目注册表（行为不变）`，把科目表移到 `shared/src/score-line-subject.ts`，原导出路径保持不变。
+- **验证**：`npm run check:score` 全绿（字典正反例、类别表批次维度、Content-Type 分派、专题页 5 年链接、文章页公告优先、国家线 HTML 28 条、国家线 PDF 文本 28 条）；`npm run typecheck` 通过。只读回归真实站点：2026 专题页抽出 5 条年度文章，2025/2026 公告表均解析出 28 条（哲学 A 类 2025 = 321/39/59、2026 = 326/41/62），2025 国家线 PDF 文本解析出 28 条且教育学 341/45/135、工学 260/34/51、管理学 333/41/62 与公告一致。`npm run verify` 全绿。
+- **未做 / 已知**：9.1 的 4（`parseStatus` 失败可见性）、6（facets 接口）、7（DimensionPicker / 页面）、9（院校名单脚本）、10（抓取导出脚本）不在本轮；筛选栏仍是自由文本输入，要等 facets + 页面层落地后才出现选项。考研表头「学硕 / 专硕」拆列（原 L2b）仍未做，国家线 `category` 暂为空。`data/` 与抓取快照未提交。
+- **提交**：待回填。
+
 ### 问卷报告模式落库：读路径不再解析问卷 JSON（2026-11-14，产品版本 v1.81）
 
 - 依据：`docs/archive/20261114/8-问卷JSON每请求重复解析-根因与修复方案.md` v1.0。根因不是解析慢，而是 `submissions` 没存「这份答卷属于 doc 还是 ai」，每个列表 / 详情 / 名单 / CSV 请求都得回读 `surveys` 全表并逐行 `JSON.parse`；成本随问卷保存次数线性增长（实测 0.072 ms / 版本 / 请求，400 版 28.6 ms / 请求）。

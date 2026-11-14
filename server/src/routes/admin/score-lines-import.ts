@@ -10,6 +10,7 @@ import { noStore } from '../../auth'
 import { db } from '../../db/connection'
 import { getBatch, saveBatch, setBatchReview } from '../../score-lines/batch-store'
 import { refreshCoverage, refreshCoverageForBatch } from '../../score-lines/coverage'
+import { normalizeBatchDimensions } from '../../score-lines/normalize'
 import { getProgram, setProgramReview, upsertProgram } from '../../score-lines/program-store'
 import { getSchool } from '../../score-lines/store'
 import { log } from '../../log'
@@ -83,7 +84,7 @@ scoreLineImportRouter.post('/score-lines/import', (req, res) => {
     return
   }
   const batches = hasBatches
-    ? (body.batches as BatchInput[]).map(normalizeImportBatch)
+    ? (body.batches as BatchInput[]).map(normalizeImportBatch).map(normalizeBatchDimensions)
     : []
   const dryRun = body.dryRun === true
   if (dryRun) {
