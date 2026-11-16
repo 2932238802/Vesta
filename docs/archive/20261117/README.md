@@ -22,4 +22,5 @@
 - **代码**：`invites` 三列（`server/src/db/schema.ts`、`migrations.ts`）；名单 GET/PATCH（`server/src/routes/admin/roster.ts`）；CSV / 列表 / 详情（`server/src/routes/admin/submissions.ts`）；首页 recent（`overview.ts`）；公开脱敏（`server/src/report-privacy.ts`、`server/src/routes/public.ts`、`shared/src/doc.ts`）；名单交互（`web/src/views/admin/submissions/*`、`Submissions.vue`）；连带展示（`Dashboard.vue`、`SubmissionDetail.vue`、`ConsultImportDialog.vue`、`useConsultImport.ts`）。
 - **验证**：临时 `DATA_DIR` 接口用例 + `npm run typecheck` / `check:size` / `build` + Playwright 走查名单、详情、首页、咨询导入、公开报告；详见 `docs/development-history.md`「本轮（2026-11-17）」。
 - **证据**：`docs/development-history.md`「本轮（2026-11-17）」；本文件与方案文档 §十三「实施记录」。
+- **提交**：`6748c9a`。
 - **部署**：新增列由启动迁移自动补，更新走 `bash update.sh`；回滚 `git revert` 本需求提交，已写入的咨询字段保留在库中。

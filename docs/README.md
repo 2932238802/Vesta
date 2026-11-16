@@ -41,7 +41,7 @@ Vesta 是一套面向大学在读学生的问卷、报告与咨询辅助系统�
 | v1.83 | 2026-11-14 | `9b6f15c` | AI 报告审校硬失败修复：scorecard 事实去封顶数字 / 入场线端点、gap 标签改「关键节点」、prompt 不再传检索词、审校分层（质量类清洗 + 放行）、落库前 `sanitizeDocContent()`、失败页不再展示模块 key |
 | v1.84 | 2026-11-14 | `—` | 分数线链路复核修复：维度严格匹配（普通高校 / 教育考试院不再误标）、`index` 只在解析器显式标记时生效、解析失败计入 run/source、覆盖看板写入 `failed` + 失败码、引导页第二跳元数据对齐、导入先归一化再查重、pending 与空 category 歧义修复 |
 | v1.85 | 2026-11-14 | `—` | 依赖版本漂移修复 S0–S1：`@types/node` 22 → 24 对齐运行时；新增离线 `check:deps`（.node-version / engines / @types 对齐）并接入 `verify`；Express / Vite / TypeScript / vue-router / xlsx 大版本仍待单独排期 |
-| v1.86 | 2026-11-17 | `—` | 学员名单咨询状态与手工优先级：`invites` 新增 `consulted / consult_result / priority`，名单新增三列（勾选在前、整行高亮、单元格保存），自动 A/B/C 下线且公开报告统一脱敏 |
+| v1.86 | 2026-11-17 | `6748c9a` | 学员名单咨询状态与手工优先级：`invites` 新增 `consulted / consult_result / priority`，名单新增三列（勾选在前、整行高亮、单元格保存），自动 A/B/C 下线且公开报告统一脱敏 |
 
 （只回填能确认 commit 的版本；`—` 表示基线之前没有单独提交。v1.77 / v1.78 因同一次提交 `2395033` 落库，commit 列相同；v1.82 含中间页索引补丁 `99a2d67`。）
 
