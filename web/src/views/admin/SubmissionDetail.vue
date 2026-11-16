@@ -31,7 +31,13 @@
         <section class="card panel score-panel">
           <header class="panel-head">
             <h2>{{ detail.reportMode === 'doc' ? '优先级' : '分数' }}</h2>
-            <span class="chip accent">{{ detail.tier }} 档</span>
+            <span
+              v-if="detail.reportMode === 'doc'"
+              class="chip"
+              :class="detail.priority ? 'accent' : ''"
+            >
+              {{ detail.priority || '未填写' }}
+            </span>
           </header>
           <div v-if="detail.reportMode !== 'doc'" class="total">
             <span class="total-value">{{ detail.total }}</span>
@@ -85,6 +91,15 @@
               <span>内部备注</span>
               <textarea v-model="form.adminNotes" class="textarea" rows="3" maxlength="2000" />
             </label>
+            <div class="contact-row">
+              <span class="contact-label">是否咨询</span>
+              <span class="contact-value">{{ detail.consulted ? '是' : '否' }}</span>
+            </div>
+            <div class="contact-row">
+              <span class="contact-label">咨询结果</span>
+              <span class="contact-value">{{ consultResultLabel(detail.consultResult) || '—' }}</span>
+            </div>
+            <p class="quiet tiny">咨询标记和优先级在学员名单里编辑。</p>
           </section>
 
           <section class="card panel">
@@ -176,6 +191,7 @@ import ScoreBar from '@/components/ScoreBar.vue'
 import { confirmAction } from '@/useConfirm'
 import { useSaveHotkey } from '@/useHotkeys'
 import { useUnsavedChanges } from '@/useUnsavedChanges'
+import { consultResultLabel } from './submissions/rosterMeta'
 
 const route = useRoute()
 const router = useRouter()

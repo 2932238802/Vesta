@@ -35,7 +35,7 @@
       :all-selected="allSelected"
       :some-selected="someSelected"
       :saving-status="savingStatus"
-      :score-column-label="scoreColumnLabel"
+      :saving-cell="savingCell"
       :has-week-filter="week !== 'all'"
       :searching="searching"
       :all-weeks-count="allWeeksCount"
@@ -49,6 +49,9 @@
       @toggle-row="toggleRow"
       @open-row="openRow"
       @change-status="changeStatus"
+      @toggle-consulted="toggleConsulted"
+      @change-consult-result="changeConsultResult"
+      @change-priority="changePriority"
       @row-menu="onRowMenu"
     />
 
@@ -88,7 +91,6 @@ const {
   someSelected,
   allWeeksCount,
   searching,
-  scoreColumnLabel,
   emptyText,
   load,
   toggleRow,
@@ -100,12 +102,16 @@ const {
 const {
   exporting,
   savingStatus,
+  savingCell,
   batchDeleting,
   removeSelected,
   openRow,
   rowMenuItems,
   onRowMenu,
   changeStatus,
+  toggleConsulted,
+  changeConsultResult,
+  changePriority,
   exportCsv
 } = actions
 

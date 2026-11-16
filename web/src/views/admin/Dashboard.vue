@@ -77,7 +77,7 @@
                   <span class="quiet tiny">{{ row.note || formatDate(row.createdAt, false) }}</span>
                 </div>
                 <div class="recent-meta">
-                  <span class="chip accent">{{ row.tier }} 档</span>
+                  <span v-if="row.priority" class="chip accent">{{ row.priority }}</span>
                   <span class="quiet tiny">{{ formatDate(row.createdAt) }}</span>
                 </div>
               </RouterLink>

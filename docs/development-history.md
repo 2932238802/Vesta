@@ -2,6 +2,19 @@
 
 本文档记录已经确认或完成的需求，帮助后续 Agent 理解“为什么这样做”。代码与文档冲突时，以 `docs/` 文档为准修正代码，并同步更新本文档（见 `agent-rules.md` 的「文档优先」）。
 
+## 本轮（2026-11-17）
+
+### 学员名单：咨询状态与手工优先级（2026-11-17，产品版本 v1.86）
+
+- 依据：`docs/archive/20261117/1-学员名单咨询状态与手工优先级-开发文档.md` v1.1。用户要求把「是否咨询」和「咨询结果」放进学员名单，并把原来的自动 A/B/C 优先级换成咨询师手写；答题者在公开报告里看不到任何档位。
+- **数据层**：`invites` 新增 `consulted INTEGER NOT NULL DEFAULT 0`、`consult_result TEXT NOT NULL DEFAULT ''`（`'' / won / following / almost / maintaining`）、`priority TEXT NOT NULL DEFAULT ''`（≤20 字）。放在邀请而不是答卷：名单一行对应一条邀请，未提交的邀请也要能标记；删掉答卷后咨询信息不该跟着消失。`server/src/db/migrations.ts#ensureInviteColumns()` 改成 additions 列表，`PRAGMA table_info` 幂等补列，重复启动不加列、不报错。`submissions.tier` 列和历史值保留、不回填到 `invites.priority`——机器判断不能被伪装成咨询师判断。
+- **接口**：`GET /api/admin/roster` 增加三字段并按 `i.consulted DESC, COALESCE(s.created_at, i.created_at) DESC, i.id` 排序，响应删除 `tier`、保留 `total`（legacy 行在优先级下面显示总分）；新增 `PATCH /api/admin/roster/:inviteId`，校验 `consulted` 布尔 / `consultResult` 白名单 / `priority` 字符串 trim 截 20 字，空 body 400、不存在 404；生效的 `consulted=false` 时服务端强制把 `consult_result` 写空，即使请求带了非空结果。写库后记 `roster.consult_updated`（`reqId` / `inviteId` / 变更字段 / `admin`）。`/submissions` 列表、详情、首页 recent 都改为返回邀请上的 `priority`，详情删顶层 `tier`；CSV 删「档位」列，新增「优先级」「是否咨询」「咨询结果」。
+- **公开报告脱敏**：删除 `shared/src/doc.ts#docPriority()` 及两处调用，doc 提交 `scores` 写 `{ total: 0, tier: '', ... }`，`buildDocReport()` 的 hero 也写空 `tier`；`ScoreResult.tier` 与 hero `tier` 类型放宽为 `Tier | ''`。`/api/report/:slug` 的已生成内容、基础版、`preview=1` 三条路径统一经过 `hidePriorityForStudent()`，公开响应 hero 的 `tier / tierLabel / tierLine` 一律为空，接口 JSON 里也查不到 A/B/C。helper 没放进 `public.ts`——该文件正卡在 611 行基线（`check:size` 只减不增），新建 `server/src/report-privacy.ts` 承载，行为和文档 §7.2 一致，已在方案文档记实施偏差。
+- **前端**：名单表头变成「学员 | 是否咨询 | 阶段 | 咨询结果 | 优先级 | 领取 / 联系 | 时间 | 操作」；勾选立即 PATCH 并重新拉名单（勾选行在前），取消勾选且已有结果先确认、取消后结果清空；未勾选时结果下拉禁用；优先级失焦或**回车**保存，去空格截 20 字；保存中只锁当前单元格（`savingCell = 邀请id:字段`）。`.consulted` 整行高亮，和批量选择的 `.picked` 叠加时用 13% 底色。详情页 doc 模式显示手工优先级、legacy 只显示总分，跟进面板增加只读的「是否咨询 / 咨询结果」；首页 recent 与咨询导入弹窗的 `tier chip` 换成 `priority`（为空不显示）；导入的来访者情况 doc 模式写「优先级：…」，legacy 继续用 `scores.tier`。
+- **偏差 / 补充口径**：文档只给了 `consulted` / `consultResult` 的错误文案，`priority` 非字符串同样返回 `400 优先级格式不对`（已补进方案文档 §5.2）；「回车保存」靠 `@keydown.enter` 触发，原生 `change` 只在失焦时触发。`scripts/file-size-baseline.json` 随 `public.ts`（611 → 610）与 `doc.ts`（1401 → 1386）下调。
+- **验证**：临时 `DATA_DIR`（不碰仓库 `data/`）起 server：旧库删掉三列后启动自动补齐、重复启动无报错；`PATCH` 四条结果、21 字优先级截断、非法结果 400、非法 consulted 400、空 body 400、不存在 invite 404、取消勾选清空结果、勾选行排序全部通过；CSV 表头与「是 / 跟进」正确；`/api/report/:slug` 与 `?preview=1` 的 hero 三字段都为空。`npm run typecheck`、`npm run check:size`、`npm run build` 通过。本地 dev server + Playwright 走查名单（表头顺序、勾选不跳详情、排序变化、确认框恢复、结果禁用、回车保存、高亮叠加）、答卷详情（doc / legacy 标题与只读咨询信息）、首页 recent、咨询导入弹窗、公开报告（无「X 档」「优先跟进」）全部通过。
+- **未做 / 已知**：历史 A/B/C 不回填，名单里显示空优先级；多管理员仍然后写覆盖（不加乐观锁）；咨询信息只记结构化日志、不建审计表；自定义报告模板若把 `{{tier}}` / `{{tierLabel}}` 写进正文，公开脱敏只覆盖 hero 块。部署需要 `bash update.sh`（新增列由启动迁移自动补），回滚 `git revert` 即可，已写入的咨询字段会留在库里。
+
 ## 本轮（2026-11-14）
 
 ### 依赖版本漂移 S0–S1：类型对齐与 check:deps 护栏（2026-11-14，产品版本 v1.85）

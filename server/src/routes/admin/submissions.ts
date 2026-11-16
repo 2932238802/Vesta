@@ -9,6 +9,8 @@ import { regenerateReport } from '../../ai/generate'
 import { clampString, decryptText, parseJson, toCsv } from '../../util'
 import {
   CONTACT_STATUSES,
+  consultResultText,
+  normalizeConsultResult,
   ROSTER_CATEGORIES,
   rosterCategoryMatches,
   rosterStage,
@@ -28,7 +30,8 @@ submissionsRouter.get('/submissions/export.csv', (req, res) => {
   const allRows = db
     .prepare(
       `SELECT s.*, i.name, i.note, i.channel,
-              i.created_at AS invite_created_at, i.opened_at, i.expires_at
+              i.created_at AS invite_created_at, i.opened_at, i.expires_at,
+              i.consulted, i.consult_result, i.priority
        FROM submissions s JOIN invites i ON i.id = s.invite_id
        WHERE (? = '' OR i.name LIKE ? OR i.note LIKE ? OR i.channel LIKE ?)
        ORDER BY s.created_at DESC`
@@ -40,6 +43,9 @@ submissionsRouter.get('/submissions/export.csv', (req, res) => {
     invite_created_at: string
     opened_at: string | null
     expires_at: string | null
+    consulted: number
+    consult_result: string
+    priority: string
   })[]
 
   const rows = allRows.filter((row) => {
@@ -72,7 +78,9 @@ submissionsRouter.get('/submissions/export.csv', (req, res) => {
       '渠道',
       '提交时间',
       '总分',
-      '档位',
+      '优先级',
+      '是否咨询',
+      '咨询结果',
       '微信号',
       '时间段',
       '联系状态',
@@ -102,7 +110,9 @@ submissionsRouter.get('/submissions/export.csv', (req, res) => {
         row.channel,
         row.created_at,
         normalizeReportMode(row.report_mode) === 'doc' ? '' : row.total,
-        row.tier,
+        row.priority,
+        row.consulted ? '是' : '否',
+        consultResultText(row.consult_result),
         row.wechat_enc ? decryptText(row.wechat_enc) : '',
         parseJson<string[]>(row.slots, []).join(' / '),
         statusLabel[row.contact_status] ?? row.contact_status,
@@ -129,8 +139,8 @@ submissionsRouter.get('/submissions', (req, res) => {
   const contactStatus = clampString(req.query.contactStatus, 20)
   const rows = db
     .prepare(
-      `SELECT s.id, s.slug, s.survey_id, s.report_mode, s.total, s.tier, s.contact_status,
-              s.created_at, s.claimed_at, s.slots, i.name, i.note, i.channel
+      `SELECT s.id, s.slug, s.survey_id, s.report_mode, s.total, s.contact_status,
+              s.created_at, s.claimed_at, s.slots, i.name, i.note, i.channel, i.priority
        FROM submissions s JOIN invites i ON i.id = s.invite_id
        WHERE (? = '' OR i.name LIKE ? OR i.note LIKE ? OR i.channel LIKE ?)
          AND (? = '' OR s.contact_status = ?)
@@ -148,7 +158,7 @@ submissionsRouter.get('/submissions', (req, res) => {
       note: row.note,
       channel: row.channel,
       total: row.total,
-      tier: row.tier,
+      priority: row.priority ?? '',
       reportMode: normalizeReportMode(row.report_mode as string),
       claimed: Boolean(row.claimed_at),
       slots: parseJson<string[]>(row.slots, []),
@@ -183,7 +193,10 @@ submissionsRouter.get('/submissions/:id', (req, res) => {
     createdAt: row.created_at,
     reportPath: `/r/${row.slug}`,
     total: row.total,
-    tier: row.tier,
+    inviteId: row.invite_id,
+    consulted: Boolean(invite?.consulted),
+    consultResult: normalizeConsultResult(invite?.consult_result),
+    priority: invite?.priority ?? '',
     reportMode: normalizeReportMode(row.report_mode),
     scores,
     answers: survey.questions.map((question) => ({

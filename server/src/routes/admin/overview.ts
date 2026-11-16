@@ -98,8 +98,8 @@ overviewRouter.get('/overview', (req, res) => {
 
   const recent = db
     .prepare(
-      `SELECT s.id, s.slug, s.total, s.tier, s.contact_status, s.created_at, s.claimed_at,
-              i.name, i.note, i.channel
+      `SELECT s.id, s.slug, s.total, s.contact_status, s.created_at, s.claimed_at,
+              i.name, i.note, i.channel, i.priority
        FROM submissions s JOIN invites i ON i.id = s.invite_id
        ORDER BY s.created_at DESC LIMIT 8`
     )
@@ -133,7 +133,7 @@ overviewRouter.get('/overview', (req, res) => {
       note: row.note,
       channel: row.channel,
       total: row.total,
-      tier: row.tier,
+      priority: row.priority ?? '',
       claimed: Boolean(row.claimed_at),
       contactStatus: row.contact_status,
       createdAt: row.created_at,

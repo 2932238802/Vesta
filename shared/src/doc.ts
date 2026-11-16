@@ -8,8 +8,7 @@ import type {
   ReportBlock,
   ReportPayload,
   ReportSearchMeta,
-  Survey,
-  Tier
+  Survey
 } from './types'
 import { computeDocScores, type DocScores } from './docScore'
 import { cleanRole, inferDirectionKey, jobDirections } from './job-map'
@@ -327,20 +326,6 @@ export function deadlineFact(survey: Survey, answers: Answers): DeadlineFact {
     distance,
     targetDate
   }
-}
-
-export function docPriority(survey: Survey, answers: Answers): 'A' | 'B' | 'C' {
-  const school = label(survey, answers, 'q1')
-  const schoolHigh = ['C9', '985', '211', '双一流', '普通一本'].includes(school)
-  const direction = index(survey, answers, 'q11')
-  const execution = index(survey, answers, 'q13')
-  const info = index(survey, answers, 'q16')
-  const how = labels(survey, answers, 'q19')
-  const hours = index(survey, answers, 'q20')
-
-  if (schoolHigh || (direction <= 1 && execution === 0 && info <= 1)) return 'A'
-  if (execution === 3 && direction === 3 && how.includes('几乎没学') && hours === 0) return 'C'
-  return 'B'
 }
 
 export function serializeDoc(survey: Survey, answers: Answers): Record<string, unknown> {
@@ -1069,7 +1054,6 @@ export function buildDocReport(
   jobs: JobCard[] = []
 ): ReportPayload {
   const { survey, answers, name, slug, createdAt, claimed } = input
-  const tier: Tier = docPriority(survey, answers)
   const scores = computeDocScores(survey, answers)
   const assets = assetsBlock(survey, answers)
   const jobMap = jobMapBlock(survey, answers, jobs)
@@ -1080,8 +1064,9 @@ export function buildDocReport(
       eyebrow: '我帮你看看现在在哪儿',
       title: survey.title,
       summary: '',
-      tier,
-      // 分层 A/B/C 只给顾问看，报告里不显示档位和分数。
+      // 自动 A/B/C 已下线，优先级由咨询师手工维护，报告里不出现任何档位。
+      tier: '',
+      // 分层只给顾问看，报告里不显示档位和分数。
       tierLabel: '',
       tierLine: '',
       total: null

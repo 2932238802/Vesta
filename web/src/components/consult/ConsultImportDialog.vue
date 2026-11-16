@@ -43,7 +43,7 @@
             </span>
           </span>
           <span class="import-choice-side">
-            <span class="chip accent">{{ item.tier }} 档</span>
+            <span v-if="item.priority" class="chip accent">{{ item.priority }}</span>
             <span class="quiet tiny">{{ importingId === item.id ? '正在导入' : '导入' }}</span>
           </span>
         </button>

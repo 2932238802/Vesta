@@ -57,7 +57,11 @@ export function useConsultImport(options: ConsultImportOptions) {
     const lines: string[] = []
     if (detail.note) lines.push(`备注：${detail.note}`)
     if (detail.channel) lines.push(`渠道：${detail.channel}`)
-    lines.push(`问卷结果：${detail.total} 分（${detail.tier} 档）`)
+    if (detail.reportMode === 'doc') {
+      if (detail.priority) lines.push(`优先级：${detail.priority}`)
+    } else {
+      lines.push(`问卷结果：${detail.total} 分（${detail.scores.tier} 档）`)
+    }
 
     for (const group of detail.groups) {
       const answers = detail.answers.filter((answer) => answer.group === group.title && answer.value)

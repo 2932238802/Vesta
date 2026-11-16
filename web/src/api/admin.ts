@@ -4,6 +4,7 @@ import type {
   AdminRosterWeek,
   AdminSubmissionDetail,
   AdminSubmissionSummary,
+  ConsultResult,
   Overview
 } from './types'
 import type {
@@ -267,6 +268,16 @@ export const adminApi = {
       })}`,
       { auth: true }
     )
+  },
+  patchRoster(
+    inviteId: string,
+    body: { consulted?: boolean; consultResult?: ConsultResult | ''; priority?: string }
+  ) {
+    return request<{ ok: true }>(`/api/admin/roster/${inviteId}`, {
+      method: 'PATCH',
+      body,
+      auth: true
+    })
   },
   submission(id: string) {
     return request<AdminSubmissionDetail>(`/api/admin/submissions/${id}`, { auth: true })

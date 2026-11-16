@@ -52,6 +52,33 @@ export interface InviteRow {
   opened_at: string | null
   submitted_at: string | null
   expires_at: string | null
+  consulted: number
+  consult_result: string
+  priority: string
+}
+
+/** 咨询结果四选一；空串表示还没选。 */
+export type ConsultResult = 'won' | 'following' | 'almost' | 'maintaining'
+
+export const CONSULT_RESULTS = new Set<string>(['won', 'following', 'almost', 'maintaining'])
+
+/** 历史脏值一律按未选择处理，避免把非法值透给前端。 */
+export function normalizeConsultResult(value: unknown): ConsultResult | '' {
+  return typeof value === 'string' && CONSULT_RESULTS.has(value)
+    ? (value as ConsultResult)
+    : ''
+}
+
+export const CONSULT_RESULT_LABELS: Record<ConsultResult, string> = {
+  won: '已成交',
+  following: '跟进',
+  almost: '快成了',
+  maintaining: '维护中'
+}
+
+export function consultResultText(value: unknown): string {
+  const result = normalizeConsultResult(value)
+  return result ? CONSULT_RESULT_LABELS[result] : ''
 }
 
 export interface SubmissionRow {
@@ -96,7 +123,9 @@ export interface RosterRow {
   report_mode: string | null
   slug: string | null
   total: number | null
-  tier: string | null
+  consulted: number
+  consult_result: string
+  priority: string
   claimed_at: string | null
   slots: string | null
   contact_status: string | null

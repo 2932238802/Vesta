@@ -24,7 +24,11 @@ export function initSchema(): void {
     created_at TEXT NOT NULL,
     opened_at TEXT,
     submitted_at TEXT,
-    expires_at TEXT
+    expires_at TEXT,
+    -- 咨询师手工维护：是否已咨询 / 咨询结果分类 / 自由优先级（≤20 字）。
+    consulted INTEGER NOT NULL DEFAULT 0,
+    consult_result TEXT NOT NULL DEFAULT '',
+    priority TEXT NOT NULL DEFAULT ''
   );
   CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token);
   CREATE INDEX IF NOT EXISTS idx_invites_created ON invites(created_at DESC);

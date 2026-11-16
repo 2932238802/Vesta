@@ -190,7 +190,7 @@ export interface Overview {
     note: string
     channel: string
     total: number
-    tier: string
+    priority: string
     claimed: boolean
     contactStatus: string
     createdAt: string
@@ -204,7 +204,7 @@ export interface AdminSubmissionSummary {
   note: string
   channel: string
   total: number
-  tier: string
+  priority: string
   reportMode: 'doc' | 'ai'
   claimed: boolean
   slots: string[]
@@ -212,6 +212,9 @@ export interface AdminSubmissionSummary {
   createdAt: string
   reportSlug: string
 }
+
+/** 咨询结果四选一；'' 表示还没选。 */
+export type ConsultResult = 'won' | 'following' | 'almost' | 'maintaining'
 
 export type AdminRosterStage =
   | 'pending'
@@ -239,7 +242,10 @@ export interface AdminRosterRow {
   submittedAt: string | null
   expiresAt: string | null
   total: number | null
-  tier: string | null
+  consulted: boolean
+  consultResult: ConsultResult | ''
+  /** 咨询师手写的优先级，≤20 字；空串表示未填写。 */
+  priority: string
   reportMode: 'doc' | 'ai' | null
   claimed: boolean
   slots: string[]
@@ -274,7 +280,10 @@ export interface AdminSubmissionDetail {
   createdAt: string
   reportPath: string
   total: number
-  tier: string
+  inviteId: string
+  consulted: boolean
+  consultResult: ConsultResult | ''
+  priority: string
   reportMode: 'doc' | 'ai'
   scores: {
     total: number

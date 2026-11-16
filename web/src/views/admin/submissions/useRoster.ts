@@ -2,7 +2,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { currentCycleKey } from '@shared/cycle'
 import { api, type AdminRosterRow, type AdminRosterWeek } from '@/api'
-import { rosterEmptyText, rosterScoreLabel, TAB_KEYS } from './rosterMeta'
+import { rosterEmptyText, TAB_KEYS } from './rosterMeta'
 
 export function useRoster() {
   const route = useRoute()
@@ -65,7 +65,6 @@ export function useRoster() {
   const isCurrentWeek = computed(
     () => week.value !== 'all' && week.value === currentWeek.value
   )
-  const scoreColumnLabel = computed(() => rosterScoreLabel(roster.value))
   const emptyText = computed(() =>
     rosterEmptyText({
       category: category.value,
@@ -166,7 +165,6 @@ export function useRoster() {
     searching,
     weekLabel,
     isCurrentWeek,
-    scoreColumnLabel,
     emptyText,
     countOf,
     load,

@@ -1,4 +1,4 @@
-import type { AdminRosterRow, AdminRosterStage } from '@/api'
+import type { AdminRosterStage, ConsultResult } from '@/api'
 
 export const ROSTER_TABS = [
   { key: '', label: '全部' },
@@ -53,13 +53,24 @@ export async function writeClipboard(text: string): Promise<boolean> {
   }
 }
 
-/** doc 模式没有数字总分，只展示 A/B/C 优先级；legacy 问卷仍显示真实分数。 */
-export function rosterScoreLabel(roster: AdminRosterRow[]): string {
-  const submitted = roster.filter((row) => row.submissionId)
-  const hasDoc = submitted.some((row) => row.reportMode === 'doc')
-  const hasLegacy = submitted.some((row) => row.reportMode !== 'doc')
-  if (hasDoc && hasLegacy) return '优先级 / 分数'
-  return hasDoc ? '优先级' : '分数'
+export const CONSULT_RESULT_OPTIONS: { value: ConsultResult | ''; label: string }[] = [
+  { value: '', label: '未选择' },
+  { value: 'won', label: '已成交' },
+  { value: 'following', label: '跟进' },
+  { value: 'almost', label: '快成了' },
+  { value: 'maintaining', label: '维护中' }
+]
+
+const CONSULT_RESULT_LABELS: Record<ConsultResult, string> = {
+  won: '已成交',
+  following: '跟进',
+  almost: '快成了',
+  maintaining: '维护中'
+}
+
+/** 空值 / 未知值都返回空串，不把历史脏值带进页面。 */
+export function consultResultLabel(value: string): string {
+  return CONSULT_RESULT_LABELS[value as ConsultResult] ?? ''
 }
 
 interface EmptyTextOptions {

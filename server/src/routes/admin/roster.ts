@@ -2,9 +2,16 @@ import { Router } from 'express'
 import { currentCycleKey, cycleLabel, cycleRange, cycleStartKey } from '../../../../shared/src/cycle'
 import { noStore } from '../../auth'
 import { db, normalizeReportMode } from '../../db'
+import { log } from '../../log'
 import { clampString, parseJson } from '../../util'
-import { ROSTER_CATEGORIES, rosterCategoryMatches, rosterStage } from './shared'
-import type { RosterRow } from './shared'
+import {
+  CONSULT_RESULTS,
+  normalizeConsultResult,
+  ROSTER_CATEGORIES,
+  rosterCategoryMatches,
+  rosterStage
+} from './shared'
+import type { InviteRow, RosterRow } from './shared'
 
 export const rosterRouter = Router()
 
@@ -22,11 +29,13 @@ rosterRouter.get('/roster', (req, res) => {
     .prepare(
       `SELECT i.id AS invite_id, i.token, i.name, i.note, i.channel,
               i.created_at AS invite_created_at, i.opened_at, i.submitted_at, i.expires_at,
-              s.id AS submission_id, s.survey_id, s.report_mode, s.slug, s.total, s.tier,
+              i.consulted, i.consult_result, i.priority,
+              s.id AS submission_id, s.survey_id, s.report_mode, s.slug, s.total,
               s.claimed_at, s.slots, s.contact_status, s.created_at AS submission_created_at
        FROM invites i
        LEFT JOIN submissions s ON s.invite_id = i.id
-       ORDER BY COALESCE(s.created_at, i.created_at) DESC LIMIT 1000`
+       ORDER BY i.consulted DESC, COALESCE(s.created_at, i.created_at) DESC, i.id
+       LIMIT 1000`
     )
     .all() as unknown as RosterRow[]
 
@@ -109,7 +118,9 @@ rosterRouter.get('/roster', (req, res) => {
       submittedAt: row.submitted_at ?? row.submission_created_at,
       expiresAt: row.expires_at,
       total: row.total,
-      tier: row.tier,
+      consulted: Boolean(row.consulted),
+      consultResult: normalizeConsultResult(row.consult_result),
+      priority: row.priority ?? '',
       reportMode: row.submission_id ? normalizeReportMode(row.report_mode) : null,
       claimed: Boolean(row.claimed_at),
       slots: parseJson<string[]>(row.slots, []),
@@ -120,6 +131,88 @@ rosterRouter.get('/roster', (req, res) => {
     }))
 
   res.json({ roster, counts, weeks, currentWeek })
+})
+
+/**
+ * 名单里的咨询标记 / 咨询结果 / 手工优先级都挂在邀请上：未提交的邀请也能改，
+ * 删掉答卷后咨询信息不会跟着消失。
+ */
+rosterRouter.patch('/roster/:inviteId', (req, res) => {
+  noStore(res)
+  const body = req.body ?? {}
+  const hasConsulted = 'consulted' in body
+  const hasResult = 'consultResult' in body
+  const hasPriority = 'priority' in body
+  const consultedInput: unknown = body.consulted
+  const resultInput: unknown = body.consultResult
+  const priorityInput: unknown = body.priority
+  if (!hasConsulted && !hasResult && !hasPriority) {
+    res.status(400).json({ error: '没有需要更新的内容' })
+    return
+  }
+  if (hasConsulted && typeof consultedInput !== 'boolean') {
+    res.status(400).json({ error: '咨询状态格式不对' })
+    return
+  }
+  if (hasResult && resultInput !== '' && !CONSULT_RESULTS.has(resultInput as string)) {
+    res.status(400).json({ error: '咨询结果不在允许范围' })
+    return
+  }
+  if (hasPriority && typeof priorityInput !== 'string') {
+    res.status(400).json({ error: '优先级格式不对' })
+    return
+  }
+
+  const inviteId = String(req.params.inviteId)
+  const row = db
+    .prepare('SELECT id, consulted, consult_result, priority FROM invites WHERE id = ?')
+    .get(inviteId) as Pick<InviteRow, 'id' | 'consulted' | 'consult_result' | 'priority'> | undefined
+  if (!row) {
+    res.status(404).json({ error: '记录不存在' })
+    return
+  }
+
+  // 取消咨询时服务端强制清空结果，即使请求里带了非空结果。
+  const consulted = hasConsulted ? (consultedInput as boolean) : Boolean(row.consulted)
+  const nextResult = consulted
+    ? hasResult
+      ? (resultInput as string)
+      : normalizeConsultResult(row.consult_result)
+    : ''
+  const nextPriority = hasPriority
+    ? (priorityInput as string).trim().slice(0, 20)
+    : row.priority
+
+  const updates: string[] = []
+  const values: (string | number)[] = []
+  const changed: string[] = []
+  if (hasConsulted && consulted !== Boolean(row.consulted)) {
+    updates.push('consulted = ?')
+    values.push(consulted ? 1 : 0)
+    changed.push('consulted')
+  }
+  if (nextResult !== normalizeConsultResult(row.consult_result)) {
+    updates.push('consult_result = ?')
+    values.push(nextResult)
+    changed.push('consult_result')
+  }
+  if (nextPriority !== row.priority) {
+    updates.push('priority = ?')
+    values.push(nextPriority)
+    changed.push('priority')
+  }
+
+  if (updates.length > 0) {
+    values.push(inviteId)
+    db.prepare(`UPDATE invites SET ${updates.join(', ')} WHERE id = ?`).run(...values)
+    log.info('roster.consult_updated', {
+      reqId: res.locals.reqId,
+      inviteId,
+      changed: changed.join(','),
+      admin: res.locals.admin
+    })
+  }
+  res.json({ ok: true })
 })
 
 rosterRouter.post('/roster/batch-delete', (req, res) => {

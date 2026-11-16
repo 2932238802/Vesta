@@ -247,7 +247,8 @@ export interface DimScore {
 
 export interface ScoreResult {
   total: number
-  tier: Tier
+  /** doc 模式不再计算 A/B/C，写空串；legacy 计分仍给档位。 */
+  tier: Tier | ''
   dimensions: DimScore[]
   detail: Record<string, number | null>
 }
@@ -258,7 +259,8 @@ export type ReportBlock =
       eyebrow: string
       title: string
       summary: string
-      tier: Tier
+      /** 面向学生的报告不展示档位，doc 模式写空串。 */
+      tier: Tier | ''
       tierLabel: string
       tierLine: string
       total: number | null

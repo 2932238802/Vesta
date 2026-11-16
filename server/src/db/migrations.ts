@@ -22,9 +22,17 @@ function ensureInviteColumns(): void {
       (column) => column.name
     )
   )
-  if (!columns.has('group_id')) {
-    // 历史数据：界面已改为按期次自动分组，这一列只保留存量，不再读写。
-    db.exec('ALTER TABLE invites ADD COLUMN group_id TEXT')
+  const additions: [string, string][] = [
+    // 历史数据：界面已改为按期次自动分组，group_id 只保留存量，不再读写。
+    ['group_id', 'TEXT'],
+    ['consulted', 'INTEGER NOT NULL DEFAULT 0'],
+    ['consult_result', "TEXT NOT NULL DEFAULT ''"],
+    ['priority', "TEXT NOT NULL DEFAULT ''"]
+  ]
+  for (const [name, definition] of additions) {
+    if (!columns.has(name)) {
+      db.exec(`ALTER TABLE invites ADD COLUMN ${name} ${definition}`)
+    }
   }
 }
 

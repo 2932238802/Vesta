@@ -153,7 +153,7 @@
 }
 /* 窄屏时让表格横向滚动，而不是把姓名 / 时间列挤成竖排。 */
 .submissions-page .roster-table {
-  min-width: 720px;
+  min-width: 920px;
 }
 
 @media (min-width: 901px) {
@@ -198,6 +198,34 @@
   font-size: 11.5px;
   padding: 0 8px;
 }
+.submissions-page .consult-col {
+  width: 74px;
+  text-align: center;
+}
+.submissions-page .consult-check {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.submissions-page .result-col,
+.submissions-page .priority-col {
+  width: 96px;
+}
+.submissions-page .result-select,
+.submissions-page .priority-input {
+  width: 96px;
+  height: 32px;
+  font-size: 11.5px;
+  padding: 0 8px;
+}
+.submissions-page .priority-input {
+  font-size: 12px;
+}
+.submissions-page .priority-legacy-total {
+  margin-top: 2px;
+  font-size: 11px;
+}
 .submissions-page .date-stack {
   display: grid;
   gap: 2px;
@@ -237,6 +265,13 @@
 }
 .submissions-page .roster-table tbody tr.picked td {
   background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+/* 已咨询整行高亮；和批量选择叠加时用更深底色，两种状态都看得出来。 */
+.submissions-page .roster-table tbody tr.consulted td {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.submissions-page .roster-table tbody tr.consulted.picked td {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
 }
 .submissions-page .roster-table tbody tr td {
   transition: background 0.15s ease;

@@ -11,7 +11,7 @@ import type {
 import { computeScores } from '../../../shared/src/scoring'
 import { buildReport } from '../../../shared/src/report'
 import { buildAiReport } from '../../../shared/src/ai'
-import { buildDocReportWithAi, docPriority } from '../../../shared/src/doc'
+import { buildDocReportWithAi } from '../../../shared/src/doc'
 import { validateAnswers } from '../../../shared/src/validate'
 import { db, getActiveSurvey, getSurvey, getTemplate, now, recordEvent, surveyReportMode } from '../db'
 import {
@@ -26,6 +26,7 @@ import { readDocContent } from '../ai/doc-generate'
 import { noStore } from '../auth'
 import { readDeployInfo } from '../deploy-info'
 import { log } from '../log'
+import { hidePriorityForStudent } from '../report-privacy'
 import {
   asyncRoute,
   encryptText,
@@ -196,11 +197,10 @@ publicRouter.post(
     }
 
     const answers = validation.answers as Answers
-    // doc 模式没有数字总分：只写优先级 A/B/C，total 固定 0。
-    // 不再把 A/B/C 映射成 82/60/25 冒充测评分数，后台按 reportMode 只展示优先级。
+    // doc 模式没有数字总分：total 固定 0、tier 空串（自动 A/B/C 已下线，优先级改为手工填写）。
     const scores: ScoreResult =
       survey.reportMode === 'doc'
-        ? { total: 0, tier: docPriority(survey, answers), dimensions: [], detail: {} }
+        ? { total: 0, tier: '', dimensions: [], detail: {} }
         : computeScores(survey, answers)
 
     const timingInput = (req.body?.timing ?? {}) as Record<string, unknown>
@@ -293,9 +293,8 @@ publicRouter.get(
       const storedDoc = readDocContent(submission.ai_report)
       if (submission.ai_status === 'ready' && storedDoc) {
         const aiMeta = parseJson<{ search?: ReportSearchMeta }>(submission.ai_meta, {})
-        const response: ReportResponse = {
-          status: 'ready',
-          report: buildDocReportWithAi({
+        const report = hidePriorityForStudent(
+          buildDocReportWithAi({
             survey,
             answers,
             name,
@@ -305,9 +304,9 @@ publicRouter.get(
             content: storedDoc.content,
             jobs: storedDoc.jobs,
             search: storedDoc.search ?? aiMeta.search
-          }),
-          name
-        }
+          })
+        )
+        const response: ReportResponse = { status: 'ready', report, name }
         res.json(response)
         return
       }
@@ -399,7 +398,7 @@ publicRouter.get(
 
     if (submission.ai_status === 'ready' && storedPayload) {
       recordView()
-      const response: ReportResponse = { status: 'ready', report: storedPayload, name }
+      const response: ReportResponse = { status: 'ready', report: hidePriorityForStudent(storedPayload), name }
       res.json(response)
       return
     }
@@ -437,7 +436,7 @@ publicRouter.get(
       if (storedPayload) {
         const response: ReportResponse = {
           status: 'failed',
-          report: storedPayload,
+          report: hidePriorityForStudent(storedPayload),
           name,
           notice: '本次更新没有成功，当前仍显示上一版报告。'
         }
@@ -446,7 +445,7 @@ publicRouter.get(
       }
       const response: ReportResponse = {
         status: 'failed',
-        report: buildFallback(),
+        report: hidePriorityForStudent(buildFallback()),
         name,
         error:
           status === 'failed'
@@ -461,7 +460,7 @@ publicRouter.get(
       recordView()
       const response: ReportResponse = {
         status: status === 'running' ? 'running' : 'pending',
-        report: storedPayload,
+        report: hidePriorityForStudent(storedPayload),
         name,
         notice: 'AI 深度版正在更新，当前先显示上一版，完成后会自动替换。'
       }
@@ -473,7 +472,7 @@ publicRouter.get(
       recordView()
       const response: ReportResponse = {
         status: status === 'running' ? 'running' : 'pending',
-        report: buildFallback(),
+        report: hidePriorityForStudent(buildFallback()),
         name,
         notice: 'AI 深度版还在生成，当前先显示基础版，完成后会自动替换。'
       }

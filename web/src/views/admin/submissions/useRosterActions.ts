@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { api, type AdminRosterRow } from '@/api'
+import { api, type AdminRosterRow, type ConsultResult } from '@/api'
 import type { RowMenuItem } from '@/components/row-menu'
 import { confirmAction } from '@/useConfirm'
 import { inviteUrl, writeClipboard } from './rosterMeta'
@@ -12,6 +12,8 @@ export function useRosterActions(state: RosterState) {
 
   const exporting = ref(false)
   const savingStatus = ref('')
+  // 正在保存的单元格（`邀请id:字段`），只锁当前行控件，避免连点。
+  const savingCell = ref('')
   const deletingId = ref('')
   const deletingInviteId = ref('')
   const batchDeleting = ref(false)
@@ -185,6 +187,82 @@ export function useRosterActions(state: RosterState) {
     }
   }
 
+  async function toggleConsulted(row: AdminRosterRow, event: Event) {
+    const target = event.target as HTMLInputElement
+    const next = target.checked
+    const previousResult = row.consultResult
+    if (!next && previousResult) {
+      const ok = await confirmAction({
+        title: '取消咨询标记',
+        message: '取消后咨询结果会清空，确定吗？',
+        confirmText: '取消标记',
+        danger: true
+      })
+      if (!ok) {
+        target.checked = true
+        return
+      }
+    }
+
+    savingCell.value = `${row.id}:consulted`
+    row.consulted = next
+    if (!next) row.consultResult = ''
+    try {
+      await api.patchRoster(row.inviteId, { consulted: next })
+      await load()
+      flash(next ? '已标记咨询' : '已取消咨询')
+    } catch (err) {
+      target.checked = !next
+      row.consulted = !next
+      row.consultResult = previousResult
+      flash(err instanceof Error ? err.message : '更新失败')
+      await load()
+    } finally {
+      savingCell.value = ''
+    }
+  }
+
+  async function changeConsultResult(row: AdminRosterRow, event: Event) {
+    const target = event.target as HTMLSelectElement
+    const value = target.value as ConsultResult | ''
+    const previous = row.consultResult
+    if (value === previous) return
+
+    savingCell.value = `${row.id}:consultResult`
+    row.consultResult = value
+    try {
+      await api.patchRoster(row.inviteId, { consultResult: value })
+      flash('咨询结果已更新')
+    } catch (err) {
+      row.consultResult = previous
+      target.value = previous
+      flash(err instanceof Error ? err.message : '更新失败')
+    } finally {
+      savingCell.value = ''
+    }
+  }
+
+  async function changePriority(row: AdminRosterRow, event: Event) {
+    const target = event.target as HTMLInputElement
+    const value = target.value.trim().slice(0, 20)
+    target.value = value
+    const previous = row.priority
+    if (value === previous) return
+
+    savingCell.value = `${row.id}:priority`
+    row.priority = value
+    try {
+      await api.patchRoster(row.inviteId, { priority: value })
+      flash('优先级已更新')
+    } catch (err) {
+      row.priority = previous
+      target.value = previous
+      flash(err instanceof Error ? err.message : '更新失败')
+    } finally {
+      savingCell.value = ''
+    }
+  }
+
   async function exportCsv() {
     exporting.value = true
     try {
@@ -211,6 +289,7 @@ export function useRosterActions(state: RosterState) {
   return {
     exporting,
     savingStatus,
+    savingCell,
     deletingId,
     deletingInviteId,
     batchDeleting,
@@ -224,6 +303,9 @@ export function useRosterActions(state: RosterState) {
     removeSubmission,
     rotate,
     changeStatus,
+    toggleConsulted,
+    changeConsultResult,
+    changePriority,
     exportCsv
   }
 }
