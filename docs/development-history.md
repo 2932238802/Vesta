@@ -4,6 +4,13 @@
 
 ## 本轮（2026-11-17）
 
+### 学员名单：咨询结果三选一（2026-11-17，产品版本 v1.87）
+
+- 依据：`docs/archive/20261117/1-学员名单咨询状态与手工优先级-开发文档.md` v1.2 §十四。用户确认咨询结果只保留三个：`已成交`、`长期维护`、`快成了`，原 `跟进` 下线，`维护中` 改称 `长期维护`。
+- **口径**：`ConsultResult` 收窄为 `won / almost / maintaining`，服务端白名单与前端选项同步；`consult_result` 列结构与 key 不变，旧值 `following` 不改写库，`normalizeConsultResult()` 读取时按未选择处理，提交 `following` 返回 `400 咨询结果不在允许范围`。
+- **改动面**：`server/src/routes/admin/shared.ts`（类型 / `CONSULT_RESULTS` / 文案）、`web/src/api/types.ts`、`web/src/views/admin/submissions/rosterMeta.ts`（选项与 `consultResultLabel`）。CSV、详情、首页复用同一套映射，无单独改动。
+- **验证**：临时 `DATA_DIR` 接口用例覆盖三个合法值（200）与 `following`（400）；`npm run verify` 全绿。
+
 ### 学员名单：咨询状态与手工优先级（2026-11-17，产品版本 v1.86）
 
 - 依据：`docs/archive/20261117/1-学员名单咨询状态与手工优先级-开发文档.md` v1.1。用户要求把「是否咨询」和「咨询结果」放进学员名单，并把原来的自动 A/B/C 优先级换成咨询师手写；答题者在公开报告里看不到任何档位。

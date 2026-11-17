@@ -57,10 +57,10 @@ export interface InviteRow {
   priority: string
 }
 
-/** 咨询结果四选一；空串表示还没选。 */
-export type ConsultResult = 'won' | 'following' | 'almost' | 'maintaining'
+/** 咨询结果三选一；空串表示还没选。 */
+export type ConsultResult = 'won' | 'almost' | 'maintaining'
 
-export const CONSULT_RESULTS = new Set<string>(['won', 'following', 'almost', 'maintaining'])
+export const CONSULT_RESULTS = new Set<string>(['won', 'almost', 'maintaining'])
 
 /** 历史脏值一律按未选择处理，避免把非法值透给前端。 */
 export function normalizeConsultResult(value: unknown): ConsultResult | '' {
@@ -71,9 +71,8 @@ export function normalizeConsultResult(value: unknown): ConsultResult | '' {
 
 export const CONSULT_RESULT_LABELS: Record<ConsultResult, string> = {
   won: '已成交',
-  following: '跟进',
-  almost: '快成了',
-  maintaining: '维护中'
+  maintaining: '长期维护',
+  almost: '快成了'
 }
 
 export function consultResultText(value: unknown): string {

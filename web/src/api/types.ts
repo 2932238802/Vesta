@@ -213,8 +213,8 @@ export interface AdminSubmissionSummary {
   reportSlug: string
 }
 
-/** 咨询结果四选一；'' 表示还没选。 */
-export type ConsultResult = 'won' | 'following' | 'almost' | 'maintaining'
+/** 咨询结果三选一；'' 表示还没选。 */
+export type ConsultResult = 'won' | 'almost' | 'maintaining'
 
 export type AdminRosterStage =
   | 'pending'

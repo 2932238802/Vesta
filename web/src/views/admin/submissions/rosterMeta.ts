@@ -56,16 +56,14 @@ export async function writeClipboard(text: string): Promise<boolean> {
 export const CONSULT_RESULT_OPTIONS: { value: ConsultResult | ''; label: string }[] = [
   { value: '', label: '未选择' },
   { value: 'won', label: '已成交' },
-  { value: 'following', label: '跟进' },
-  { value: 'almost', label: '快成了' },
-  { value: 'maintaining', label: '维护中' }
+  { value: 'maintaining', label: '长期维护' },
+  { value: 'almost', label: '快成了' }
 ]
 
 const CONSULT_RESULT_LABELS: Record<ConsultResult, string> = {
   won: '已成交',
-  following: '跟进',
-  almost: '快成了',
-  maintaining: '维护中'
+  maintaining: '长期维护',
+  almost: '快成了'
 }
 
 /** 空值 / 未知值都返回空串，不把历史脏值带进页面。 */
