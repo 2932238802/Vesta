@@ -1,0 +1,178 @@
+{
+  "schema": "vesta-docs-manifest/v1",
+  "product": "Vesta",
+  "version": "1.85.0",
+  "commit": "884ef39",
+  "generated_at": "2026-11-16",
+  "date": "2026-11-16",
+  "locale": "zh-CN",
+  "mode": "full",
+  "root": "/home/losangelous/LosAngelous/Vesta",
+  "out": "docs/261116",
+  "docs": [
+    {
+      "file": "00-文档索引.md",
+      "doc_id": "IDX",
+      "title": "文档索引",
+      "order": 0,
+      "lines": 103,
+      "sha256": "f0bbb9e4315917150bfc0b52e524d8c37bd5e2325a5b9675b6360dc97982cd88",
+      "covers": ["index", "evidence"]
+    },
+    {
+      "file": "01-项目概述.md",
+      "doc_id": "OVR",
+      "title": "项目概述",
+      "order": 1,
+      "lines": 195,
+      "sha256": "d9c1c329298e99a81a50a8bb38acc929f3c00b619eff54ae3010b4c5ae024f9a",
+      "covers": [
+        "positioning",
+        "form",
+        "stack",
+        "runtime_architecture",
+        "module_map",
+        "core_flows",
+        "data_state",
+        "build_run",
+        "quality",
+        "maturity",
+        "known_issues_risks",
+        "glossary"
+      ]
+    },
+    {
+      "file": "02-开发环境搭建.md",
+      "doc_id": "ENV",
+      "title": "开发环境搭建",
+      "order": 2,
+      "lines": 206,
+      "sha256": "6237f74252c3c88ae9d4494402dd1a81eb503ba5210f30607a267ea184932cac",
+      "covers": ["stack", "build_run", "engineering_standards"]
+    },
+    {
+      "file": "03-系统架构.md",
+      "doc_id": "ARC",
+      "title": "系统架构",
+      "order": 3,
+      "lines": 206,
+      "sha256": "d138fcd1ebd74de296274168da00fcc80a264594d1b50469bde1ae7723ec9821",
+      "covers": ["runtime_architecture", "module_map", "core_flows"]
+    },
+    {
+      "file": "04-核心功能.md",
+      "doc_id": "FUN",
+      "title": "核心功能",
+      "order": 4,
+      "lines": 266,
+      "sha256": "e15b886faa00e70fee8ee4da4b8f89f25d18aabb4b00423ccb931a5e4d6545ba",
+      "covers": ["core_flows", "data_state", "acceptance"]
+    },
+    {
+      "file": "05-对外契约.md",
+      "doc_id": "API",
+      "title": "对外契约",
+      "order": 5,
+      "lines": 227,
+      "sha256": "e35d95f2eab0446a28245fca4510ebcf490551ec1e7593030a92f551f6fdd48f",
+      "covers": ["core_flows", "contracts"]
+    },
+    {
+      "file": "06-数据模型.md",
+      "doc_id": "DAT",
+      "title": "数据模型",
+      "order": 6,
+      "lines": 230,
+      "sha256": "b47c73b9cd00183ce2a8946fdb73ee5672dd6e22891bef92c27176a661c2fab6",
+      "covers": ["data_state", "migrations", "retention"]
+    },
+    {
+      "file": "07-部署与运维.md",
+      "doc_id": "OPS",
+      "title": "部署与运维",
+      "order": 7,
+      "lines": 196,
+      "sha256": "9222ac90e7e99a1d36be470276d379e705d6e8c13735c5b0a917c072bb69d3c9",
+      "covers": ["build_run", "deployment", "operations"]
+    },
+    {
+      "file": "08-排障手册.md",
+      "doc_id": "OPS",
+      "title": "排障手册",
+      "order": 8,
+      "lines": 279,
+      "sha256": "3b36e603d9290d0471c33ae42c0ca93f750da0b2f5e87c568ef0636dc826fcb0",
+      "covers": ["known_issues_risks", "failure_modes", "operations"]
+    },
+    {
+      "file": "09-测试与验证.md",
+      "doc_id": "TST",
+      "title": "测试与验证",
+      "order": 9,
+      "lines": 251,
+      "sha256": "6ec0739c8aca0f6e5efa5da825e9021982d747cb7b3ef14ff163846dcff1ab81",
+      "covers": ["quality", "verification", "gaps"]
+    },
+    {
+      "file": "AGENT.md",
+      "doc_id": "AGENT",
+      "title": "执行型 Agent 契约层",
+      "order": 99,
+      "lines": 195,
+      "sha256": "8aa94bb71ebce12ae869af1a7befe65560838e43791d6621f72a09f6541ed63f",
+      "covers": [
+        "commands",
+        "symbols",
+        "invariants",
+        "failure_modes",
+        "open_questions",
+        "freshness"
+      ]
+    }
+  ],
+  "covered_paths": [
+    "package.json",
+    "server/package.json",
+    "web/package.json",
+    ".env.example",
+    ".node-version",
+    "AGENTS.md",
+    "docs/README.md",
+    "docs/agent-rules.md",
+    "docs/consult-system.md",
+    "docs/规划自测问卷-设计文档.md",
+    "docs/development-history.md",
+    "server/dev.mjs",
+    "server/src/index.ts",
+    "server/src/env.ts",
+    "server/src/auth.ts",
+    "server/src/log.ts",
+    "server/src/util.ts",
+    "server/src/deploy-info.ts",
+    "server/src/consult-export.ts",
+    "server/src/consult-modules.ts",
+    "server/src/db/",
+    "server/src/routes/public.ts",
+    "server/src/routes/admin/",
+    "server/src/routes/consult/",
+    "server/src/ai/",
+    "server/src/score-lines/",
+    "shared/src/",
+    "web/src/router.ts",
+    "web/src/main.ts",
+    "web/src/api/",
+    "web/src/views/",
+    "web/src/components/",
+    "web/src/composables/",
+    "web/vite.config.ts",
+    "scripts/",
+    "deploy/",
+    "update.sh"
+  ],
+  "known_environment_limits": [
+    "node_modules 未安装，check:deps 退出 1",
+    "未运行 npm run verify / typecheck / build",
+    "未验证 AI / Bocha 真实连通性",
+    "未读取生产 systemd / Nginx 实际配置"
+  ]
+}
