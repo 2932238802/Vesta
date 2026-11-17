@@ -32,5 +32,5 @@
 - **代码**：数据层（`server/src/db/schema.ts`、`server/src/db/roster-groups.ts`、`migrations.ts`）；分组接口（`server/src/routes/admin/roster-groups.ts`、`index.ts`）；名单 GET / 批量删除（`server/src/routes/admin/roster.ts`）；邀请创建删除连带清理（`server/src/routes/admin/invites.ts`）；前端组件与状态（`web/src/views/admin/submissions/*`、`Submissions.vue`、`web/src/api/{types,admin}.ts`）。
 - **核心设计**：复用 `roster_groups` 并增加 `is_default`，新增多对多 `roster_group_members`；归档是 `NOT EXISTS` 有效组的派生结果，不建归档表；启动迁移保留旧组和 `invites.group_id` 归属，未归属邀请进默认组；新邀请自动进默认组。
 - **验证**：临时 `DATA_DIR` 覆盖全新库与旧库迁移、四个分组接口与名单筛选；Playwright 走查分组筛选 / 批量加入 / 新建组 / 多组 chip / 移出本组 / 最后一组归档 / 归档折叠与加回 / 分组管理删除 / URL 兼容；`npm run verify` 全绿。
-- **提交**：`—`（v1.88，提交后可按需回填）。
+- **提交**：`0275a97`（v1.88）。
 - **部署**：更新走 `bash update.sh`，新增表和列由启动迁移自动执行；回滚 `git revert` 本需求提交，被软删除的分组不会自动恢复。
