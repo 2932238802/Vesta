@@ -33,14 +33,24 @@ export function initSchema(): void {
   CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token);
   CREATE INDEX IF NOT EXISTS idx_invites_created ON invites(created_at DESC);
 
-  -- 历史数据：界面已改为按咨询期次自动分组，roster_groups / roster_hidden_dates
-  -- 与 invites.group_id 只保留存量，不再读写（见第 12 篇开发文档）。
+  -- 名单分组：roster_groups 为组定义（软删除），roster_group_members 为多对多成员。
+  -- 归档 = 没有任何有效组成员关系的邀请，不建归档表；invites.group_id 只保留旧归属。
   CREATE TABLE IF NOT EXISTS roster_groups (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    deleted_at TEXT
+    deleted_at TEXT,
+    is_default INTEGER NOT NULL DEFAULT 0
   );
+
+  CREATE TABLE IF NOT EXISTS roster_group_members (
+    group_id TEXT NOT NULL,
+    invite_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (group_id, invite_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_roster_group_members_invite
+    ON roster_group_members(invite_id);
 
   CREATE TABLE IF NOT EXISTS roster_hidden_dates (
     date TEXT PRIMARY KEY,

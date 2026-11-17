@@ -11,6 +11,7 @@ import { getSetting, now, setSetting } from './core'
 import { backfillEventFacts } from './events'
 import { clearExpiredAdminSessions, migrateLegacyAdminSession } from './sessions'
 import { migrateReportSkill, migrateReportSkillTemplates } from './skill'
+import { ensureRosterGroupSchema, migrateRosterGroupsV2 } from './roster-groups'
 import { saveBatch } from '../score-lines/batch-store'
 import { inferCategory, inferTrack, legacySubjectCode } from '../score-lines/normalize'
 import { seedScorelineSources } from '../score-lines/sources'
@@ -537,6 +538,8 @@ function ensureScoreLineColumns(): void {
 export function runMigrations(): void {
   ensureInviteColumns()
   ensureSubmissionColumns()
+  ensureRosterGroupSchema()
+  migrateRosterGroupsV2()
   ensureConsultColumns()
   // 先把历史事件沉淀成漏斗事实，再允许后续按保留期清理原始事件。
   backfillEventFacts()

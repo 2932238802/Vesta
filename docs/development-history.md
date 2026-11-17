@@ -4,6 +4,16 @@
 
 ## 本轮（2026-11-17）
 
+### 学员名单：分组与归档（2026-11-17，产品版本 v1.88）
+
+- 依据：`docs/archive/20261117/2-学员名单分组与归档-开发文档.md` v1.0。用户确认现状：勾选学员后只有「取消选择 / 批量删除」；新需求是自定义分组、删除组、最后一个组移除后自动归档，归档区放在名单下方。
+- **口径**：一个学员可同时在多个组；未归档名单行至少在一个有效组内；没有有效组的邀请进入归档。归档是派生结果，不建归档表，加入任意组即可回到名单。
+- **数据层**：`roster_groups` 增加 `is_default`；新增 `roster_group_members(group_id, invite_id, created_at)`，主键 `(group_id, invite_id)` 并加邀请索引。`server/src/db/roster-groups.ts` 用 `settings` 标记 `roster_groups_v2_migrated` 只迁移一次：导入 `invites.group_id` 归属、确保默认组、把无有效组邀请放进默认组；`migrations.ts` 只加 import 和调用。
+- **接口**：新增 `POST/DELETE /roster/groups` 与 `/roster/groups/:groupId/members`；`GET /roster` 增加 `groupId`，返回 `roster / archive / groups / archiveCount`，行上带 `groups`；新建邀请自动进默认组，删除邀请和批量删除先清理成员关系。组名重复 / 空名 / 超过 50 组 / 删除最后一个组 / 非法组 / 空成员分别返回 409 或 400，日志记 `roster.group_*`。
+- **前端**：新增 `RosterGroupBar`、`RosterGroupDialog`、`RosterSelectionBar`、`RosterArchive`、`useRosterGroups`；`useRoster` 管理 `groupId`、归档列表与独立归档选择集，`useRosterActions` 行菜单增加「加入分组… / 移出本组」；名单下加折叠归档区，归档行显示「已归档」，姓名下最多显示 3 个组 chip。
+- **偏差**：删除非当前分组时停留原视图（只有删除当前分组才回全部）；分组弹窗传送到 `body`，样式改为全局 `.group-*`；软删除组保留成员关系，归档只认有效组。均已在方案文档 §十三记录。
+- **验证**：临时 `DATA_DIR` 覆盖全新库、旧库迁移与幂等、四个分组接口、名单 `groupId` 筛选与归档计数；Playwright 走查分组筛选、批量加入、新建组、多组 chip、移出本组、最后一组归档、归档折叠与加回、分组管理删除与「至少保留一个分组」、旧 URL 参数清理，页面无控制台报错；`npm run verify` 全绿。
+
 ### 学员名单：咨询结果三选一（2026-11-17，产品版本 v1.87）
 
 - 依据：`docs/archive/20261117/1-学员名单咨询状态与手工优先级-开发文档.md` v1.2 §十四。用户确认咨询结果只保留三个：`已成交`、`长期维护`、`快成了`，原 `跟进` 下线，`维护中` 改称 `长期维护`。

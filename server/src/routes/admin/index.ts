@@ -7,6 +7,7 @@ import { rateLimit } from '../../util'
 import { invitesRouter } from './invites'
 import { overviewRouter } from './overview'
 import { rosterRouter } from './roster'
+import { rosterGroupsRouter } from './roster-groups'
 import { scoreLinesRouter } from './score-lines'
 import { settingsRouter } from './settings'
 import { submissionsRouter } from './submissions'
@@ -63,6 +64,7 @@ adminRouter.post('/logout', (req, res) => {
 // /submissions/export.csv 在 /submissions/:id 之前，/roster 的具体路径在参数路径之前。
 adminRouter.use(overviewRouter)
 adminRouter.use(invitesRouter)
+adminRouter.use(rosterGroupsRouter)
 adminRouter.use(rosterRouter)
 adminRouter.use(submissionsRouter)
 adminRouter.use(scoreLinesRouter)

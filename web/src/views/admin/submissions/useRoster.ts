@@ -1,7 +1,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { currentCycleKey } from '@shared/cycle'
-import { api, type AdminRosterRow, type AdminRosterWeek } from '@/api'
+import { api, type AdminRosterGroup, type AdminRosterRow, type AdminRosterWeek } from '@/api'
 import { rosterEmptyText, TAB_KEYS } from './rosterMeta'
 
 export function useRoster() {
@@ -13,7 +13,15 @@ export function useRoster() {
     return TAB_KEYS.has(value) ? value : ''
   }
 
+  function groupFromQuery(): string {
+    return typeof route.query.groupId === 'string' ? route.query.groupId : ''
+  }
+
   const roster = ref<AdminRosterRow[]>([])
+  const archive = ref<AdminRosterRow[]>([])
+  const groups = ref<AdminRosterGroup[]>([])
+  const archiveCount = ref(0)
+  const groupId = ref(groupFromQuery())
   const counts = ref<Record<string, number>>({ all: 0 })
   const weeks = ref<AdminRosterWeek[]>([])
   const currentWeek = ref(currentCycleKey())
@@ -32,12 +40,19 @@ export function useRoster() {
   const category = ref(categoryFromQuery())
   const toast = ref('')
   const selected = ref<Set<string>>(new Set())
+  const archiveSelected = ref<Set<string>>(new Set())
 
   const allSelected = computed(
     () => roster.value.length > 0 && selected.value.size === roster.value.length
   )
   const someSelected = computed(
     () => selected.value.size > 0 && selected.value.size < roster.value.length
+  )
+  const archiveAllSelected = computed(
+    () => archive.value.length > 0 && archiveSelected.value.size === archive.value.length
+  )
+  const archiveSomeSelected = computed(
+    () => archiveSelected.value.size > 0 && archiveSelected.value.size < archive.value.length
   )
 
   function toggleRow(id: string, event: Event) {
@@ -52,8 +67,31 @@ export function useRoster() {
     selected.value = checked ? new Set(roster.value.map((row) => row.id)) : new Set()
   }
 
+  function toggleArchiveRow(id: string, event: Event) {
+    const next = new Set(archiveSelected.value)
+    if ((event.target as HTMLInputElement).checked) next.add(id)
+    else next.delete(id)
+    archiveSelected.value = next
+  }
+
+  function toggleArchiveAll(event: Event) {
+    const checked = (event.target as HTMLInputElement).checked
+    archiveSelected.value = checked ? new Set(archive.value.map((row) => row.id)) : new Set()
+  }
+
   function clearSelection() {
     selected.value = new Set()
+  }
+
+  function clearArchiveSelection() {
+    archiveSelected.value = new Set()
+  }
+
+  /** 移出分组 / 删除后从两个选择集合里去掉已不可见的行。 */
+  function removeFromSelections(ids: Iterable<string>) {
+    const drop = new Set(ids)
+    selected.value = new Set([...selected.value].filter((id) => !drop.has(id)))
+    archiveSelected.value = new Set([...archiveSelected.value].filter((id) => !drop.has(id)))
   }
 
   let searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -65,6 +103,9 @@ export function useRoster() {
   const isCurrentWeek = computed(
     () => week.value !== 'all' && week.value === currentWeek.value
   )
+  const groupName = computed(
+    () => groups.value.find((group) => group.id === groupId.value)?.name ?? ''
+  )
   const emptyText = computed(() =>
     rosterEmptyText({
       category: category.value,
@@ -72,12 +113,35 @@ export function useRoster() {
       weekLabel: weekLabel.value,
       current: isCurrentWeek.value,
       searching: searching.value,
-      allWeeksCount: allWeeksCount.value
+      allWeeksCount: allWeeksCount.value,
+      groupId: groupId.value,
+      groupName: groupName.value,
+      archiveCount: archiveCount.value
     })
   )
 
   function countOf(key: string): number {
     return counts.value[key || 'all'] ?? 0
+  }
+
+  function syncGroupQuery(value: string) {
+    const current = groupFromQuery()
+    if (current === value && !route.query.group && !route.query.dates) return
+    const query = { ...route.query }
+    if (value) query.groupId = value
+    else delete query.groupId
+    delete query.group
+    delete query.dates
+    void router.replace({ query })
+  }
+
+  function selectGroup(value: string) {
+    if (value === groupId.value) return
+    groupId.value = value
+    syncGroupQuery(value)
+    clearSelection()
+    clearArchiveSelection()
+    void load()
   }
 
   let loadRequest = 0
@@ -90,7 +154,8 @@ export function useRoster() {
       const result = await api.roster({
         q: q.value.trim(),
         category: category.value,
-        week: week.value
+        week: week.value,
+        groupId: groupId.value
       })
       if (requestId !== loadRequest) return
       weeks.value = result.weeks
@@ -101,11 +166,23 @@ export function useRoster() {
         void load()
         return
       }
+      // 组被删或参数非法：接口回空串，前端回「全部」并清掉地址栏参数。
+      if (result.groupId !== groupId.value) {
+        groupId.value = result.groupId
+        syncGroupQuery(result.groupId)
+      }
+      groups.value = result.groups
+      archive.value = result.archive
+      archiveCount.value = result.archiveCount
       roster.value = result.roster
       counts.value = result.counts
-      // 只保留还在列表里的勾选，避免切期次后选中计数残留。
+      // 只保留还在列表里的勾选，避免切期次 / 分组后选中计数残留。
       const visibleIds = new Set(result.roster.map((row) => row.id))
       selected.value = new Set([...selected.value].filter((id) => visibleIds.has(id)))
+      const visibleArchiveIds = new Set(result.archive.map((row) => row.id))
+      archiveSelected.value = new Set(
+        [...archiveSelected.value].filter((id) => visibleArchiveIds.has(id))
+      )
     } catch (err) {
       if (requestId !== loadRequest) return
       error.value = err instanceof Error ? err.message : '读取失败'
@@ -118,7 +195,11 @@ export function useRoster() {
     if (searchTimer) clearTimeout(searchTimer)
     searchTimer = setTimeout(load, 280)
   })
-  watch([week, category], load)
+  watch([week, category], () => {
+    clearSelection()
+    clearArchiveSelection()
+    void load()
+  })
   watch(category, (value) => {
     const query = { ...route.query }
     if (value) query.category = value
@@ -135,6 +216,18 @@ export function useRoster() {
       if (next !== category.value) category.value = next
     }
   )
+  watch(
+    () => route.query.groupId,
+    () => {
+      const next = groupFromQuery()
+      if (next !== groupId.value) {
+        groupId.value = next
+        clearSelection()
+        clearArchiveSelection()
+        void load()
+      }
+    }
+  )
 
   function showAllWeeks() {
     week.value = 'all'
@@ -149,6 +242,10 @@ export function useRoster() {
 
   return {
     roster,
+    archive,
+    groups,
+    archiveCount,
+    groupId,
     counts,
     weeks,
     currentWeek,
@@ -159,19 +256,28 @@ export function useRoster() {
     category,
     toast,
     selected,
+    archiveSelected,
     allSelected,
     someSelected,
+    archiveAllSelected,
+    archiveSomeSelected,
     allWeeksCount,
     searching,
     weekLabel,
     isCurrentWeek,
+    groupName,
     emptyText,
     countOf,
     load,
     toggleRow,
     toggleAll,
+    toggleArchiveRow,
+    toggleArchiveAll,
     clearSelection,
+    clearArchiveSelection,
+    removeFromSelections,
     showAllWeeks,
+    selectGroup,
     flash
   }
 }

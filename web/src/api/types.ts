@@ -246,6 +246,8 @@ export interface AdminRosterRow {
   consultResult: ConsultResult | ''
   /** 咨询师手写的优先级，≤20 字；空串表示未填写。 */
   priority: string
+  /** 有效分组，默认组在前；归档行固定为空数组。 */
+  groups: AdminRosterGroupRef[]
   reportMode: 'doc' | 'ai' | null
   claimed: boolean
   slots: string[]
@@ -253,6 +255,28 @@ export interface AdminRosterRow {
   reportSlug: string | null
   reportPath: string | null
   detailPath: string | null
+}
+
+export interface AdminRosterGroupRef {
+  id: string
+  name: string
+}
+
+export interface AdminRosterGroup extends AdminRosterGroupRef {
+  count: number
+  totalCount: number
+  default: boolean
+}
+
+export interface AdminRosterResponse {
+  roster: AdminRosterRow[]
+  archive: AdminRosterRow[]
+  groups: AdminRosterGroup[]
+  groupId: string
+  archiveCount: number
+  counts: Record<string, number>
+  weeks: AdminRosterWeek[]
+  currentWeek: string
 }
 
 export interface AdminRosterWeek {

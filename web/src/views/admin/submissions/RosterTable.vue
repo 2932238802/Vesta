@@ -32,7 +32,7 @@
                 type="checkbox"
                 :checked="allSelected"
                 :indeterminate.prop="someSelected"
-                aria-label="全选"
+                :aria-label="selectAllLabel"
                 @change="$emit('toggle-all', $event)"
               />
             </th>
@@ -55,6 +55,7 @@
                 unsubmitted: !row.submissionId,
                 picked: selected.has(row.id),
                 consulted: row.consulted,
+                archived,
                 'row-link': !!row.detailPath
               }
             ]"
@@ -73,6 +74,25 @@
             </td>
             <td>
               <div class="name">{{ row.name || '未命名' }}</div>
+              <div v-if="row.groups.length || archived" class="group-chips">
+                <template v-if="row.groups.length">
+                  <span
+                    v-for="group in row.groups.slice(0, 3)"
+                    :key="group.id"
+                    class="group-chip mini"
+                  >
+                    {{ group.name }}
+                  </span>
+                  <span
+                    v-if="row.groups.length > 3"
+                    class="group-chip mini"
+                    :title="row.groups.map((group) => group.name).join('、')"
+                  >
+                    +{{ row.groups.length - 3 }}
+                  </span>
+                </template>
+                <span v-else class="chip mini archived-chip">已归档</span>
+              </div>
               <div v-if="row.note" class="note">{{ row.note }}</div>
               <div v-if="row.channel" class="note channel">{{ row.channel }}</div>
             </td>
@@ -166,7 +186,7 @@ import { formatDate } from '@/format'
 import RowMenu from '@/components/RowMenu.vue'
 import type { RowMenuItem } from '@/components/row-menu'
 import { CONSULT_RESULT_OPTIONS, stageClass, stageLabel } from './rosterMeta'
-defineProps<{
+withDefaults(defineProps<{
   loading: boolean
   error: string
   roster: AdminRosterRow[]
@@ -182,7 +202,10 @@ defineProps<{
   category: string
   allCount: number
   rowMenuItems: (row: AdminRosterRow) => RowMenuItem[]
-}>()
+  /** 归档区块复用同一张表：只加边框 / 背景区分，不降文字对比度。 */
+  archived?: boolean
+  selectAllLabel?: string
+}>(), { archived: false, selectAllLabel: '全选' })
 
 /** 只锁住正在保存的那个单元格，其他行和其他列不受影响。 */
 function cellKey(row: AdminRosterRow, field: string): string {

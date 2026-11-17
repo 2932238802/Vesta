@@ -1,5 +1,7 @@
 import type {
   AdminReportSkillTemplate,
+  AdminRosterGroup,
+  AdminRosterResponse,
   AdminRosterRow,
   AdminRosterWeek,
   AdminSubmissionDetail,
@@ -254,19 +256,40 @@ export const adminApi = {
       { auth: true }
     )
   },
-  roster(params: { q?: string; category?: string; week?: string } = {}) {
-    return request<{
-      roster: AdminRosterRow[]
-      counts: Record<string, number>
-      weeks: AdminRosterWeek[]
-      currentWeek: string
-    }>(
+  roster(params: { q?: string; category?: string; week?: string; groupId?: string } = {}) {
+    return request<AdminRosterResponse>(
       `/api/admin/roster${query({
         q: params.q,
         category: params.category,
-        week: params.week
+        week: params.week,
+        groupId: params.groupId
       })}`,
       { auth: true }
+    )
+  },
+  createRosterGroup(name: string) {
+    return request<{ group: AdminRosterGroup }>('/api/admin/roster/groups', {
+      method: 'POST',
+      body: { name },
+      auth: true
+    })
+  },
+  deleteRosterGroup(groupId: string) {
+    return request<{ ok: true; archived: number }>(`/api/admin/roster/groups/${groupId}`, {
+      method: 'DELETE',
+      auth: true
+    })
+  },
+  addRosterGroupMembers(groupId: string, inviteIds: string[]) {
+    return request<{ ok: true; added: number; skipped: number }>(
+      `/api/admin/roster/groups/${groupId}/members`,
+      { method: 'POST', body: { inviteIds }, auth: true }
+    )
+  },
+  removeRosterGroupMembers(groupId: string, inviteIds: string[]) {
+    return request<{ ok: true; removed: number; archived: number }>(
+      `/api/admin/roster/groups/${groupId}/members`,
+      { method: 'DELETE', body: { inviteIds }, auth: true }
     )
   },
   patchRoster(

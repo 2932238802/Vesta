@@ -9,32 +9,37 @@
     />
   </div>
 
-  <div v-else class="toolbar selection-bar" role="region" aria-label="批量操作">
-    <strong>已选 {{ selectedCount }} 条</strong>
-    <span class="spacer" />
-    <button class="btn ghost small" type="button" @click="$emit('clear-selection')">
-      取消选择
-    </button>
-    <button
-      class="btn ghost small danger-btn"
-      type="button"
-      :disabled="batchDeleting"
-      @click="$emit('remove-selected')"
-    >
-      {{ batchDeleting ? '删除中' : '批量删除' }}
-    </button>
-  </div>
+  <RosterSelectionBar
+    v-else
+    :selected-count="selectedCount"
+    :batch-deleting="batchDeleting"
+    :busy="groupSaving"
+    :show-remove-from-group="showRemoveFromGroup"
+    @add-to-group="$emit('add-to-group')"
+    @remove-from-group="$emit('remove-from-group')"
+    @clear-selection="$emit('clear-selection')"
+    @remove-selected="$emit('remove-selected')"
+  />
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  selectedCount: number
-  batchDeleting: boolean
-}>()
+import RosterSelectionBar from './RosterSelectionBar.vue'
+
+withDefaults(
+  defineProps<{
+    selectedCount: number
+    batchDeleting: boolean
+    showRemoveFromGroup?: boolean
+    groupSaving?: boolean
+  }>(),
+  { showRemoveFromGroup: false, groupSaving: false }
+)
 
 const q = defineModel<string>('q', { required: true })
 
 defineEmits<{
+  (event: 'add-to-group'): void
+  (event: 'remove-from-group'): void
   (event: 'clear-selection'): void
   (event: 'remove-selected'): void
 }>()

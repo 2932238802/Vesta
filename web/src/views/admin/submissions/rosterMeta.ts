@@ -78,17 +78,25 @@ interface EmptyTextOptions {
   current: boolean
   searching: boolean
   allWeeksCount: number
+  groupId?: string
+  groupName?: string
+  archiveCount?: number
 }
 
-/** 空状态文案：期次 / 状态 / 搜索三种口径，避免再出现「日期分类」「分组」的旧词。 */
+/** 空状态文案：搜索 / 分组 / 期次 / 状态四种口径。 */
 export function rosterEmptyText(options: EmptyTextOptions): string {
-  const { category, week, weekLabel, current, searching, allWeeksCount } = options
+  const { category, week, weekLabel, current, searching, allWeeksCount, groupId } = options
   if (searching) {
+    if (groupId) return '这个分组里没有搜到学员'
     if (week !== 'all' && allWeeksCount > 0) return '这一期没有搜到学员'
     return '没有找到匹配的学员'
   }
+  if (groupId) return '这个分组还没有学员，勾选名单里的学员后点「加入分组」'
   const inWeek = week !== 'all'
   const scope = inWeek ? (current ? '本期' : '这一期') : ''
+  if (inWeek && (options.archiveCount ?? 0) > 0) {
+    return `${scope}没有在组学员，下面有 ${options.archiveCount} 人归档`
+  }
   if (category && category !== 'all') {
     const label = ROSTER_TABS.find((tab) => tab.key === category)?.label ?? '这个状态'
     return inWeek ? `${scope}没有${label}的学员` : `没有${label}的学员`

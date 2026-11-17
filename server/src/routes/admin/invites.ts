@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { noStore } from '../../auth'
 import { db, getActiveSurvey, newId, now } from '../../db'
+import { getDefaultGroupId } from '../../db/roster-groups'
 import { clampString, randomToken } from '../../util'
 import { invitePath } from './shared'
 
@@ -48,15 +49,24 @@ invitesRouter.post('/invites', (req, res) => {
   const survey = getActiveSurvey()
   const created: { id: string; name: string; token: string; path: string }[] = []
 
+  // 默认组在迁移后一定存在；手工改库导致没有有效组时邀请仍创建成功（先落归档）。
+  const defaultGroupId = getDefaultGroupId()
   db.exec('BEGIN')
   try {
     for (const name of names) {
       const id = newId('inv')
       const token = randomToken(18)
+      const createdAt = now()
       db.prepare(
         `INSERT INTO invites (id, token, name, note, channel, survey_id, status, created_at, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
-      ).run(id, token, name, note, channel, survey.id, now(), expiresAt)
+      ).run(id, token, name, note, channel, survey.id, createdAt, expiresAt)
+      if (defaultGroupId) {
+        db.prepare(
+          `INSERT OR IGNORE INTO roster_group_members (group_id, invite_id, created_at)
+           VALUES (?, ?, ?)`
+        ).run(defaultGroupId, id, createdAt)
+      }
       created.push({ id, name, token, path: invitePath(token) })
     }
     db.exec('COMMIT')
@@ -77,7 +87,15 @@ invitesRouter.delete('/invites/:id', (req, res) => {
     res.status(409).json({ error: '这个链接已经提交过，不能删除' })
     return
   }
-  db.prepare('DELETE FROM invites WHERE id = ?').run(req.params.id)
+  db.exec('BEGIN')
+  try {
+    db.prepare('DELETE FROM roster_group_members WHERE invite_id = ?').run(req.params.id)
+    db.prepare('DELETE FROM invites WHERE id = ?').run(req.params.id)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
   res.json({ ok: true })
 })
 

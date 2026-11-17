@@ -6,9 +6,14 @@ import { confirmAction } from '@/useConfirm'
 import { inviteUrl, writeClipboard } from './rosterMeta'
 import type { RosterState } from './useRoster'
 
-export function useRosterActions(state: RosterState) {
+export interface RosterGroupHooks {
+  openPickGroups(inviteIds: string[]): void
+  removeFromGroup(rows: AdminRosterRow[]): void | Promise<void>
+}
+
+export function useRosterActions(state: RosterState, groupHooks?: RosterGroupHooks) {
   const router = useRouter()
-  const { q, selected, week, category, load, flash } = state
+  const { q, selected, archiveSelected, week, category, groupId, load, flash } = state
 
   const exporting = ref(false)
   const savingStatus = ref('')
@@ -18,8 +23,7 @@ export function useRosterActions(state: RosterState) {
   const deletingInviteId = ref('')
   const batchDeleting = ref(false)
 
-  async function removeSelected() {
-    const ids = [...selected.value]
+  async function removeIds(ids: string[]) {
     if (ids.length === 0) return
     const ok = await confirmAction({
       title: '批量删除记录',
@@ -32,6 +36,7 @@ export function useRosterActions(state: RosterState) {
     try {
       await api.batchDeleteRoster(ids)
       selected.value = new Set()
+      archiveSelected.value = new Set()
       await load()
       flash(`已删除 ${ids.length} 条记录`)
     } catch (err) {
@@ -39,6 +44,14 @@ export function useRosterActions(state: RosterState) {
     } finally {
       batchDeleting.value = false
     }
+  }
+
+  async function removeSelected() {
+    await removeIds([...selected.value])
+  }
+
+  async function removeArchiveSelected() {
+    await removeIds([...archiveSelected.value])
   }
 
   async function copyLink(row: AdminRosterRow) {
@@ -64,8 +77,12 @@ export function useRosterActions(state: RosterState) {
   }
 
   function rowMenuItems(row: AdminRosterRow): RowMenuItem[] {
+    const groupItems: RowMenuItem[] = [{ key: 'add-group', label: '加入分组…' }]
+    if (groupId.value && row.groups.length > 0) {
+      groupItems.push({ key: 'remove-group', label: '移出本组' })
+    }
     if (row.submissionId) {
-      const items: RowMenuItem[] = []
+      const items: RowMenuItem[] = [...groupItems]
       if (row.detailPath) items.push({ key: 'detail', label: '查看答卷' })
       if (row.reportPath) items.push({ key: 'report', label: '打开报告' })
       items.push({
@@ -76,7 +93,7 @@ export function useRosterActions(state: RosterState) {
       })
       return items
     }
-    const items: RowMenuItem[] = []
+    const items: RowMenuItem[] = [...groupItems]
     if (row.stage === 'expired') items.push({ key: 'rotate', label: '换新链接' })
     items.push({ key: 'copy', label: '复制链接' })
     if (row.stage !== 'expired') items.push({ key: 'open', label: '打开' })
@@ -90,7 +107,11 @@ export function useRosterActions(state: RosterState) {
   }
 
   async function onRowMenu(row: AdminRosterRow, key: string) {
-    if (key === 'detail') {
+    if (key === 'add-group') {
+      groupHooks?.openPickGroups([row.id])
+    } else if (key === 'remove-group') {
+      await groupHooks?.removeFromGroup([row])
+    } else if (key === 'detail') {
       if (row.detailPath) void router.push(row.detailPath)
     } else if (key === 'report') {
       if (row.reportPath) window.open(row.reportPath, '_blank', 'noopener')
@@ -294,6 +315,7 @@ export function useRosterActions(state: RosterState) {
     deletingInviteId,
     batchDeleting,
     removeSelected,
+    removeArchiveSelected,
     copyLink,
     openInvite,
     openRow,
