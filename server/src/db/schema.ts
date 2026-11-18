@@ -222,6 +222,34 @@ export function initSchema(): void {
   CREATE INDEX IF NOT EXISTS idx_consult_quotes_category
     ON consult_quotes(category_id, pinned DESC, sort_order, created_at);
 
+  -- 故事集：与金句栏结构一致但独立成表；分类存在性与非空删除限制在接口层校验。
+  CREATE TABLE IF NOT EXISTS consult_story_categories (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_consult_story_categories_name
+    ON consult_story_categories(name);
+  CREATE INDEX IF NOT EXISTS idx_consult_story_categories_order
+    ON consult_story_categories(sort_order, id);
+
+  CREATE TABLE IF NOT EXISTS consult_stories (
+    id TEXT PRIMARY KEY,
+    category_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    text TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT '',
+    pinned INTEGER NOT NULL DEFAULT 0,
+    pinned_at TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_consult_stories_category
+    ON consult_stories(category_id, pinned DESC, pinned_at DESC, sort_order, created_at);
+
   CREATE TABLE IF NOT EXISTS search_cache (
     key TEXT PRIMARY KEY,
     results TEXT NOT NULL,

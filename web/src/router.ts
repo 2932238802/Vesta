@@ -21,6 +21,7 @@ const SkillEditor = () => import('./views/admin/SkillEditor.vue')
 const ConsultWorkspace = () => import('./views/admin/ConsultWorkspace.vue')
 const ConsultPurposes = () => import('./views/admin/ConsultPurposes.vue')
 const ConsultQuotes = () => import('./views/admin/ConsultQuotes.vue')
+const ConsultStories = () => import('./views/admin/ConsultStories.vue')
 const ConsultCollections = () => import('./views/admin/ConsultCollections.vue')
 const ConsultCollectionDetail = () => import('./views/admin/ConsultCollectionDetail.vue')
 const ScoreLines = () => import('./views/admin/ScoreLines.vue')
@@ -62,6 +63,7 @@ export const router = createRouter({
         { path: 'consult/tree', redirect: { name: 'admin-consult-purposes' } },
         { path: 'consult/purposes', name: 'admin-consult-purposes', component: ConsultPurposes },
         { path: 'consult/quotes', name: 'admin-consult-quotes', component: ConsultQuotes },
+        { path: 'consult/stories', name: 'admin-consult-stories', component: ConsultStories },
         { path: 'consult/collections', name: 'admin-consult-collections', component: ConsultCollections },
         {
           path: 'consult/collections/:id',
@@ -92,6 +94,7 @@ const PAGE_TITLES: Record<string, string> = {
   'admin-consult': '写咨询稿 · 管理后台',
   'admin-consult-purposes': '咨询树 · 管理后台',
   'admin-consult-quotes': '金句栏 · 管理后台',
+  'admin-consult-stories': '故事集 · 管理后台',
   'admin-consult-collections': '收藏栏 · 管理后台',
   'admin-consult-collection': '收藏详情 · 管理后台',
   'not-found': '页面不存在'

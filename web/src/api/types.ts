@@ -38,6 +38,13 @@ export type {
   ConsultQuoteUpdateInput
 } from '@shared/consult-quote'
 export type {
+  ConsultStory,
+  ConsultStoryCategory,
+  ConsultStoryCategoryInput,
+  ConsultStoryInput,
+  ConsultStoryUpdateInput
+} from '@shared/consult-story'
+export type {
   CoverageInfo,
   CoverageItem,
   CoverageStatus,

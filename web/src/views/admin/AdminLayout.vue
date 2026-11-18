@@ -76,6 +76,7 @@
             <RouterLink to="/admin/consult" exact-active-class="on">写咨询稿</RouterLink>
             <RouterLink to="/admin/consult/purposes" active-class="on">咨询树</RouterLink>
             <RouterLink to="/admin/consult/quotes" active-class="on">金句栏</RouterLink>
+            <RouterLink to="/admin/consult/stories" active-class="on">故事集</RouterLink>
             <RouterLink
               to="/admin/consult/collections"
               active-class="on"

@@ -138,7 +138,7 @@ import { confirmAction } from '@/useConfirm'
 import QuoteCard from './quotes/QuoteCard.vue'
 import QuoteFormModal from './quotes/QuoteFormModal.vue'
 import QuoteCategoryModal from './quotes/QuoteCategoryModal.vue'
-import { copyPlainText } from './quotes/clipboard'
+import { copyPlainText } from '@/clipboard'
 import { useQuoteShelf } from './quotes/useQuoteShelf'
 
 const shelf = useQuoteShelf()

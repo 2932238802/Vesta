@@ -35,7 +35,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 import type { ConsultQuote } from '@/api'
-import { copyPlainText } from './clipboard'
+import { copyPlainText } from '@/clipboard'
 
 const props = defineProps<{
   quote: ConsultQuote

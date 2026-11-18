@@ -13,6 +13,10 @@ import type {
   ConsultRun,
   ConsultRunMode,
   ConsultScoringConfig,
+  ConsultStory,
+  ConsultStoryCategory,
+  ConsultStoryInput,
+  ConsultStoryUpdateInput,
   ConsultTemplate,
   ConsultTree
 } from './types'
@@ -88,6 +92,55 @@ export const consultApi = {
   deleteConsultQuoteCategory(id: string) {
     return request<{ ok: true }>(
       `/api/admin/consult/quote-categories/${encodeURIComponent(id)}`,
+      { method: 'DELETE', auth: true }
+    )
+  },
+  consultStories() {
+    return request<{ categories: ConsultStoryCategory[]; stories: ConsultStory[] }>(
+      '/api/admin/consult/stories',
+      { auth: true }
+    )
+  },
+  createConsultStory(body: ConsultStoryInput) {
+    return request<{ item: ConsultStory }>('/api/admin/consult/stories', {
+      method: 'POST',
+      body,
+      auth: true
+    })
+  },
+  updateConsultStory(id: string, body: ConsultStoryUpdateInput) {
+    return request<{ item: ConsultStory }>(
+      `/api/admin/consult/stories/${encodeURIComponent(id)}`,
+      { method: 'PATCH', body, auth: true }
+    )
+  },
+  deleteConsultStory(id: string) {
+    return request<{ ok: true }>(`/api/admin/consult/stories/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      auth: true
+    })
+  },
+  createConsultStoryCategory(name: string) {
+    return request<{ category: ConsultStoryCategory }>(
+      '/api/admin/consult/story-categories',
+      { method: 'POST', body: { name }, auth: true }
+    )
+  },
+  updateConsultStoryCategory(id: string, name: string) {
+    return request<{ category: ConsultStoryCategory }>(
+      `/api/admin/consult/story-categories/${encodeURIComponent(id)}`,
+      { method: 'PATCH', body: { name }, auth: true }
+    )
+  },
+  reorderConsultStoryCategories(ids: string[]) {
+    return request<{ categories: ConsultStoryCategory[] }>(
+      '/api/admin/consult/story-categories/order',
+      { method: 'PUT', body: { ids }, auth: true }
+    )
+  },
+  deleteConsultStoryCategory(id: string) {
+    return request<{ ok: true }>(
+      `/api/admin/consult/story-categories/${encodeURIComponent(id)}`,
       { method: 'DELETE', auth: true }
     )
   },
