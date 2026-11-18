@@ -57,7 +57,7 @@ related: [IDX, OVR, ENV, ARC, FUN, API, DAT, OPS, TST]
 | 进程入口 | `server/src/index.ts` | 中间件、路由挂载、静态站点、启动任务 | 管理路由必须挂在 `requireAdmin()` 之后 |
 | `config` | `server/src/env.ts#config` | 全部环境变量与默认值 | 生产硬校验：管理员账号、`AUTH_SECRET` |
 | `requireAdmin` | `server/src/auth.ts#requireAdmin` | Token + `admin_sessions` 双重校验 | 新增管理接口不要绕过 |
-| `initSchema` | `server/src/db/schema.ts#initSchema` | 31 张表、42 条索引 | 改表必须同时写幂等迁移 |
+| `initSchema` | `server/src/db/schema.ts#initSchema` | 33 张表、45 条索引 | 改表必须同时写幂等迁移 |
 | `runMigrations` | `server/src/db/migrations.ts#runMigrations` | 启动时补列/回填/种子 | 不要写一次性迁移脚本 |
 | `publicRouter` | `server/src/routes/public.ts#publicRouter` | 健康、邀请、提交、报告、领取、事件 | `doc` 模式失败不得伪造报告 |
 | `adminRouter` | `server/src/routes/admin/index.ts#adminRouter` | 登录后全部管理接口 | 子路由挂载顺序影响匹配 |
@@ -173,7 +173,7 @@ related: [IDX, OVR, ENV, ARC, FUN, API, DAT, OPS, TST]
 | 生成日期 | `2026-11-16` |
 | 代码 commit | `884ef39` |
 | 产品版本 | `1.85.0` |
-| 定点勘误 | `2026-11-18`（HEAD `70d8225` / `1.89.0`） |
+| 定点勘误 | `2026-11-18`（v1.86–v1.94；v1.94 工作区未提交） |
 | 勘误范围 | 00 / 01 / 04 / 05 / 06 / 09 / AGENT 与 `manifest.json` 哈希 |
 | 输出目录 | `docs/reference/` |
 | 模式 | `full` + `patch` |

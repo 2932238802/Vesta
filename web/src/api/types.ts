@@ -45,6 +45,14 @@ export type {
   ConsultStoryUpdateInput
 } from '@shared/consult-story'
 export type {
+  KnowledgeArticle,
+  KnowledgeArticleInput,
+  KnowledgeArticleSummary,
+  KnowledgeArticleUpdateInput,
+  KnowledgeMajor,
+  KnowledgeMajorInput
+} from '@shared/knowledge'
+export type {
   CoverageInfo,
   CoverageItem,
   CoverageStatus,

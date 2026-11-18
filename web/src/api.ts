@@ -1,5 +1,6 @@
 import { adminApi } from './api/admin'
 import { consultApi } from './api/consult'
+import { knowledgeApi } from './api/knowledge'
 import { publicApi } from './api/public'
 
 export * from './api/request'
@@ -10,5 +11,6 @@ export * from './api/public'
 export const api = {
   ...adminApi,
   ...consultApi,
+  ...knowledgeApi,
   ...publicApi
 }

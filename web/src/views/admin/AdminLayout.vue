@@ -75,13 +75,7 @@
           <div class="nav-links" :class="{ closed: !groups.consult }">
             <RouterLink to="/admin/consult" exact-active-class="on">写咨询稿</RouterLink>
             <RouterLink to="/admin/consult/purposes" active-class="on">咨询树</RouterLink>
-            <RouterLink to="/admin/consult/quotes" active-class="on">金句栏</RouterLink>
             <RouterLink to="/admin/consult/stories" active-class="on">故事集</RouterLink>
-            <RouterLink
-              to="/admin/consult/collections"
-              active-class="on"
-              :class="{ on: route.path.startsWith('/admin/consult/collections') }"
-            >收藏栏</RouterLink>
           </div>
         </section>
 
@@ -93,7 +87,7 @@
             :aria-expanded="groups.score"
             @click="toggleGroup('score')"
           >
-            <span>分数线</span>
+            <span>知识库 &amp; 数据库</span>
             <span class="chev" :class="{ closed: !groups.score }" aria-hidden="true">
               <svg viewBox="0 0 14 14" fill="none">
                 <path
@@ -108,6 +102,12 @@
           </button>
           <div class="nav-links" :class="{ closed: !groups.score }">
             <RouterLink to="/admin/score-lines" active-class="on">升学分数线查询</RouterLink>
+            <RouterLink to="/admin/consult/quotes" active-class="on">金句栏</RouterLink>
+            <RouterLink
+              to="/admin/knowledge"
+              active-class="on"
+              :class="{ on: route.path.startsWith('/admin/knowledge') }"
+            >专业知识汇总</RouterLink>
           </div>
         </section>
 
@@ -186,6 +186,11 @@ const groups = ref<Record<NavGroup, boolean>>({
 
 const activeGroup = computed<NavGroup | null>(() => {
   const path = route.path
+  // 金句栏与专业知识汇总迁入「知识库 & 数据库」，但金句栏路由仍在 /admin/consult 下。
+  // 收藏栏保留页面与直达路由，入口已移除，仍归「咨询」组。
+  if (path.startsWith('/admin/consult/quotes') || path.startsWith('/admin/knowledge')) {
+    return 'score'
+  }
   if (path.startsWith('/admin/consult')) return 'consult'
   if (path.startsWith('/admin/score-lines')) return 'score'
   if (

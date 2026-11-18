@@ -5,6 +5,7 @@ import { deleteAdminSession } from '../../db'
 import { consultRouter } from '../consult/index'
 import { rateLimit } from '../../util'
 import { invitesRouter } from './invites'
+import { knowledgeRouter } from './knowledge'
 import { overviewRouter } from './overview'
 import { rosterRouter } from './roster'
 import { rosterGroupsRouter } from './roster-groups'
@@ -48,6 +49,7 @@ adminRouter.post('/dev-login', (req, res) => {
 adminRouter.use(requireAdmin())
 
 adminRouter.use('/consult', consultRouter)
+adminRouter.use('/knowledge', knowledgeRouter)
 
 adminRouter.get('/me', (req, res) => {
   res.json({ user: { username: res.locals.admin } })

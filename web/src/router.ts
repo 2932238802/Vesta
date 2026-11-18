@@ -24,6 +24,7 @@ const ConsultQuotes = () => import('./views/admin/ConsultQuotes.vue')
 const ConsultStories = () => import('./views/admin/ConsultStories.vue')
 const ConsultCollections = () => import('./views/admin/ConsultCollections.vue')
 const ConsultCollectionDetail = () => import('./views/admin/ConsultCollectionDetail.vue')
+const KnowledgeBase = () => import('./views/admin/KnowledgeBase.vue')
 const ScoreLines = () => import('./views/admin/ScoreLines.vue')
 
 export const router = createRouter({
@@ -69,6 +70,17 @@ export const router = createRouter({
           path: 'consult/collections/:id',
           name: 'admin-consult-collection',
           component: ConsultCollectionDetail
+        },
+        { path: 'knowledge', name: 'admin-knowledge', component: KnowledgeBase },
+        {
+          path: 'knowledge/:majorId',
+          name: 'admin-knowledge-major',
+          component: KnowledgeBase
+        },
+        {
+          path: 'knowledge/:majorId/:articleId',
+          name: 'admin-knowledge-article',
+          component: KnowledgeBase
         }
       ]
     },
@@ -97,6 +109,9 @@ const PAGE_TITLES: Record<string, string> = {
   'admin-consult-stories': '故事集 · 管理后台',
   'admin-consult-collections': '收藏栏 · 管理后台',
   'admin-consult-collection': '收藏详情 · 管理后台',
+  'admin-knowledge': '专业知识汇总 · 管理后台',
+  'admin-knowledge-major': '专业 · 管理后台',
+  'admin-knowledge-article': '知识点 · 管理后台',
   'not-found': '页面不存在'
 }
 

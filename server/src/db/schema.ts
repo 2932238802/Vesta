@@ -250,6 +250,32 @@ export function initSchema(): void {
   CREATE INDEX IF NOT EXISTS idx_consult_stories_category
     ON consult_stories(category_id, pinned DESC, pinned_at DESC, sort_order, created_at);
 
+  -- 专业知识汇总：专业 → 知识点两级；不启用外键，专业存在性与非空删除限制在接口层校验。
+  -- 无种子、无迁移、无 settings 标记，启动时由 initSchema() 幂等建表。
+  CREATE TABLE IF NOT EXISTS knowledge_majors (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_majors_name
+    ON knowledge_majors(name);
+  CREATE INDEX IF NOT EXISTS idx_knowledge_majors_order
+    ON knowledge_majors(sort_order, id);
+
+  CREATE TABLE IF NOT EXISTS knowledge_articles (
+    id TEXT PRIMARY KEY,
+    major_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_knowledge_articles_major
+    ON knowledge_articles(major_id, sort_order, created_at);
+
   CREATE TABLE IF NOT EXISTS search_cache (
     key TEXT PRIMARY KEY,
     results TEXT NOT NULL,
