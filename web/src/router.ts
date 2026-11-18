@@ -88,7 +88,7 @@ const PAGE_TITLES: Record<string, string> = {
   'admin-report': '报告设置 · 管理后台',
   'admin-report-preview': '报告预览 · 管理后台',
   'admin-skill': 'AI 分析规则 · 管理后台',
-  'admin-score-lines': '分数线 · 管理后台',
+  'admin-score-lines': '升学分数线查询 · 管理后台',
   'admin-consult': '写咨询稿 · 管理后台',
   'admin-consult-purposes': '咨询树 · 管理后台',
   'admin-consult-quotes': '金句栏 · 管理后台',

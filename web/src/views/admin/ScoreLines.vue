@@ -2,7 +2,7 @@
   <div class="score-page">
     <AdminPageHeader
       eyebrow="内部查询"
-      title="分数线"
+      title="升学分数线查询"
       subtitle="内部查询参考；主线永远显示，校线 / 专业线在选院校后叠加。抓取数据默认待复核。"
     >
       <template #actions>

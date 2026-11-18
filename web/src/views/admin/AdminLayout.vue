@@ -106,7 +106,7 @@
             </span>
           </button>
           <div class="nav-links" :class="{ closed: !groups.score }">
-            <RouterLink to="/admin/score-lines" active-class="on">分数线</RouterLink>
+            <RouterLink to="/admin/score-lines" active-class="on">升学分数线查询</RouterLink>
           </div>
         </section>
 
