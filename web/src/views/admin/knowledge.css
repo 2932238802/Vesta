@@ -265,7 +265,7 @@
   overflow-wrap: anywhere;
 }
 
-.article-head {
+.article-view .article-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
