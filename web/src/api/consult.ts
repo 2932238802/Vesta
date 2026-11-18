@@ -10,6 +10,10 @@ import type {
   ConsultQuoteCategory,
   ConsultQuoteInput,
   ConsultQuoteUpdateInput,
+  ConsultQuestion,
+  ConsultQuestionCategory,
+  ConsultQuestionInput,
+  ConsultQuestionUpdateInput,
   ConsultRun,
   ConsultRunMode,
   ConsultScoringConfig,
@@ -92,6 +96,55 @@ export const consultApi = {
   deleteConsultQuoteCategory(id: string) {
     return request<{ ok: true }>(
       `/api/admin/consult/quote-categories/${encodeURIComponent(id)}`,
+      { method: 'DELETE', auth: true }
+    )
+  },
+  consultQuestions() {
+    return request<{ categories: ConsultQuestionCategory[]; questions: ConsultQuestion[] }>(
+      '/api/admin/consult/questions',
+      { auth: true }
+    )
+  },
+  createConsultQuestion(body: ConsultQuestionInput) {
+    return request<{ item: ConsultQuestion }>('/api/admin/consult/questions', {
+      method: 'POST',
+      body,
+      auth: true
+    })
+  },
+  updateConsultQuestion(id: string, body: ConsultQuestionUpdateInput) {
+    return request<{ item: ConsultQuestion }>(
+      `/api/admin/consult/questions/${encodeURIComponent(id)}`,
+      { method: 'PATCH', body, auth: true }
+    )
+  },
+  deleteConsultQuestion(id: string) {
+    return request<{ ok: true }>(`/api/admin/consult/questions/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      auth: true
+    })
+  },
+  createConsultQuestionCategory(name: string) {
+    return request<{ category: ConsultQuestionCategory }>(
+      '/api/admin/consult/question-categories',
+      { method: 'POST', body: { name }, auth: true }
+    )
+  },
+  updateConsultQuestionCategory(id: string, name: string) {
+    return request<{ category: ConsultQuestionCategory }>(
+      `/api/admin/consult/question-categories/${encodeURIComponent(id)}`,
+      { method: 'PATCH', body: { name }, auth: true }
+    )
+  },
+  reorderConsultQuestionCategories(ids: string[]) {
+    return request<{ categories: ConsultQuestionCategory[] }>(
+      '/api/admin/consult/question-categories/order',
+      { method: 'PUT', body: { ids }, auth: true }
+    )
+  },
+  deleteConsultQuestionCategory(id: string) {
+    return request<{ ok: true }>(
+      `/api/admin/consult/question-categories/${encodeURIComponent(id)}`,
       { method: 'DELETE', auth: true }
     )
   },

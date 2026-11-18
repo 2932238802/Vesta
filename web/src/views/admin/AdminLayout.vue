@@ -75,6 +75,7 @@
           <div class="nav-links" :class="{ closed: !groups.consult }">
             <RouterLink to="/admin/consult" exact-active-class="on">写咨询稿</RouterLink>
             <RouterLink to="/admin/consult/purposes" active-class="on">咨询树</RouterLink>
+            <RouterLink to="/admin/consult/questions" active-class="on">有效的提问</RouterLink>
           </div>
         </section>
 

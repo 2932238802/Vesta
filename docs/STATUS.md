@@ -7,11 +7,11 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 当前 CR | CR-007 故事集迁移（v1.95，已交付） |
-| 当前门禁 | **G3 通过 + G4 豁免**（CR-007，2026-11-18；用户授权：纯导航改动适用简化规则）；commit `21c4ca2` 已推送 |
-| 进行中任务 | 无；CR-007 已交付 |
+| 当前 CR | CR-008 有效的提问（v1.96，开发完成） |
+| 当前门禁 | **G2 自检完成**（CR-008，2026-11-18；`npm run verify` 全绿，接口 36/36、Playwright 51/51 + 错误态 3/3）；工作区未提交，待 G3 评审 |
+| 进行中任务 | T-027 ~ T-031 全部 DONE；待 Review Agent 评审 |
 | 阻塞 | 无 |
-| 下一步 | 用户执行 `bash update.sh` 发布 v1.93–v1.95；后续需求待定 |
+| 下一步 | Review Agent 执行 G3 评审；通过后提交并执行 `bash update.sh` 发布 v1.96 |
 | 文档根目录 | `docs/` |
 
 ## 角色记录
@@ -37,6 +37,17 @@
 - 2026-11-18：Dev SubAgent 完成 CR-007 / T-025 ~ T-026（v1.95）。`AdminLayout.vue` 故事集入口迁入知识库组、`activeGroup` 归 `score`；`npm run verify` EXIT=0；临时 `DATA_DIR` + Playwright 25/25 断言通过（导航顺序、故事集功能回归、高亮切换、390px）；工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-18-故事集迁移.md`。
 - 2026-11-18：Review SubAgent 完成 CR-007 G3 评审，结论 **通过**（无 P0/P1/P2；3 项 P3）；独立 Playwright 71/71、`verify` EXIT=0。报告落盘为 `docs/reports/review-agent-2026-11-18-故事集迁移.md`。
 - 2026-11-18：用户建立 G4 简化规则（`dev-workflow` §2.2）：纯文案/样式/导航/文档、代码 ≤3 文件且 G3 通过时可经同意跳过 Meta 总审。CR-007 据此 **G4 豁免**，记录于本文件与开发文档。
+- 2026-11-18：Dev SubAgent 完成 CR-008 / T-027 ~ T-031（v1.96）。新增 `consult_question_categories` / `consult_questions` 两张表与 3 条索引、`shared/src/consult-question.ts`、`server/src/routes/consult/questions.ts`（8 个接口，挂载在金句栏之后）、`ConsultQuestions.vue` 与 `questions/*` 组件；`npm run verify` 全绿；临时 `DATA_DIR` 接口断言 36/36、Playwright 51/51 + 失败重试 3/3；库内表 / 索引 35 / 48；工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-18-有效提问.md`。
+
+## 任务概览（CR-008）
+
+| 任务 | 状态 | 依赖 |
+| --- | --- | --- |
+| T-027 建表与共享类型 | DONE | 无 |
+| T-028 后端接口 | DONE | T-027 |
+| T-029 前端骨架：路由、导航、分类栏与只读列表 | DONE | T-028 |
+| T-030 前端增删改、置顶、备注编辑与分类管理 | DONE | T-029 |
+| T-031 验证、文档与版本 | DONE | T-027 ~ T-030 |
 
 ## 任务概览（CR-007）
 
@@ -86,7 +97,6 @@
 
 ## 排队中
 
-- **有效的提问（CR-008）**：G0 已确认（空页面、复制仅正文、无随机、咨询树之后）；开发文档 `archive/20261118/14-有效提问-开发文档.md` 已写，**待 G1**。
 - **知识库 P2（CR-006 后续）**：`knowledge.css` 的 `.article-head` 跨页影响收藏详情，已修复（`aa04644`，限定 `.article-view .article-head`）。
 - **知识库 P3（CR-006 后续）**：外链图片受 CSP 限制（仅站内/相对图片）；`knowledge.css` 585 行与 400 行口径待明确；换专业后停留在旧专业页可加跳转/提示；列表分页阈值约 200 篇 / 5MB。
 - **故事集迁移（CR-007）**：已交付（v1.95，`21c4ca2`）；G4 按简化规则豁免。
@@ -98,6 +108,7 @@
 
 ## 最近报告
 
+- [dev-agent-2026-11-18-有效提问.md](./reports/dev-agent-2026-11-18-有效提问.md) — CR-008 / T-027 ~ T-031 开发报告（G2 自检）
 - [review-agent-2026-11-18-故事集迁移.md](./reports/review-agent-2026-11-18-故事集迁移.md) — G3 评审：通过（无 P0/P1/P2；3 项 P3）
 - [dev-agent-2026-11-18-故事集迁移.md](./reports/dev-agent-2026-11-18-故事集迁移.md) — CR-007 / T-025 ~ T-026 开发报告（G2 自检）
 - [meta-agent-2026-11-18-知识库重组.md](./reports/meta-agent-2026-11-18-知识库重组.md) — G4 总审：通过（无 P0/P1；P2 样式泄漏单独修复）
@@ -118,6 +129,7 @@
 
 ## 最近需求
 
+- CR-008 有效的提问（v1.96，开发完成待评审）：`archive/20261118/13-有效提问-需求卡.md`、`archive/20261118/14-有效提问-开发文档.md`
 - CR-007 故事集迁移（v1.95，已交付 `21c4ca2`）：`archive/20261118/11-故事集迁移-需求卡.md`、`archive/20261118/12-故事集迁移-开发文档.md`
 - CR-006 知识库重组（v1.94，已交付 `91b09b9`）：`archive/20261118/9-知识库重组-需求卡.md`、`archive/20261118/10-知识库与专业知识汇总-开发文档.md`
 - CR-005 故事集（v1.93，已交付 `1f4f1ef`）：`archive/20261118/7-故事集-需求卡.md`、`archive/20261118/8-故事集-开发文档.md`
