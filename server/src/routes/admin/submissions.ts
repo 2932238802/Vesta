@@ -2,7 +2,6 @@ import { Router, raw } from 'express'
 import type { Answers, ReportOverrides } from '../../../../shared/src/types'
 import { answerLabel } from '../../../../shared/src/report'
 import { computeScores } from '../../../../shared/src/scoring'
-import { cycleStartKey } from '../../../../shared/src/cycle'
 import { noStore } from '../../auth'
 import { db, getActiveSurvey, getSurvey, normalizeReportMode, recordEvent } from '../../db'
 import { regenerateReport } from '../../ai/generate'
@@ -23,8 +22,6 @@ export const submissionsRouter = Router()
 submissionsRouter.get('/submissions/export.csv', (req, res) => {
   noStore(res)
   const q = clampString(req.query.q, 80)
-  const weekParam = clampString(req.query.week, 20)
-  const week = /^\d{4}-\d{2}-\d{2}$/.test(weekParam) ? weekParam : 'all'
   const requestedCategory = clampString(req.query.category, 20)
   const category = ROSTER_CATEGORIES.has(requestedCategory) ? requestedCategory : ''
   const allRows = db
@@ -49,7 +46,6 @@ submissionsRouter.get('/submissions/export.csv', (req, res) => {
   })[]
 
   const rows = allRows.filter((row) => {
-    if (week !== 'all' && cycleStartKey(row.invite_created_at) !== week) return false
     if (!category || category === 'all') return true
     const stage = rosterStage({
       submission_id: row.id,

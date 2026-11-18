@@ -1,6 +1,5 @@
 <template>
   <div class="group-bar" role="tablist" aria-label="分组">
-    <span class="group-bar-label">分组</span>
     <button
       class="group-chip"
       type="button"
@@ -22,7 +21,6 @@
       @click="$emit('update:groupId', group.id)"
     >
       {{ group.name }}
-      <span v-if="group.default" class="group-default">默认</span>
       <b>{{ group.count }}</b>
     </button>
     <span class="group-bar-spacer" />

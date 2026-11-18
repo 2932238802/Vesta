@@ -2,7 +2,20 @@
 
 本文档记录已经确认或完成的需求，帮助后续 Agent 理解“为什么这样做”。代码与文档冲突时，以 `docs/` 文档为准修正代码，并同步更新本文档（见 `agent-rules.md` 的「文档优先」）。
 
+> 2026-11-18 起：原 `docs/README.md`、`agent-rules.md`、`consult-system.md`、`规划自测问卷-设计文档.md`、`development-history.md` 均迁入 `docs/reference/`；`docs/README.md` 只保留入口索引。本文历史条目里的旧路径按当时记录保留，新改动请写 `docs/reference/` 下的新路径。
+
 ## 本轮（2026-11-18）
+
+### 学员名单分组简化：移除期次、默认组并入“全部”（2026-11-18，产品版本 v1.90）
+
+- 依据：`docs/archive/20261118/2-学员名单分组简化-开发文档.md`（CR-001 / R-001 v1，G1 已确认，用户选择“做，完整范围”）。
+- **口径**：名单只保留“全部 + 用户自建分组”一个维度；不再有期次/日期栏。默认分组（`is_default=1`）在分组栏、管理弹窗和行内 chip 中都不显示，但底层保留，继续承担新邀请自动归组与归档判定；“全部”= `groupId` 空串，不新增虚拟分组记录。
+- **接口**：`GET /api/admin/roster` 移除 `week` 过滤与 `weeks` / `currentWeek` 响应，行上不再返回 `week`；`GET /api/admin/submissions/export.csv` 移除 `week` 过滤；旧 URL 的 `week` / `group` / `dates` 一律忽略并清掉。`POST /api/admin/roster/groups` 拒绝名为 `全部` / `默认分组` 的组，返回 `400`；空名、同名、50 组上限行为不变。
+- **前端**：删除 `RosterCycleBar.vue`；`useRoster` 去掉期次状态，保留原始 `groups` 并派生 `visibleGroups` / `defaultGroupId`；分组栏去掉“分组”标签与默认组 chip；管理弹窗隐藏默认组，只有默认组时显示空状态；行内 chip 过滤默认组；归档区与名单行共用“加入分组…”弹窗，目标列表顶部为“全部”，选中后写入隐藏默认组。
+- **数据**：无表结构变更、无迁移；`roster_groups` / `roster_group_members` / 默认组成员 / 归档数据保持原样。
+- **验证**：`npm run typecheck`、`npm run build`、`npm run verify` 通过；起服务后断言 `GET /api/admin/roster` 无 `weeks/currentWeek`、`export.csv?week=` 不再按周过滤、保留名返回 `400`；Playwright 走查名单默认态、分组切换、行内 chip、管理弹窗空状态、归档加回“全部”、删除最后一个用户分组与旧 URL。
+- **部署**：无表结构变更，随 `bash update.sh`；回滚 `git revert` 本轮提交即可，默认组数据未删除，回滚后分组栏恢复显示默认组。
+- **已知**：A-001（生产是否已有名为“全部/默认分组”的用户分组）需在发布前用只读 SQL 排查；若有同名数据，需先改名。无自动化 UI 测试，名单相关 AC 依赖手工走查。
 
 ### 分数线筛选栏候选：facets 接口与可搜索下拉（2026-11-18，产品版本 v1.89）
 
@@ -329,7 +342,7 @@
 
 ### 前端拆包与巨型文件拆分（2026-11-12，产品版本 v1.62）
 
-- 依据：`docs/archive/20261112/13-前端拆包与巨型文件拆分-开发方案.md` v1.2（v1.1 第一批 / v1.2 第二批），并已按同目录 [`15-13号前端拆包方案-Review.md`](./archive/20261112/15-13号前端拆包方案-Review.md) 补齐事实与验证记录；只调整「代码怎么放、按需加载什么」，不改任何接口、路由路径和业务逻辑。产品版本按 `docs/README.md`「版本约定」递增（并行的 14 号方案为 v1.61）。
+- 依据：`docs/archive/20261112/13-前端拆包与巨型文件拆分-开发方案.md` v1.2（v1.1 第一批 / v1.2 第二批），并已按同目录 [`15-13号前端拆包方案-Review.md`](../archive/20261112/15-13号前端拆包方案-Review.md) 补齐事实与验证记录；只调整「代码怎么放、按需加载什么」，不改任何接口、路由路径和业务逻辑。产品版本按 `docs/README.md`「版本约定」递增（并行的 14 号方案为 v1.61）。
 - 前端拆包：`web/src/router.ts` 除 `Root` / `NotFound` 外全部改成路由级 `() => import(...)`；`web/vite.config.ts` 把 `vue` / `vue-router` 拆成 `vendor-vue` chunk。构建后入口 `index-*.js` 从约 383KB 降到 24.0KB，入口 + vendor 合计约 131KB（gzip 约 50KB）；管理端各页（ConsultWorkspace 35.5KB、ReportEditor 26.0KB、Submissions 25.4KB、ReportBlocks 25.6KB…）各自成 chunk，公开页不再下载管理后台代码。
 - admin 拆分：`server/src/routes/admin.ts`（1473 行）拆成 `admin/index.ts` + `shared.ts` + `resumes/overview/invites/roster/submissions/settings`；`server/src/index.ts` 的 import 改为 `./routes/admin/index`。注册顺序与「`/login`、`/dev-login` 在 `requireAdmin()` 之前」的边界不变。拆分后 38 条路由：`GET /appointments` 是并行的 `14-管理员界面交互优化` 方案按「已无消费方」删除的（前端页面同时改为重定向到学员名单），不是本次拆分丢失。
 - consult 拆分：`server/src/routes/consult.ts`（2378 行）拆成 `consult/index.ts` + `forest.ts` + `shared.ts` + `purposes.ts` + `collections.ts` + `trees.ts` + `runs.ts`；根路由 `GET /` 与 `/trees*` 一起放在 `trees.ts` 并最先挂载，`/collections/bundle` 仍在 `/collections/:id` 之前。目录比原文件深一层，读取 `shared/src/consult-purpose-data.json` 与 `consult-forest-seed.json` 的相对路径同步改成 `../../../../`，已确认种子树仍能并入森林。`runs.ts` 仍有 1228 行，留作后续单独处理。

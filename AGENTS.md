@@ -1,30 +1,30 @@
 # Vesta · Agent 开工规则
 
-> 所有在本仓库工作的 Agent（Codex / Claude Code / DSH / Cursor / 其他）**先读本文件，再读 `docs/agent-rules.md`**。
-> 规则优先级：用户当次明确要求 > 本文件 > `docs/agent-rules.md` > `docs/` 其他文档 > 代码现状。
+> 所有在本仓库工作的 Agent（Codex / Claude Code / DSH / Cursor / 其他）**先读本文件，再读 `docs/reference/agent-rules.md`**。
+> 规则优先级：用户当次明确要求 > 本文件 > `docs/reference/agent-rules.md` > `docs/` 其他文档 > 代码现状。
 > 核心约定：**文档优先**——要改题目、选项、跳题、报告规则、接口、数据模型或部署流程，先改 `docs/`，再改代码；代码与文档冲突时，按文档修正代码。
 
 ## 0. 开工前（缺一不可）
 
-1. 读 `docs/agent-rules.md`（硬约束）和 `docs/README.md`（工程全貌）。
+1. 先读 `docs/README.md`（入口索引），再读 `docs/reference/agent-rules.md`（硬约束）和 `docs/reference/README.md`（工程全貌）。
 2. 按任务类型补读：
-   - 问卷 / 报告 / 评分 → `docs/规划自测问卷-设计文档.md`（唯一口径）
-   - 咨询树 / 咨询稿生成 / 收藏栏 → `docs/consult-system.md`
-   - 部署 / `update.sh` / 环境变量 → `docs/README.md` 对应章节
-   - 为什么要这样做 → `docs/development-history.md` 最近两轮
+   - 问卷 / 报告 / 评分 → `docs/reference/规划自测问卷-设计文档.md`（唯一口径）
+   - 咨询树 / 咨询稿生成 / 收藏栏 → `docs/reference/consult-system.md`
+   - 部署 / `update.sh` / 环境变量 → `docs/reference/README.md` 对应章节
+   - 为什么要这样做 → `docs/reference/development-history.md` 最近两轮
 3. 先跑一遍基线，确认开工前是绿的：`npm run typecheck`（要改前端再加 `npm run build`）。
 4. 用 todo 写下计划：改哪些文件、对应文档哪一节、怎么验证。
 5. 本地环境变量已经配好（AI 在 WSL 全局 `~/.profile`，项目变量在仓库 `.env`），见文末「附：本地环境变量」——别重复配、别提交、别打印 key。
 
 ## 1. 文档优先（硬性）
 
-- 需求变了：**先改 `docs/`**，在 `docs/development-history.md` 记「何时、改了什么、为什么」，再动代码。
+- 需求变了：**先改 `docs/`**，在 `docs/reference/development-history.md` 记「何时、改了什么、为什么」，再动代码。
 - 不允许「先改代码、文档回头再说」，也不允许只改代码不改文档。
 - 判断文档过期时，也要先改文档并说明原因，再改代码；不能直接按代码现状覆盖文档。
 - 已作废的方案放 `docs/archive/`，正文里不留会误导人的旧口径。
 - 服务器 `/opt/vesta` 上只 `git pull` / `bash update.sh`，**不要在服务器上直接改代码**——改在本地仓库，推上去再拉。
 
-## 2. 实现纪律（摘自 `docs/agent-rules.md`，必须遵守）
+## 2. 实现纪律（摘自 `docs/reference/agent-rules.md`，必须遵守）
 
 - 使用者不是技术从业者：界面简单、直接、少解释；重要动作显眼居中；不堆标题、小标题和重复按钮。
 - AI 失败要给出可操作的真实结论、允许重试、保留已完成部分；面向学生的文案不暴露模块 key / 系统分数口径，真实原因写 `ai_error` 与后台日志；**不许用低质量兜底模板伪装成 AI 成功**。
@@ -44,7 +44,7 @@
 | 前端 `web/` | `npm run typecheck && npm run build` |
 | 文档 / 问卷口径 | `npm run check:docs` |
 | 版本号 / `package.json` | `npm run check:version` |
-| 以上全部 | `npm run verify`（= check:docs + check:size + check:version + check:deps + check:dates + check:score + check:audit + check:search + typecheck + build） |
+| 以上全部 | `npm run verify`（= check:docs + check:size + check:version + check:deps + check:dates + check:score + check:audit + check:roster + check:search + typecheck + build） |
 
 - 没有自动化测试套件，关键页面必须手工走查：问卷一整套（含跳题）、报告页、后台列表。
 - **没验证过不要写「完成」**；拿不准就说「不确定」，给出已知信息和可选方案。
@@ -57,7 +57,7 @@
 2. **官方文档**：用 context7 MCP（`mcp__context7__resolve-library-id` → `mcp__context7__get-library-docs`）查 Express / Vue / Vite / SQLite / Node 的现行 API，别凭记忆写。
 3. **真实跑一遍**：要看页面就起 `npm run dev`，用 playwright MCP（`mcp__playwright__*`）打开 `http://127.0.0.1:5173` 走查，不要臆测 DOM 和样式。
 4. **仍然拿不准**：停下来问，给「已知信息 + 可选方案 + 风险」，不要硬编答案。
-5. **需要新能力**：优先找现成 skill（项目 `.dsh/skills/`、用户 `~/.dsh/skills`）或 MCP server；选型理由写进 `docs/development-history.md`，不要为了一个工具大改架构。
+5. **需要新能力**：优先找现成 skill（项目 `.dsh/skills/`、用户 `~/.dsh/skills`）或 MCP server；选型理由写进 `docs/reference/development-history.md`，不要为了一个工具大改架构。
 
 已接入的 MCP（见 `.mcp.json` 与 `.codex/config.toml`）：
 
@@ -74,8 +74,8 @@
 **版本动作清单（需求收尾必须依次做，漏了第 1–3 步 `check:version` 会让 `verify` 失败）：**
 
 1. 升根 `package.json` 的 `version` 为 `1.<minor+1>.0`（同一轮需求内多次提交不重复升版本，补丁并进下一轮）。
-2. `docs/README.md` 的「已完成：…」追加 `v1.<minor+1> <一句话>`，并在「版本记录」表加一行（日期、commit、摘要）。
-3. `docs/development-history.md` 的「本轮（YYYY-MM-DD）」加小节，标题带产品版本，写「改了 / 为什么 / 验证」。
+2. `docs/reference/README.md` 的「已完成：…」追加 `v1.<minor+1> <一句话>`，并在「版本记录」表加一行（日期、commit、摘要）。
+3. `docs/reference/development-history.md` 的「本轮（YYYY-MM-DD）」加小节，标题带产品版本，写「改了 / 为什么 / 验证」。
 4. 对应 `docs/archive/YYYYMMDD/N-xxx.md` 顶部状态改为「已实施并提交（产品版本 vX）」，补「实施记录」。
 5. `docs/archive/YYYYMMDD/README.md` 索引表更新状态、版本、证据。
 6. `npm run verify` 全绿后提交。

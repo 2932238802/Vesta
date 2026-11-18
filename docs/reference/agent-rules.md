@@ -6,7 +6,7 @@
 
 - **先改文档，再改代码**：涉及题目/选项/跳题、报告规则、接口、数据模型、部署流程的改动，先更新 `docs/` 里对应文档，确认后再改实现。
 - 代码与文档冲突时，默认以文档为准修正代码；如果确实是文档过期，也先改文档说明变更，再改代码——不允许「先改代码、文档回头再说」。
-- 问卷与报告以 `docs/规划自测问卷-设计文档.md` 为准；咨询系统以 `docs/consult-system.md` 为准；历史决策查 `docs/development-history.md`。
+- 问卷与报告以 `docs/reference/规划自测问卷-设计文档.md` 为准；咨询系统以 `docs/reference/consult-system.md` 为准；历史决策查 `docs/reference/development-history.md`。
 - 已作废的方案放 `docs/archive/`，正文里不要留会误导人的旧口径。
 - 开工前先读仓库根目录的 `AGENTS.md`（执行清单）和本文件（硬约束）；交付前跑 `npm run verify`。
 
@@ -82,7 +82,7 @@
 ## 文档维护
 
 - 改动涉及架构、认证、数据模型、部署流程或已确认需求时，同步更新 `docs/`。
-- 产品版本从 v1.60 起算，每完成一轮需求递增一个小版本（v1.61、v1.62……）；在 `development-history.md` 对应小节注明产品版本号。方案文档自身的 v1.0 / v1.1 与产品版本分开编号（见 `docs/README.md`「版本约定」）。
-- **版本号三处同步**：根 `package.json` 的 `version` 是唯一事实源，产品 `v1.<minor>` ↔ `1.<minor>.0`（`major` 恒为 1、`patch` 恒为 0）；`docs/README.md` 的「已完成」行与「版本记录」表、`docs/development-history.md` 的本轮小节标题必须同步。`npm run check:version` 已接入 `npm run verify`，不一致会直接失败；不要为了通过去改脚本判定。
+- 产品版本从 v1.60 起算，每完成一轮需求递增一个小版本（v1.61、v1.62……）；在 `development-history.md` 对应小节注明产品版本号。方案文档自身的 v1.0 / v1.1 与产品版本分开编号（见 `docs/reference/README.md`「版本约定」）。
+- **版本号三处同步**：根 `package.json` 的 `version` 是唯一事实源，产品 `v1.<minor>` ↔ `1.<minor>.0`（`major` 恒为 1、`patch` 恒为 0）；`docs/reference/README.md` 的「已完成」行与「版本记录」表、`docs/reference/development-history.md` 的本轮小节标题必须同步。`npm run check:version` 已接入 `npm run verify`，不一致会直接失败；不要为了通过去改脚本判定。
 - 用户的新要求如果推翻旧实现，要在 `development-history.md` 记录“何时、改了什么、为什么”，避免后续 Agent 又把旧逻辑加回来。
-- 开发设计文档统一放 `docs/archive/`；同一天的文档收进 `docs/archive/YYYYMMDD/`（如 `docs/archive/20261112/`），文件名按 `1-标题.md`、`2-标题.md` 依次递增。`docs/` 根目录只保留口径文档（`规划自测问卷-设计文档.md`、`consult-system.md`）与 `README.md` / `development-history.md` / `agent-rules.md`。
+- 开发设计文档统一放 `docs/archive/`；同一天的文档收进 `docs/archive/YYYYMMDD/`（如 `docs/archive/20261112/`），文件名按 `1-标题.md`、`2-标题.md` 依次递增。`docs/` 根目录只保留入口索引 `README.md`；问卷 / 咨询 / 规则 / 历史 / 工程全貌等长期口径统一放 `docs/reference/`，一种功能一个文件。

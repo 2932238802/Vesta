@@ -101,8 +101,10 @@ export function useRosterGroups(state: RosterState) {
 
   async function assignSelected(groupId: string) {
     if (!groupId) return
+    // 选“全部”时实际写入隐藏的默认组，提示文案仍用“全部”。
+    const isAll = groupId === state.defaultGroupId.value
     const group = state.groups.value.find((item) => item.id === groupId)
-    await joinGroup(groupId, groupTargetIds.value, group?.name ?? '分组')
+    await joinGroup(groupId, groupTargetIds.value, isAll ? '全部' : group?.name ?? '分组')
   }
 
   function rowsByIds(ids: string[]): AdminRosterRow[] {

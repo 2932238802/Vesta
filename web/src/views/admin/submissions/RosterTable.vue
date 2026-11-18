@@ -9,12 +9,7 @@
     </div>
     <div v-else-if="roster.length === 0" class="empty">
       {{ emptyText }}
-      <div v-if="searching && hasWeekFilter && allWeeksCount > 0" class="empty-action">
-        <button class="btn ghost small" type="button" @click="$emit('search-all-weeks')">
-          在全部期次里搜
-        </button>
-      </div>
-      <div v-else-if="category !== ''" class="empty-action">
+      <div v-if="category !== ''" class="empty-action">
         <button class="btn ghost small" type="button" @click="$emit('clear-category')">
           查看全部状态
         </button>
@@ -74,21 +69,21 @@
             </td>
             <td>
               <div class="name">{{ row.name || '未命名' }}</div>
-              <div v-if="row.groups.length || archived" class="group-chips">
-                <template v-if="row.groups.length">
+              <div v-if="visibleGroups(row).length || archived" class="group-chips">
+                <template v-if="visibleGroups(row).length">
                   <span
-                    v-for="group in row.groups.slice(0, 3)"
+                    v-for="group in visibleGroups(row).slice(0, 3)"
                     :key="group.id"
                     class="group-chip mini"
                   >
                     {{ group.name }}
                   </span>
                   <span
-                    v-if="row.groups.length > 3"
+                    v-if="visibleGroups(row).length > 3"
                     class="group-chip mini"
-                    :title="row.groups.map((group) => group.name).join('、')"
+                    :title="visibleGroups(row).map((group) => group.name).join('、')"
                   >
-                    +{{ row.groups.length - 3 }}
+                    +{{ visibleGroups(row).length - 3 }}
                   </span>
                 </template>
                 <span v-else class="chip mini archived-chip">已归档</span>
@@ -186,7 +181,7 @@ import { formatDate } from '@/format'
 import RowMenu from '@/components/RowMenu.vue'
 import type { RowMenuItem } from '@/components/row-menu'
 import { CONSULT_RESULT_OPTIONS, stageClass, stageLabel } from './rosterMeta'
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   loading: boolean
   error: string
   roster: AdminRosterRow[]
@@ -196,16 +191,21 @@ withDefaults(defineProps<{
   someSelected: boolean
   savingStatus: string
   savingCell: string
-  hasWeekFilter: boolean
-  searching: boolean
-  allWeeksCount: number
   category: string
   allCount: number
   rowMenuItems: (row: AdminRosterRow) => RowMenuItem[]
   /** 归档区块复用同一张表：只加边框 / 背景区分，不降文字对比度。 */
   archived?: boolean
   selectAllLabel?: string
-}>(), { archived: false, selectAllLabel: '全选' })
+  /** 界面隐藏的默认分组 id；行内 chip 不再展示它。 */
+  hiddenGroupId?: string
+}>(), { archived: false, selectAllLabel: '全选', hiddenGroupId: '' })
+
+function visibleGroups(row: AdminRosterRow) {
+  return props.hiddenGroupId
+    ? row.groups.filter((group) => group.id !== props.hiddenGroupId)
+    : row.groups
+}
 
 /** 只锁住正在保存的那个单元格，其他行和其他列不受影响。 */
 function cellKey(row: AdminRosterRow, field: string): string {
@@ -214,7 +214,6 @@ function cellKey(row: AdminRosterRow, field: string): string {
 
 defineEmits<{
   (event: 'reload'): void
-  (event: 'search-all-weeks'): void
   (event: 'clear-category'): void
   (event: 'toggle-all', change: Event): void
   (event: 'toggle-row', id: string, change: Event): void

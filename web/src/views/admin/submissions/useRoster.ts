@@ -1,7 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { currentCycleKey } from '@shared/cycle'
-import { api, type AdminRosterGroup, type AdminRosterRow, type AdminRosterWeek } from '@/api'
+import { api, type AdminRosterGroup, type AdminRosterRow } from '@/api'
 import { rosterEmptyText, TAB_KEYS } from './rosterMeta'
 
 export function useRoster() {
@@ -23,13 +22,11 @@ export function useRoster() {
   const archiveCount = ref(0)
   const groupId = ref(groupFromQuery())
   const counts = ref<Record<string, number>>({ all: 0 })
-  const weeks = ref<AdminRosterWeek[]>([])
-  const currentWeek = ref(currentCycleKey())
-  // 旧链接带着 group/dates 时不再按那两个参数筛选，直接回到「全部期次」。
-  const hasLegacyFilter = Boolean(route.query.group || route.query.dates)
-  const week = ref(hasLegacyFilter ? 'all' : currentWeek.value)
+  // 旧链接带着 week/group/dates 时不再按这些参数筛选，清掉地址栏参数即可。
+  const hasLegacyFilter = Boolean(route.query.week || route.query.group || route.query.dates)
   if (hasLegacyFilter) {
     const query = { ...route.query }
+    delete query.week
     delete query.group
     delete query.dates
     void router.replace({ query })
@@ -95,28 +92,17 @@ export function useRoster() {
   }
 
   let searchTimer: ReturnType<typeof setTimeout> | undefined
-  const allWeeksCount = computed(() => weeks.value.reduce((sum, item) => sum + item.count, 0))
   const searching = computed(() => q.value.trim().length > 0)
-  const weekLabel = computed(
-    () => weeks.value.find((item) => item.key === week.value)?.label ?? ''
-  )
-  const isCurrentWeek = computed(
-    () => week.value !== 'all' && week.value === currentWeek.value
-  )
-  const groupName = computed(
-    () => groups.value.find((group) => group.id === groupId.value)?.name ?? ''
+  // 默认组在界面上隐藏，但仍保留在 groups 里，用于归档加回和分组切换。
+  const visibleGroups = computed(() => groups.value.filter((group) => !group.default))
+  const defaultGroupId = computed(
+    () => groups.value.find((group) => group.default)?.id ?? ''
   )
   const emptyText = computed(() =>
     rosterEmptyText({
       category: category.value,
-      week: week.value,
-      weekLabel: weekLabel.value,
-      current: isCurrentWeek.value,
       searching: searching.value,
-      allWeeksCount: allWeeksCount.value,
-      groupId: groupId.value,
-      groupName: groupName.value,
-      archiveCount: archiveCount.value
+      groupId: groupId.value
     })
   )
 
@@ -130,6 +116,7 @@ export function useRoster() {
     const query = { ...route.query }
     if (value) query.groupId = value
     else delete query.groupId
+    delete query.week
     delete query.group
     delete query.dates
     void router.replace({ query })
@@ -154,18 +141,9 @@ export function useRoster() {
       const result = await api.roster({
         q: q.value.trim(),
         category: category.value,
-        week: week.value,
         groupId: groupId.value
       })
       if (requestId !== loadRequest) return
-      weeks.value = result.weeks
-      currentWeek.value = result.currentWeek
-      // 老链接或手改的 week 不在列表里：回到本期，再取一次。
-      if (week.value !== 'all' && !result.weeks.some((item) => item.key === week.value)) {
-        week.value = result.currentWeek
-        void load()
-        return
-      }
       // 组被删或参数非法：接口回空串，前端回「全部」并清掉地址栏参数。
       if (result.groupId !== groupId.value) {
         groupId.value = result.groupId
@@ -195,19 +173,18 @@ export function useRoster() {
     if (searchTimer) clearTimeout(searchTimer)
     searchTimer = setTimeout(load, 280)
   })
-  watch([week, category], () => {
+  watch(category, (value) => {
     clearSelection()
     clearArchiveSelection()
-    void load()
-  })
-  watch(category, (value) => {
     const query = { ...route.query }
     if (value) query.category = value
     else delete query.category
-    // 旧链接里的 group / dates 一律忽略并清掉，不再参与筛选。
+    // 旧链接里的 week / group / dates 一律忽略并清掉，不再参与筛选。
+    delete query.week
     delete query.group
     delete query.dates
     void router.replace({ query })
+    void load()
   })
   watch(
     () => route.query.category,
@@ -229,10 +206,6 @@ export function useRoster() {
     }
   )
 
-  function showAllWeeks() {
-    week.value = 'all'
-  }
-
   function flash(message: string) {
     toast.value = message
     setTimeout(() => {
@@ -244,12 +217,11 @@ export function useRoster() {
     roster,
     archive,
     groups,
+    visibleGroups,
+    defaultGroupId,
     archiveCount,
     groupId,
     counts,
-    weeks,
-    currentWeek,
-    week,
     loading,
     error,
     q,
@@ -261,11 +233,7 @@ export function useRoster() {
     someSelected,
     archiveAllSelected,
     archiveSomeSelected,
-    allWeeksCount,
     searching,
-    weekLabel,
-    isCurrentWeek,
-    groupName,
     emptyText,
     countOf,
     load,
@@ -276,7 +244,6 @@ export function useRoster() {
     clearSelection,
     clearArchiveSelection,
     removeFromSelections,
-    showAllWeeks,
     selectGroup,
     flash
   }

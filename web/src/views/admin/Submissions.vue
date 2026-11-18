@@ -16,10 +16,8 @@
       </template>
     </AdminPageHeader>
 
-    <RosterCycleBar v-model="week" :weeks="weeks" :total="allWeeksCount" />
-
     <RosterGroupBar
-      :groups="groupList"
+      :groups="visibleGroups"
       :group-id="groupId"
       :total="groupBarTotal"
       @update:group-id="selectGroup"
@@ -51,14 +49,11 @@
       :some-selected="someSelected"
       :saving-status="savingStatus"
       :saving-cell="savingCell"
-      :has-week-filter="week !== 'all'"
-      :searching="searching"
-      :all-weeks-count="allWeeksCount"
       :category="category"
       :all-count="counts.all ?? 0"
+      :hidden-group-id="defaultGroupId"
       :row-menu-items="rowMenuItems"
       @reload="load"
-      @search-all-weeks="showAllWeeks"
       @clear-category="category = ''"
       @toggle-all="toggleAll"
       @toggle-row="toggleRow"
@@ -80,6 +75,7 @@
       :saving-cell="savingCell"
       :batch-deleting="batchDeleting"
       :group-saving="groupSaving"
+      :hidden-group-id="defaultGroupId"
       :row-menu-items="rowMenuItems"
       @add-to-group="openArchiveToGroup"
       @clear-selection="clearArchiveSelection"
@@ -98,10 +94,12 @@
     <RosterGroupDialog
       :open="groupDialogOpen"
       :mode="groupDialogMode"
-      :groups="groupList"
+      :groups="visibleGroups"
       :selected-count="groupTargetIds.length"
       :saving="groupSaving"
       :deleting-id="groupDeletingId"
+      :default-group-id="defaultGroupId"
+      :group-count="groupList.length"
       @close="closeGroupDialog"
       @create="createGroup"
       @create-and-join="createGroupAndJoin"
@@ -123,7 +121,6 @@ import { ROSTER_TABS } from './submissions/rosterMeta'
 import { useRoster } from './submissions/useRoster'
 import { useRosterActions } from './submissions/useRosterActions'
 import { useRosterGroups } from './submissions/useRosterGroups'
-import RosterCycleBar from './submissions/RosterCycleBar.vue'
 import RosterGroupBar from './submissions/RosterGroupBar.vue'
 import RosterCategoryTabs from './submissions/RosterCategoryTabs.vue'
 import RosterToolbar from './submissions/RosterToolbar.vue'
@@ -142,11 +139,11 @@ const {
   roster,
   archive,
   groups: groupList,
+  visibleGroups,
+  defaultGroupId,
   archiveCount,
   groupId,
   counts,
-  weeks,
-  week,
   loading,
   error,
   q,
@@ -158,8 +155,6 @@ const {
   someSelected,
   archiveAllSelected,
   archiveSomeSelected,
-  allWeeksCount,
-  searching,
   emptyText,
   load,
   toggleRow,
@@ -168,7 +163,6 @@ const {
   toggleArchiveAll,
   clearSelection,
   clearArchiveSelection,
-  showAllWeeks,
   selectGroup
 } = state
 
@@ -206,7 +200,7 @@ const {
   deleteGroup
 } = groupActions
 
-/** 「全部」chip 与组计数同口径：搜索 + 期次 + 状态 tab，不含分组筛选。 */
+/** 「全部」chip 与组计数同口径：搜索 + 状态 tab，不含分组筛选。 */
 const groupBarTotal = computed(() => counts.value[category.value || 'all'] ?? 0)
 
 function openSelectedToGroup() {

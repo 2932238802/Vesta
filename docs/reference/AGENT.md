@@ -17,6 +17,8 @@ source_of_truth:
 related: [IDX, OVR, ENV, ARC, FUN, API, DAT, OPS, TST]
 ---
 
+> 维护者：Doc Agent ｜ 最近更新：2026-11-18 ｜ 状态：草稿（定点勘误，待用户复核）
+
 # 执行型 Agent 契约层
 
 本文件是给执行型 AI 的**最短可信路径**：先看命令与符号，再看不变量与失败表。不要从这里跳去读整个仓库；需要细节时按 `路径#符号` 定点阅读。
@@ -55,7 +57,7 @@ related: [IDX, OVR, ENV, ARC, FUN, API, DAT, OPS, TST]
 | 进程入口 | `server/src/index.ts` | 中间件、路由挂载、静态站点、启动任务 | 管理路由必须挂在 `requireAdmin()` 之后 |
 | `config` | `server/src/env.ts#config` | 全部环境变量与默认值 | 生产硬校验：管理员账号、`AUTH_SECRET` |
 | `requireAdmin` | `server/src/auth.ts#requireAdmin` | Token + `admin_sessions` 双重校验 | 新增管理接口不要绕过 |
-| `initSchema` | `server/src/db/schema.ts#initSchema` | 26 张表与索引 | 改表必须同时写幂等迁移 |
+| `initSchema` | `server/src/db/schema.ts#initSchema` | 27 张表与索引 | 改表必须同时写幂等迁移 |
 | `runMigrations` | `server/src/db/migrations.ts#runMigrations` | 启动时补列/回填/种子 | 不要写一次性迁移脚本 |
 | `publicRouter` | `server/src/routes/public.ts#publicRouter` | 健康、邀请、提交、报告、领取、事件 | `doc` 模式失败不得伪造报告 |
 | `adminRouter` | `server/src/routes/admin/index.ts#adminRouter` | 登录后全部管理接口 | 子路由挂载顺序影响匹配 |
@@ -149,8 +151,8 @@ related: [IDX, OVR, ENV, ARC, FUN, API, DAT, OPS, TST]
 | 2 | `.env.example` 未列 `SCORELINE_*` | 部署者不知道抓取开关与预算 | `grep -n "SCORELINE" .env.example`（应无输出） |
 | 3 | `AI_TIMEOUT_MS` 示例 `120000` vs 代码默认 `240000` | 行为与文档不一致 | `grep -n "AI_TIMEOUT_MS" .env.example server/src/env.ts` |
 | 4 | 抓取 `running` 残留会永久阻塞自动调度 | 需人工改库；是否应启动自愈未定 | `grep -n "status IN ('queued', 'running')\|status = 'running'" server/src/score-lines/*.ts` |
-| 5 | `docs/archive/20261116/` 为空 | 归档流程可能未完成 | `find docs/archive/20261116 -type f` |
-| 6 | 设计文档提到“复制完整结果”，页面未实现 | 验收口径不一致 | `grep -n "复制" docs/规划自测问卷-设计文档.md web/src/views/ReportView.vue` |
+| 5 | `docs/archive/20261116/` 不存在 | 当天方案没有按日归档，追溯需靠提交历史与 `261116` 快照 | `ls docs/archive` |
+| 6 | 设计文档提到“复制完整结果”，页面未实现 | 验收口径不一致 | `grep -n "复制" docs/reference/规划自测问卷-设计文档.md web/src/views/ReportView.vue` |
 | 7 | 旧版 AI 报告回退路径仍存在 | 两套渲染逻辑并存 | `grep -n "buildFallback" server/src/routes/public.ts` |
 | 8 | `not_offered` 是否有后台入口未确认 | 影响覆盖维护 | `grep -rn "not_offered" server/src web/src` |
 | 9 | `resume_images` / legacy 分数线表是否可清理 | 占空间；注释要求先确认 | `grep -rn "resume_images\|score_line_sets" server/src` |
@@ -158,8 +160,8 @@ related: [IDX, OVR, ENV, ARC, FUN, API, DAT, OPS, TST]
 | 11 | 线上 `8082` 端口只在文档记载 | 未读取生产 unit | 生产执行 `systemctl cat vesta` |
 | 12 | `deploy/nginx.conf` 注释仍提“简历上传 20MB” | 注释过期，实际上限 25MB | `grep -n "简历" deploy/nginx.conf` |
 | 13 | systemd `ReadWritePaths` 未配 `ProtectSystem` | 可能不构成写限制 | `grep -n "ProtectSystem\|ReadWritePaths" deploy/vesta.service`；`systemd-analyze security vesta` |
-| 14 | 依赖大版本升级待办 | Express 5 / Vite 8 / TS 7 / vue-router 5 / xlsx | `grep -n "Express 5\|Vite 8\|TypeScript 7\|xlsx" docs/development-history.md` |
-| 15 | 本次未跑 `verify` / `typecheck` / `build` | 缺依赖且 build 会写 `web/dist` | `ls node_modules server/node_modules web/node_modules` |
+| 14 | 依赖大版本升级待办 | Express 5 / Vite 8 / TS 7 / vue-router 5 / xlsx | `grep -n "Express 5\|Vite 8\|TypeScript 7\|xlsx" docs/reference/development-history.md` |
+| 15 | 本次未跑 `verify` / `typecheck` / `build` | 文档任务只做只读检查；build 会写 `web/dist` | `npm run verify`（交付前必须补跑） |
 | 16 | AI / Bocha 真实连通性未验证 | 需要凭据与外部网络 | 配好后 `curl` 一个最小请求；或后台看 `ai.configured` |
 
 处理第 1 项时：**不要打印 DOCX 内容、姓名、文件名列表**。只报告数量与路径，交由仓库所有者决定取消跟踪与历史清理方案。
@@ -171,10 +173,12 @@ related: [IDX, OVR, ENV, ARC, FUN, API, DAT, OPS, TST]
 | 生成日期 | `2026-11-16` |
 | 代码 commit | `884ef39` |
 | 产品版本 | `1.85.0` |
-| 输出目录 | `docs/261116/` |
-| 模式 | `full` |
+| 定点勘误 | `2026-11-18`（HEAD `70d8225` / `1.89.0`） |
+| 勘误范围 | 00 / 01 / 04 / 05 / 06 / 09 / AGENT 与 `manifest.json` 哈希 |
+| 输出目录 | `docs/reference/` |
+| 模式 | `full` + `patch` |
 
-**何时失效**：HEAD 不再是 `884ef39`、根版本变化、或 `shared/src/survey.ts` / 数据库 Schema / 路由表发生变化。此时：
+**何时失效**：HEAD 不再是 `70d8225`、根版本变化、或 `shared/src/survey.ts` / 数据库 Schema / 路由表发生变化。此时：
 
 1. 先 `git rev-parse --short HEAD` 确认新 commit。
 2. 检查 `source_of_truth` 路径是否仍存在（下条命令）。
@@ -183,13 +187,13 @@ related: [IDX, OVR, ENV, ARC, FUN, API, DAT, OPS, TST]
 `source_of_truth` 路径存在性检查（cwd = 仓库根；预期无输出，退出码 0）：
 
 ```bash
-node -e "const fs=require('fs');const dir='docs/261116';let bad=0;for(const f of fs.readdirSync(dir).filter(x=>x.endsWith('.md'))){const t=fs.readFileSync(dir+'/'+f,'utf8');for(const m of t.matchAll(/^\s*-\s+([^\s#]+)#/gm)){if(!fs.existsSync(m[1])){console.log('MISSING',f,m[1]);bad++}}}process.exit(bad?1:0)"
+node -e "const fs=require('fs');const dir='docs/reference';let bad=0;for(const f of fs.readdirSync(dir).filter(x=>x.endsWith('.md'))){const t=fs.readFileSync(dir+'/'+f,'utf8');for(const m of t.matchAll(/^\s*-\s+([^\s#]+)#/gm)){if(!fs.existsSync(m[1])){console.log('MISSING',f,m[1]);bad++}}}process.exit(bad?1:0)"
 ```
 
 manifest 与磁盘一致性检查（预期输出 `OK`，退出码 0）：
 
 ```bash
-node -e "const fs=require('fs'),c=require('crypto');const m=JSON.parse(fs.readFileSync('docs/261116/manifest.json','utf8'));let bad=0;for(const d of m.docs){const p='docs/261116/'+d.file;if(!fs.existsSync(p)){console.log('MISSING',d.file);bad++;continue}const h=c.createHash('sha256').update(fs.readFileSync(p)).digest('hex');if(h!==d.sha256){console.log('CHANGED',d.file);bad++}}console.log(bad?'FAIL':'OK');process.exit(bad?1:0)"
+node -e "const fs=require('fs'),c=require('crypto');const m=JSON.parse(fs.readFileSync('docs/reference/manifest.json','utf8'));let bad=0;for(const d of m.docs){const p='docs/reference/'+d.file;if(!fs.existsSync(p)){console.log('MISSING',d.file);bad++;continue}const h=c.createHash('sha256').update(fs.readFileSync(p)).digest('hex');if(h!==d.sha256){console.log('CHANGED',d.file);bad++}}console.log(bad?'FAIL':'OK');process.exit(bad?1:0)"
 ```
 
 如果只是文档被人工编辑，`CHANGED` 是正常的；更新 manifest 或重跑增量即可。若是代码变了而文档没变，按 [00-文档索引.md](./00-文档索引.md) §5 处理。

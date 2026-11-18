@@ -1,54 +1,4 @@
 
-.submissions-page .cycle-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-  padding-bottom: 3px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.submissions-page .cycle-bar::-webkit-scrollbar {
-  display: none;
-}
-.submissions-page .cycle-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  height: 32px;
-  padding: 0 13px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--ink-2);
-  font-size: 12.5px;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-}
-.submissions-page .cycle-chip:hover {
-  border-color: var(--ink-3);
-}
-.submissions-page .cycle-chip.current:not(.on) {
-  border-color: rgba(47, 93, 70, 0.35);
-  color: var(--accent);
-}
-.submissions-page .cycle-chip.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.submissions-page .cycle-chip b {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--ink-3);
-}
-.submissions-page .cycle-chip.on b {
-  color: rgba(255, 255, 255, 0.75);
-}
-
 .submissions-page .category-tabs {
   display: flex;
   gap: 4px;
@@ -306,11 +256,6 @@
 .submissions-page .group-bar::-webkit-scrollbar {
   display: none;
 }
-.submissions-page .group-bar-label {
-  flex: 0 0 auto;
-  color: var(--ink-3);
-  font-size: 11.5px;
-}
 .submissions-page .group-bar-spacer {
   flex: 1;
 }
@@ -345,13 +290,6 @@
   color: var(--accent);
 }
 .submissions-page .group-chip.on b {
-  color: var(--accent);
-}
-.submissions-page .group-default {
-  font-size: 10px;
-  color: var(--ink-3);
-}
-.submissions-page .group-chip.on .group-default {
   color: var(--accent);
 }
 .submissions-page .group-action {

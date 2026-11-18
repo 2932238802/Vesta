@@ -37,11 +37,9 @@
         :some-selected="someSelected"
         :saving-status="savingStatus"
         :saving-cell="savingCell"
-        :has-week-filter="false"
-        :searching="false"
-        :all-weeks-count="0"
         category=""
         :all-count="archiveCount"
+        :hidden-group-id="hiddenGroupId"
         :row-menu-items="rowMenuItems"
         @reload="$emit('reload')"
         @toggle-all="$emit('toggle-all', $event)"
@@ -76,6 +74,7 @@ defineProps<{
   batchDeleting: boolean
   groupSaving: boolean
   rowMenuItems: (row: AdminRosterRow) => RowMenuItem[]
+  hiddenGroupId?: string
 }>()
 
 const emit = defineEmits<{

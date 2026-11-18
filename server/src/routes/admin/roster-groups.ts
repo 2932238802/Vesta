@@ -6,6 +6,9 @@ import { clampString } from '../../util'
 
 export const rosterGroupsRouter = Router()
 
+/** “全部”是虚拟分组，“默认分组”由系统隐藏维护，都不能再建同名用户分组。 */
+const RESERVED_GROUP_NAMES = new Set(['全部', '默认分组'])
+
 interface GroupRow {
   id: string
   name: string
@@ -46,6 +49,10 @@ rosterGroupsRouter.post('/roster/groups', (req, res) => {
   const name = clampString(req.body?.name, 24)
   if (!name) {
     res.status(400).json({ error: '分组名称不能为空' })
+    return
+  }
+  if (RESERVED_GROUP_NAMES.has(name)) {
+    res.status(400).json({ error: `「${name}」是保留名称，请换一个分组名` })
     return
   }
   const duplicate = db

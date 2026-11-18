@@ -13,7 +13,7 @@ export interface RosterGroupHooks {
 
 export function useRosterActions(state: RosterState, groupHooks?: RosterGroupHooks) {
   const router = useRouter()
-  const { q, selected, archiveSelected, week, category, groupId, load, flash } = state
+  const { q, selected, archiveSelected, category, groupId, load, flash } = state
 
   const exporting = ref(false)
   const savingStatus = ref('')
@@ -289,7 +289,6 @@ export function useRosterActions(state: RosterState, groupHooks?: RosterGroupHoo
     try {
       const blob = await api.exportSubmissions({
         q: q.value.trim(),
-        week: week.value,
         category: category.value
       })
       const url = URL.createObjectURL(blob)

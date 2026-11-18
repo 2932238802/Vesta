@@ -1,9 +1,9 @@
 import { Router } from 'express'
-import { currentCycleKey, cycleLabel, cycleRange, cycleStartKey } from '../../../../shared/src/cycle'
 import { noStore } from '../../auth'
 import { db, normalizeReportMode } from '../../db'
 import { log } from '../../log'
 import { clampString, parseJson } from '../../util'
+import { selectRosterGroupId } from './roster-group-id'
 import {
   CONSULT_RESULTS,
   normalizeConsultResult,
@@ -20,10 +20,6 @@ rosterRouter.get('/roster', (req, res) => {
   const q = clampString(req.query.q, 80)
   const requested = clampString(req.query.category, 20)
   const category = ROSTER_CATEGORIES.has(requested) ? requested : ''
-  const weekParam = clampString(req.query.week, 20)
-  // 期次是纯派生值：week 只接受 YYYY-MM-DD，其他（含旧链接的 group/dates）一律按全部处理。
-  const requestedWeek = /^\d{4}-\d{2}-\d{2}$/.test(weekParam) ? weekParam : 'all'
-  const currentWeek = currentCycleKey()
   const requestedGroupId = clampString(req.query.groupId, 100)
 
   const columns = `i.id AS invite_id, i.token, i.name, i.note, i.channel,
@@ -65,7 +61,8 @@ rosterRouter.get('/roster', (req, res) => {
        ORDER BY is_default DESC, created_at ASC, name ASC`
     )
     .all() as { id: string; name: string; is_default: number }[]
-  const groupId = groupRows.some((group) => group.id === requestedGroupId) ? requestedGroupId : ''
+  // 默认组在界面隐藏：旧链接即使带默认组 id，也按“全部”处理，避免隐形过滤。
+  const groupId = selectRosterGroupId(groupRows, requestedGroupId)
 
   // 成员关系一次查完并按邀请归并，避免 1000 行逐行查询。
   const inviteIds = [...new Set([...rows, ...archiveRows].map((row) => row.invite_id))]
@@ -100,16 +97,8 @@ rosterRouter.get('/roster', (req, res) => {
     .all() as { group_id: string; n: number }[]
   for (const total of totals) totalCounts.set(total.group_id, Number(total.n))
 
-  const prepared = rows.map((row) => ({
-    row,
-    stage: rosterStage(row),
-    week: cycleStartKey(row.invite_created_at)
-  }))
-  const preparedArchive = archiveRows.map((row) => ({
-    row,
-    stage: rosterStage(row),
-    week: cycleStartKey(row.invite_created_at)
-  }))
+  const prepared = rows.map((row) => ({ row, stage: rosterStage(row) }))
+  const preparedArchive = archiveRows.map((row) => ({ row, stage: rosterStage(row) }))
 
   const needle = q.toLocaleLowerCase()
   const matchesQuery = ({ row }: { row: RosterRow }): boolean =>
@@ -122,34 +111,8 @@ rosterRouter.get('/roster', (req, res) => {
   const queryFiltered = prepared.filter(matchesQuery)
   const queryFilteredArchive = preparedArchive.filter(matchesQuery)
 
-  const weekCounts = new Map<string, number>()
-  for (const item of queryFiltered) {
-    if (!item.week) continue
-    weekCounts.set(item.week, (weekCounts.get(item.week) ?? 0) + 1)
-  }
-  // 本期永远在列（哪怕 0 人），她周三打开就能看到新一期。
-  if (!weekCounts.has(currentWeek)) weekCounts.set(currentWeek, 0)
-  const weeks = [...weekCounts.entries()]
-    .sort((a, b) => b[0].localeCompare(a[0]))
-    .map(([key, count]) => {
-      const range = cycleRange(key)
-      return {
-        key,
-        start: range.start,
-        end: range.end,
-        label: cycleLabel(key),
-        count,
-        current: key === currentWeek
-      }
-    })
-
-  const inWeek = <T extends { week: string }>(items: T[]): T[] =>
-    requestedWeek === 'all' ? items : items.filter((item) => item.week === requestedWeek)
-  const weekFiltered = inWeek(queryFiltered)
-  const weekFilteredArchive = inWeek(queryFilteredArchive)
-
   const counts: Record<string, number> = {
-    all: weekFiltered.length,
+    all: queryFiltered.length,
     unsubmitted: 0,
     pending: 0,
     opened: 0,
@@ -160,17 +123,17 @@ rosterRouter.get('/roster', (req, res) => {
     scheduled: 0,
     done: 0
   }
-  for (const item of weekFiltered) {
+  for (const item of queryFiltered) {
     counts[item.stage] += 1
     if (item.stage === 'pending' || item.stage === 'opened' || item.stage === 'expired') {
       counts.unsubmitted += 1
     }
   }
 
-  const categoryMatched = weekFiltered.filter((item) =>
+  const categoryMatched = queryFiltered.filter((item) =>
     rosterCategoryMatches(category, item.stage)
   )
-  const archiveMatched = weekFilteredArchive.filter((item) =>
+  const archiveMatched = queryFilteredArchive.filter((item) =>
     rosterCategoryMatches(category, item.stage)
   )
 
@@ -188,7 +151,7 @@ rosterRouter.get('/roster', (req, res) => {
     default: Boolean(group.is_default)
   }))
 
-  const toRow = ({ row, stage, week }: { row: RosterRow; stage: RosterStage; week: string }) => ({
+  const toRow = ({ row, stage }: { row: RosterRow; stage: RosterStage }) => ({
     id: row.invite_id,
     inviteId: row.invite_id,
     submissionId: row.submission_id,
@@ -197,7 +160,6 @@ rosterRouter.get('/roster', (req, res) => {
     note: row.note,
     channel: row.channel,
     stage,
-    week,
     inviteCreatedAt: row.invite_created_at,
     openedAt: row.opened_at,
     submittedAt: row.submitted_at ?? row.submission_created_at,
@@ -230,9 +192,7 @@ rosterRouter.get('/roster', (req, res) => {
     groups,
     groupId,
     archiveCount: archiveMatched.length,
-    counts,
-    weeks,
-    currentWeek
+    counts
   })
 })
 

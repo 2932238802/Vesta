@@ -3,7 +3,6 @@ import type {
   AdminRosterGroup,
   AdminRosterResponse,
   AdminRosterRow,
-  AdminRosterWeek,
   AdminSubmissionDetail,
   AdminSubmissionSummary,
   ConsultResult,
@@ -277,12 +276,11 @@ export const adminApi = {
       { auth: true }
     )
   },
-  roster(params: { q?: string; category?: string; week?: string; groupId?: string } = {}) {
+  roster(params: { q?: string; category?: string; groupId?: string } = {}) {
     return request<AdminRosterResponse>(
       `/api/admin/roster${query({
         q: params.q,
         category: params.category,
-        week: params.week,
         groupId: params.groupId
       })}`,
       { auth: true }
@@ -409,11 +407,10 @@ export const adminApi = {
       auth: true
     })
   },
-  async exportSubmissions(params: { q?: string; week?: string; category?: string } = {}) {
+  async exportSubmissions(params: { q?: string; category?: string } = {}) {
     const response = await fetch(
       `/api/admin/submissions/export.csv${query({
         q: params.q,
-        week: params.week,
         category: params.category
       })}`,
       {

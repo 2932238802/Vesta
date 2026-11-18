@@ -19,11 +19,11 @@ function read(rel) {
 }
 
 // 1. 必读文件存在
-for (const f of ['AGENTS.md', 'docs/agent-rules.md', 'docs/README.md', 'docs/规划自测问卷-设计文档.md']) read(f)
+for (const f of ['AGENTS.md', 'docs/reference/agent-rules.md', 'docs/README.md', 'docs/reference/规划自测问卷-设计文档.md']) read(f)
 
 const survey = read('shared/src/survey.ts')
-const designDoc = read('docs/规划自测问卷-设计文档.md')
-const rules = read('docs/agent-rules.md')
+const designDoc = read('docs/reference/规划自测问卷-设计文档.md')
+const rules = read('docs/reference/agent-rules.md')
 const readme = read('docs/README.md')
 
 // 2. 设计文档覆盖代码里的每一道题（题号 + 题干）
@@ -49,7 +49,7 @@ if (count === 0) {
 // 3. agent 规则保留关键小节
 for (const key of ['文档优先', '认证与安全', '数据操作', '运行与验证']) {
   if (rules.includes(key)) passes.push(`agent-rules 含「${key}」`)
-  else problems.push(`docs/agent-rules.md 缺少「${key}」小节`)
+  else problems.push(`docs/reference/agent-rules.md 缺少「${key}」小节`)
 }
 
 // 4. 设计文档必须声明文档优先

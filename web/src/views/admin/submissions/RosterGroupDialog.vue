@@ -20,30 +20,33 @@
           {{ saving ? '创建中' : '新建分组' }}
         </button>
       </div>
-      <ul class="group-list">
+      <ul v-if="groups.length > 0" class="group-list">
         <li v-for="group in groups" :key="group.id" class="group-row">
           <span class="group-name">{{ group.name }}</span>
-          <span v-if="group.default" class="chip mini">默认</span>
           <span class="quiet small">{{ group.totalCount }} 人</span>
           <button
             class="btn ghost small danger-btn"
             type="button"
-            :disabled="groups.length <= 1 || saving || !!deletingId"
-            :title="groups.length <= 1 ? '至少保留一个分组' : undefined"
+            :disabled="groupCount <= 1 || saving || !!deletingId"
+            :title="groupCount <= 1 ? '至少保留一个分组' : undefined"
             @click="$emit('delete', group)"
           >
             {{ deletingId === group.id ? '删除中' : '删除' }}
           </button>
         </li>
       </ul>
+      <div v-else class="empty">还没有自建分组，在上方输入名称新建一个。</div>
     </template>
 
     <template v-else>
       <div class="group-pick-list">
+        <label v-if="defaultGroupId" class="group-option">
+          <input v-model="picked" type="radio" name="roster-group" :value="defaultGroupId" />
+          <span>全部</span>
+        </label>
         <label v-for="group in groups" :key="group.id" class="group-option">
           <input v-model="picked" type="radio" name="roster-group" :value="group.id" />
           <span>{{ group.name }}</span>
-          <span v-if="group.default" class="chip mini">默认</span>
           <span class="quiet small">{{ group.totalCount }} 人</span>
         </label>
       </div>
@@ -96,6 +99,10 @@ const props = defineProps<{
   selectedCount: number
   saving: boolean
   deletingId: string
+  /** 隐藏默认组的 id；选中它表示把学员加回“全部”。 */
+  defaultGroupId: string
+  /** 含默认组在内的有效分组数，用于判断能否删除。 */
+  groupCount: number
 }>()
 
 const emit = defineEmits<{

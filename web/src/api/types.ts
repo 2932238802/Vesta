@@ -236,8 +236,6 @@ export interface AdminRosterRow {
   note: string
   channel: string
   stage: AdminRosterStage
-  /** 邀请创建时间所属的期次起点（YYYY-MM-DD，周三）。 */
-  week: string
   inviteCreatedAt: string
   openedAt: string | null
   submittedAt: string | null
@@ -276,17 +274,6 @@ export interface AdminRosterResponse {
   groupId: string
   archiveCount: number
   counts: Record<string, number>
-  weeks: AdminRosterWeek[]
-  currentWeek: string
-}
-
-export interface AdminRosterWeek {
-  key: string
-  start: string
-  end: string
-  label: string
-  count: number
-  current: boolean
 }
 
 export interface AdminReportSkillTemplate {

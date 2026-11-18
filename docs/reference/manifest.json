@@ -6,26 +6,29 @@
   "generated_at": "2026-11-16",
   "date": "2026-11-16",
   "locale": "zh-CN",
-  "mode": "full",
+  "mode": "full+patch",
   "root": "/home/losangelous/LosAngelous/Vesta",
-  "out": "docs/261116",
+  "out": "docs/reference",
   "docs": [
     {
       "file": "00-文档索引.md",
       "doc_id": "IDX",
       "title": "文档索引",
       "order": 0,
-      "lines": 103,
-      "sha256": "f0bbb9e4315917150bfc0b52e524d8c37bd5e2325a5b9675b6360dc97982cd88",
-      "covers": ["index", "evidence"]
+      "lines": 117,
+      "sha256": "215a6e382d9d8207990dd1e99cf6eb8609c994b91e89114c176bc92ad83191d1",
+      "covers": [
+        "index",
+        "evidence"
+      ]
     },
     {
       "file": "01-项目概述.md",
       "doc_id": "OVR",
       "title": "项目概述",
       "order": 1,
-      "lines": 195,
-      "sha256": "d9c1c329298e99a81a50a8bb38acc929f3c00b619eff54ae3010b4c5ae024f9a",
+      "lines": 205,
+      "sha256": "f362eebb03a1bbe92f7e18b6d239a8f8280af55602e8c1a50551d67f2a44bc30",
       "covers": [
         "positioning",
         "form",
@@ -47,8 +50,12 @@
       "title": "开发环境搭建",
       "order": 2,
       "lines": 206,
-      "sha256": "6237f74252c3c88ae9d4494402dd1a81eb503ba5210f30607a267ea184932cac",
-      "covers": ["stack", "build_run", "engineering_standards"]
+      "sha256": "11eb47da4d6d50a54fc5ca450d684a95d2e06426229cb31c08fed67ea49f0994",
+      "covers": [
+        "stack",
+        "build_run",
+        "engineering_standards"
+      ]
     },
     {
       "file": "03-系统架构.md",
@@ -56,35 +63,50 @@
       "title": "系统架构",
       "order": 3,
       "lines": 206,
-      "sha256": "d138fcd1ebd74de296274168da00fcc80a264594d1b50469bde1ae7723ec9821",
-      "covers": ["runtime_architecture", "module_map", "core_flows"]
+      "sha256": "416f9b4cb00071a57ea1ce98525eaf4079111eaf4bbf6472113f2ebc9aa383fb",
+      "covers": [
+        "runtime_architecture",
+        "module_map",
+        "core_flows"
+      ]
     },
     {
       "file": "04-核心功能.md",
       "doc_id": "FUN",
       "title": "核心功能",
       "order": 4,
-      "lines": 266,
-      "sha256": "e15b886faa00e70fee8ee4da4b8f89f25d18aabb4b00423ccb931a5e4d6545ba",
-      "covers": ["core_flows", "data_state", "acceptance"]
+      "lines": 283,
+      "sha256": "e6743ec4e3633e126ef68ed046226fc6a0e9ed7f50758dd638e763a01fd71788",
+      "covers": [
+        "core_flows",
+        "data_state",
+        "acceptance"
+      ]
     },
     {
       "file": "05-对外契约.md",
       "doc_id": "API",
       "title": "对外契约",
       "order": 5,
-      "lines": 227,
-      "sha256": "e35d95f2eab0446a28245fca4510ebcf490551ec1e7593030a92f551f6fdd48f",
-      "covers": ["core_flows", "contracts"]
+      "lines": 237,
+      "sha256": "1c4d01a78bc8183a2c4802dcc1adf2455653959f086c21f24c389d2eb8a6c588",
+      "covers": [
+        "core_flows",
+        "contracts"
+      ]
     },
     {
       "file": "06-数据模型.md",
       "doc_id": "DAT",
       "title": "数据模型",
       "order": 6,
-      "lines": 230,
-      "sha256": "b47c73b9cd00183ce2a8946fdb73ee5672dd6e22891bef92c27176a661c2fab6",
-      "covers": ["data_state", "migrations", "retention"]
+      "lines": 245,
+      "sha256": "2479c0492ee4741742e9f9f87915611cbaee03180e24e26c8a2c899487d486fc",
+      "covers": [
+        "data_state",
+        "migrations",
+        "retention"
+      ]
     },
     {
       "file": "07-部署与运维.md",
@@ -92,8 +114,12 @@
       "title": "部署与运维",
       "order": 7,
       "lines": 196,
-      "sha256": "9222ac90e7e99a1d36be470276d379e705d6e8c13735c5b0a917c072bb69d3c9",
-      "covers": ["build_run", "deployment", "operations"]
+      "sha256": "543dcc0925fd9ba2a76fce5de1854537e30fda5df9b7d4becb61e7820446b765",
+      "covers": [
+        "build_run",
+        "deployment",
+        "operations"
+      ]
     },
     {
       "file": "08-排障手册.md",
@@ -102,24 +128,32 @@
       "order": 8,
       "lines": 279,
       "sha256": "3b36e603d9290d0471c33ae42c0ca93f750da0b2f5e87c568ef0636dc826fcb0",
-      "covers": ["known_issues_risks", "failure_modes", "operations"]
+      "covers": [
+        "known_issues_risks",
+        "failure_modes",
+        "operations"
+      ]
     },
     {
       "file": "09-测试与验证.md",
       "doc_id": "TST",
       "title": "测试与验证",
       "order": 9,
-      "lines": 251,
-      "sha256": "6ec0739c8aca0f6e5efa5da825e9021982d747cb7b3ef14ff163846dcff1ab81",
-      "covers": ["quality", "verification", "gaps"]
+      "lines": 253,
+      "sha256": "c0303dd21437a47293b5670619266dafa2da5b8457b26e50881faedfd3d41530",
+      "covers": [
+        "quality",
+        "verification",
+        "gaps"
+      ]
     },
     {
       "file": "AGENT.md",
       "doc_id": "AGENT",
       "title": "执行型 Agent 契约层",
       "order": 99,
-      "lines": 195,
-      "sha256": "8aa94bb71ebce12ae869af1a7befe65560838e43791d6621f72a09f6541ed63f",
+      "lines": 199,
+      "sha256": "5bc62332ee894f97baf1b2288bc59ff1a738fd80fdc2410e0efab0611de88bf8",
       "covers": [
         "commands",
         "symbols",
@@ -131,17 +165,18 @@
     }
   ],
   "covered_paths": [
+    "docs/README.md",
     "package.json",
     "server/package.json",
     "web/package.json",
     ".env.example",
     ".node-version",
     "AGENTS.md",
-    "docs/README.md",
-    "docs/agent-rules.md",
-    "docs/consult-system.md",
-    "docs/规划自测问卷-设计文档.md",
-    "docs/development-history.md",
+    "docs/reference/README.md",
+    "docs/reference/agent-rules.md",
+    "docs/reference/consult-system.md",
+    "docs/reference/规划自测问卷-设计文档.md",
+    "docs/reference/development-history.md",
     "server/dev.mjs",
     "server/src/index.ts",
     "server/src/env.ts",
@@ -170,9 +205,22 @@
     "update.sh"
   ],
   "known_environment_limits": [
-    "node_modules 未安装，check:deps 退出 1",
+    "2026-11-18：依赖已安装，check:deps 退出 0",
     "未运行 npm run verify / typecheck / build",
     "未验证 AI / Bocha 真实连通性",
     "未读取生产 systemd / Nginx 实际配置"
+  ],
+  "patched_at": "2026-11-18",
+  "patched_head": "70d8225",
+  "patched_version": "1.89.0",
+  "patch_note": "v1.86–v1.89 定点勘误；2026-11-18 docs/261116 → docs/reference，长期口径文档迁入 reference，docs/README.md 只保留索引。",
+  "renamed_from": "docs/261116",
+  "renamed_at": "2026-11-18",
+  "supplemental": [
+    "README.md",
+    "agent-rules.md",
+    "consult-system.md",
+    "规划自测问卷-设计文档.md",
+    "development-history.md"
   ]
 }
