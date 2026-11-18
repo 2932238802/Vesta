@@ -15,7 +15,7 @@
 - **维护方式**：分类可新增、改名、上下调序，非空分类不可删除（`409`）；金句支持新增、编辑、删除、置顶、复制、搜索、随机三条。不提供 Word 导入。
 - **首批数据**：`咨询金句-分类版` 的 11 类 140 条（136 个主编号 + 4 条字母补充编号）由 `runMigrations()` 的 `seedConsultQuotes()` 写入一次，标记位 `settings.consult_quotes_seed_applied`；失败不写标记，下次重启重试。不新增一次性脚本，`update.sh` 不变；服务重启即触发。
 - **接口**：`GET/POST /api/admin/consult/quotes`、`PATCH/DELETE /quotes/:id`、`POST /quote-categories`、`PATCH/DELETE /quote-categories/:id`、`PUT /quote-categories/order`。
-- **状态**：已实施（v1.91，待提交）。T-006 ~ T-012 完成，G2 自检通过，待 G3 评审。
+- **状态**：已实施并交付（v1.91，commit `1641845`）。T-006 ~ T-012 完成；G2 自检、G3 评审、G4 总审均通过（G4 无阻断项，4 项非阻断跟进）。
 - **验证**：`npm run verify` 全绿；临时 `DATA_DIR` 断言全新库 11 类 140 条、标记位写入、二次启动不重复、删除一条后重启不补回、删除标记后 `INSERT OR IGNORE` 仍为 140 无重复；curl 覆盖 401/400/404/409、分类重名、非空分类删除、调序排列校验与置顶排序（31 条断言）；Playwright 走查导航、分类计数、搜索（正文/编号/分类名）、复制内容、置顶持久化、随机三条、新增/编辑/删除、分类增改调序与删除限制、错误重试、收藏栏不受影响、390px 无横向溢出（51 条断言）。
 - **部署/回滚**：随 `bash update.sh` 重启自动建表并执行一次性种子；回滚 `git revert` 后新表与种子数据保留，旧代码不读写。
 
