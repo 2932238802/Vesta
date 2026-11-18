@@ -6,6 +6,7 @@
 
 | 入口 | 内容 |
 | --- | --- |
+| [STATUS.md](./STATUS.md) | 当前 CR、门禁、进行中任务、阻塞、下一步 |
 | [reference/README.md](./reference/README.md) | 工程全貌：技术栈、本地开发、生产部署、环境变量、报告生成、版本记录 |
 | [reference/](./reference/) | 全局参考：项目概述、架构、对外契约、数据模型、部署、排障、测试（基线 v1.85 + 定点勘误） |
 | [reference/agent-rules.md](./reference/agent-rules.md) | Agent 硬约束与文档维护规则 |

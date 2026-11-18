@@ -31,6 +31,13 @@ export type {
   ConsultCollectionKind
 } from '@shared/consult-collection'
 export type {
+  ConsultQuote,
+  ConsultQuoteCategory,
+  ConsultQuoteCategoryInput,
+  ConsultQuoteInput,
+  ConsultQuoteUpdateInput
+} from '@shared/consult-quote'
+export type {
   CoverageInfo,
   CoverageItem,
   CoverageStatus,

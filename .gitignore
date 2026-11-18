@@ -26,7 +26,8 @@ rustc-ice-*.txt
 # Vesta
 node_modules/
 dist/
-data/
+# 只忽略运行时数据目录（仓库根）；server/src/data 下的种子 JSON 需要入库。
+/data/
 .env
 
 # 一次性脚本 / 调试产物，禁止入库

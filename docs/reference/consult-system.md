@@ -90,7 +90,20 @@
 5. 生成完成后，咨询师在模块卡片里改节拍、换打法、加删模块并保存；确认后复制全文。
 6. 记录成交、未成交、好评或中途退出，累计到目的反馈表。
 
+## 金句栏
+
+咨询师在通话中按主题找两三句金句的独立页面（`/admin/consult/quotes`），位于侧栏“咨询树”与“收藏栏”之间，与收藏栏完全独立。
+
+- 数据：`consult_quote_categories`（分类名、排序）+ `consult_quotes`（分类、正文、出处、原稿编号、置顶、分类内顺序）。
+- 页面：左侧分类栏（全部 / 置顶 / 各分类），右侧搜索与金句卡片；支持单条复制、置顶、随机三条、新增、编辑、删除。
+- 分类：可新增、改名、上下调序；分类下仍有金句时不可删除（`409`）。
+- 首批 11 类 140 条来自 `咨询金句-分类版`，由 `runMigrations()` 的 `seedConsultQuotes()` 写入一次，标记位 `settings.consult_quotes_seed_applied`；不提供 Word 导入，之后全部人工维护。写入失败不写标记，下次 `update.sh` 重启后重试。
+- 接口统一位于 `/api/admin/consult/quotes` 与 `/api/admin/consult/quote-categories`。
+- 需求与实现细节见 `docs/archive/20261118/4-金句栏-开发文档.md`（R-002）。
+
 ## 收藏栏
+
+> 说明：金句已迁至独立的金句栏；收藏栏暂时保留完整页面与数据，后续是否下线另立需求。
 
 咨询师可以把金句、完整优秀咨询稿、公众号链接和其他参考资料收进“收藏栏”（`/admin/consult/collections`）。数据保存在 `consult_collections` 表，字段包括类型、标题、正文、链接、出处、备注、标签和置顶。
 
@@ -112,7 +125,8 @@ npx tsx scripts/import-collections-docx.ts zxg --write
 
 - `/admin/consult`：咨询工作台，选择目的树、生成、回看、记录反馈。
 - `/admin/consult/purposes`：咨询树（目的骨架模板、示例、蝴蝶）。旧地址 `/admin/consult/tree` 会重定向到这里。
-- `/admin/consult/collections`：收藏栏，金句、优秀咨询稿、公众号链接和其他参考资料。
+- `/admin/consult/quotes`：金句栏，按分类浏览、搜索、复制与人工维护金句。
+- `/admin/consult/collections`：收藏栏，优秀咨询稿、公众号链接和其他参考资料（页面暂保留）。
 - `/admin/consult/collections/:id`：单条收藏的 wiki 风格详情页，可编辑、复制原文或删除。
 
 接口统一位于 `/api/admin/consult`，沿用现有管理员登录态。

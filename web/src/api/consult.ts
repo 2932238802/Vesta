@@ -6,6 +6,10 @@ import type {
   ConsultForest,
   ConsultOutcome,
   ConsultPurposePayload,
+  ConsultQuote,
+  ConsultQuoteCategory,
+  ConsultQuoteInput,
+  ConsultQuoteUpdateInput,
   ConsultRun,
   ConsultRunMode,
   ConsultScoringConfig,
@@ -37,6 +41,55 @@ export const consultApi = {
   },
   consultPurposes() {
     return request<ConsultPurposePayload>('/api/admin/consult/purposes', { auth: true })
+  },
+  consultQuotes() {
+    return request<{ categories: ConsultQuoteCategory[]; quotes: ConsultQuote[] }>(
+      '/api/admin/consult/quotes',
+      { auth: true }
+    )
+  },
+  createConsultQuote(body: ConsultQuoteInput) {
+    return request<{ item: ConsultQuote }>('/api/admin/consult/quotes', {
+      method: 'POST',
+      body,
+      auth: true
+    })
+  },
+  updateConsultQuote(id: string, body: ConsultQuoteUpdateInput) {
+    return request<{ item: ConsultQuote }>(
+      `/api/admin/consult/quotes/${encodeURIComponent(id)}`,
+      { method: 'PATCH', body, auth: true }
+    )
+  },
+  deleteConsultQuote(id: string) {
+    return request<{ ok: true }>(`/api/admin/consult/quotes/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      auth: true
+    })
+  },
+  createConsultQuoteCategory(name: string) {
+    return request<{ category: ConsultQuoteCategory }>(
+      '/api/admin/consult/quote-categories',
+      { method: 'POST', body: { name }, auth: true }
+    )
+  },
+  updateConsultQuoteCategory(id: string, name: string) {
+    return request<{ category: ConsultQuoteCategory }>(
+      `/api/admin/consult/quote-categories/${encodeURIComponent(id)}`,
+      { method: 'PATCH', body: { name }, auth: true }
+    )
+  },
+  reorderConsultQuoteCategories(ids: string[]) {
+    return request<{ categories: ConsultQuoteCategory[] }>(
+      '/api/admin/consult/quote-categories/order',
+      { method: 'PUT', body: { ids }, auth: true }
+    )
+  },
+  deleteConsultQuoteCategory(id: string) {
+    return request<{ ok: true }>(
+      `/api/admin/consult/quote-categories/${encodeURIComponent(id)}`,
+      { method: 'DELETE', auth: true }
+    )
   },
   consultCollections() {
     return request<{ items: ConsultCollectionItem[] }>('/api/admin/consult/collections', {

@@ -195,6 +195,33 @@ export function initSchema(): void {
   CREATE INDEX IF NOT EXISTS idx_consult_collections_updated ON consult_collections(pinned DESC, updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_consult_collections_kind ON consult_collections(kind);
 
+  -- 金句栏：独立于收藏栏的分类与金句；分类存在性与非空删除限制在接口层校验。
+  CREATE TABLE IF NOT EXISTS consult_quote_categories (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_consult_quote_categories_name
+    ON consult_quote_categories(name);
+  CREATE INDEX IF NOT EXISTS idx_consult_quote_categories_order
+    ON consult_quote_categories(sort_order, id);
+
+  CREATE TABLE IF NOT EXISTS consult_quotes (
+    id TEXT PRIMARY KEY,
+    category_id TEXT NOT NULL,
+    no TEXT NOT NULL DEFAULT '',
+    text TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT '',
+    pinned INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_consult_quotes_category
+    ON consult_quotes(category_id, pinned DESC, sort_order, created_at);
+
   CREATE TABLE IF NOT EXISTS search_cache (
     key TEXT PRIMARY KEY,
     results TEXT NOT NULL,
