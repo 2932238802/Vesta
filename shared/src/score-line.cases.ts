@@ -11,7 +11,8 @@ import type { ExamType } from './score-line'
 import {
   POSTGRAD_TRACKS,
   UPGRADE_TRACKS,
-  normalizeDimension
+  normalizeDimension,
+  shouldKeepRawTrack
 } from './score-line-dimension'
 import type { DimensionKind } from './score-line-dimension'
 import { normalizeProvince, provinceRegion, provinces } from './score-line-region'
@@ -99,6 +100,12 @@ for (const [kind, exam, input] of dimensionMisses) {
   )
 }
 console.log('✓ 批次 / 科类字典与归一化（含考试分表、正反例）')
+
+assert.equal(shouldKeepRawTrack('upgrade', '艺术类（舞蹈学类）'), true, '专升本细分科类保留括号')
+assert.equal(shouldKeepRawTrack('upgrade', '电子商务（文）'), true, '专升本专业方向保留括号')
+assert.equal(shouldKeepRawTrack('upgrade', '文史类'), false, '无括号的专升本科类仍归一')
+assert.equal(shouldKeepRawTrack('postgrad', '工学（学硕）'), false, '考研括号是学位类型，仍归一')
+console.log('✓ 专升本细分 track 保留原名，避免不同子类撞唯一键')
 
 const validBatch = {
   scope: 'program',

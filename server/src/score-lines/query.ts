@@ -16,7 +16,7 @@ import {
   MINIMUM_TYPE_LABELS,
   subjectNameOf
 } from '../../../shared/src/score-line'
-import { normalizeDimension, DIMENSION_UNLABELED } from '../../../shared/src/score-line-dimension'
+import { normalizeDimension, DIMENSION_UNLABELED, shouldKeepRawTrack } from '../../../shared/src/score-line-dimension'
 import { normalizeProvince, normalizeRegion, provinceRegion } from '../../../shared/src/score-line-region'
 import { db } from '../db/connection'
 import { getBatch, pendingBatchCount } from './batch-store'
@@ -83,10 +83,40 @@ function ambiguity(batches: ScoreLineBatch[], selection: QuerySelection): string
   return requires
 }
 
-function buildLine(scope: QueryLine['scope'], batches: ScoreLineBatch[]): QueryLine | null {
-  if (batches.length === 0) return null
-  const byYear = new Map<number, ScoreLineMetric[]>()
+/** 校线 / 专业线同一年的多个计划类别：按选择优先，其次普通类，再空维度。 */
+function batchRank(batch: ScoreLineBatch, selection: QuerySelection): number {
+  const category = selection.category === DIMENSION_UNLABELED ? '' : selection.category
+  const track = selection.track === DIMENSION_UNLABELED ? '' : selection.track
+  let rank = 0
+  if (category && batch.category === category) rank -= 20
+  if (track && batch.track === track) rank -= 10
+  if (batch.category === '普通类') rank -= 5
+  else if (!batch.category) rank -= 3
+  return rank
+}
+
+function preferOnePerYear(batches: ScoreLineBatch[], selection: QuerySelection): ScoreLineBatch[] {
+  const byYear = new Map<number, ScoreLineBatch>()
   for (const batch of batches) {
+    const current = byYear.get(batch.year)
+    if (!current || batchRank(batch, selection) < batchRank(current, selection)) {
+      byYear.set(batch.year, batch)
+    }
+  }
+  return [...byYear.values()].sort((a, b) => a.year - b.year)
+}
+
+function buildLine(
+  scope: QueryLine['scope'],
+  batches: ScoreLineBatch[],
+  selection?: QuerySelection
+): QueryLine | null {
+  if (batches.length === 0) return null
+  // 主线不合并：多条同类线必须由 requires 要求补选，不能混画。
+  // 校线 / 专业线只按院校 / 专业定位，多个计划类别时取一条优先线，避免把不同类别混进同一张图。
+  const picked = selection ? preferOnePerYear(batches, selection) : batches
+  const byYear = new Map<number, ScoreLineMetric[]>()
+  for (const batch of picked) {
     const metrics = (batch.metrics ?? []).filter((metric) => metric.isMinimum === 0)
     if (metrics.length === 0) continue
     const list = byYear.get(batch.year) ?? []
@@ -97,7 +127,7 @@ function buildLine(scope: QueryLine['scope'], batches: ScoreLineBatch[]): QueryL
     .sort((a, b) => a[0] - b[0])
     .map(([year, metrics]) => ({ year, metrics }))
   if (years.length === 0) return null
-  const latest = batches[batches.length - 1]
+  const latest = picked[picked.length - 1]
   return {
     scope,
     region: latest.region,
@@ -264,10 +294,6 @@ export function queryScoreLines(input: QueryInput): ScoreLineQueryResult {
           track: selection.track
         })
       : []
-  if (requires.length === 0) {
-    requires.push(...ambiguity([...schoolBatches, ...programBatches], selection))
-  }
-
   const allBatches = [...mainBatches, ...schoolBatches, ...programBatches]
   const mainPending = mainPendingCount(input.exam, input.year, schoolProvince, region)
   const pendingCount = school
@@ -294,8 +320,8 @@ export function queryScoreLines(input: QueryInput): ScoreLineQueryResult {
     requires.length === 0
       ? {
           main: buildLine(mainScope, mainBatches),
-          schoolLine: buildLine('school', schoolBatches),
-          programLine: buildLine('program', programBatches)
+          schoolLine: buildLine('school', schoolBatches, selection),
+          programLine: buildLine('program', programBatches, selection)
         }
       : { main: null, schoolLine: null, programLine: null }
 
@@ -329,6 +355,8 @@ function dimensionInput(
 ): string {
   const value = String(raw ?? '').trim()
   if (!value || value === DIMENSION_UNLABELED) return value
+  // 与写库口径一致：专升本带括号的细分科类保留原名，避免把不同子类归一成同一值。
+  if (kind === 'track' && shouldKeepRawTrack(exam, value)) return value
   const normalized = normalizeDimension(kind, exam, value)
   return normalized.matched ? normalized.value : value
 }

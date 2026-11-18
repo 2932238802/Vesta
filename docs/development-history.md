@@ -11,8 +11,11 @@
 - **查询口径**：`query.ts` 收到 `__unlabeled__` 时翻译成 `category=''` / `track=''`，所以「未标注」可以显式选中，且不会被 `ambiguity()` 再要求补选；入参仍兼容旧别名（如 `文史类 → 文史`），认不出的值原样保留，不猜。`normalizeRegion()` 移到 `shared/src/score-line-region.ts`，查询与 facets 共用同一套 A/B 区判定。
 - **页面（L4）**：新增 `web/src/views/admin/score-lines/DimensionPicker.vue`：0 个候选不渲染该字段，1 个候选显示只读 chip，≥2 个显示可搜索下拉（「全部」= 不筛选，「未标注」= 只看空维度）。`ScoreLineFilters.vue` 删除两个自由文本 `<input>`；`ScoreLines.vue` 在年份 / 省份 / 考试变化时重置并重拉 facets，用户点选维度后级联重拉并立即重查；级联后已不存在的旧选择自动清空，避免「选了 0 条」的假选项。
 - **为什么先做 facets 再做控件**：查询是等值匹配，前端硬编码字典或先做下拉都会出现「选了一个库里没有的写法 → 静默空结果」。v1.82 的 canonical 落库是本轮的前提。
-- **验证**：`npm run check:score`、`typecheck`、`build` 通过；临时 `DATA_DIR` 造 4 条 approved + 1 条 pending，断言 facets 只统计 approved、计数、级联、未标注、考研 A/B 区、别名查询，全部通过；Playwright 走查专升本筛选栏（省份前不渲染、选省后 2 个字段、选科类后提示补批次、选批次后出线、未标注可查）与 390px（无横向溢出、控制台零错误）；`npm run verify` 全绿。
-- **未做 / 已知**：本地 `data/vesta.db` 的 `scoreline_batches=0`，所以本地选完省份后两个字段不会出现；需要先人工导入或抓取复核产生 approved 数据。这是「没有可选值」的正确表现，不是控件丢失。9.1 的 4（`parseStatus` 失败可见性）、9（院校名单脚本）、10（抓取导出脚本）仍未做；复核「修正后通过」仍后置。
+- **服务器同步（`scripts/scoreline-data.ts apply`）**：新增独立 apply 脚本，服务器上 `scp` 文件后执行；默认 dry-run，`--write` 才落库，写前自动 `VACUUM INTO` 备份。冲突默认服务器优先：新增直接写；同键同内容跳过；服务器 pending 提升 approved；服务器 approved / rejected 且内容不同 → 冲突清单，只有 `--overwrite` 才覆盖。校线 / 专业线用 `schoolName + schoolProvince` 与专业自然键解析，解析不到就跳过，不写跨库随机 id。支持江苏 512 条、辽宁 462 条专业线；`programLines` 会先建 `school_programs`。
+- **细分 track 保留原名**：专升本带括号的科类 / 专业方向（山西「艺术类（舞蹈学类）」、陕西「电子商务（文）」）不再归一成「艺术 / 教育」，否则不同子类会撞唯一键、被静默覆盖。规则抽到 `shared/src/score-line-dimension.ts#shouldKeepRawTrack()`，查询与落库共用；`check:score` 增加正反例。
+- **校线 / 专业线多类别**：查询不再让校线 / 专业线参与主线的 `requires`；同一年多个计划类别时按「已选类别 → 普通类 → 空维度」取一条优先线，避免辽宁三档专业线出现「请补选类别但主表没有该选项」的死局。
+- **验证**：`npm run check:score`、`typecheck`、`build` 通过；临时 `DATA_DIR` 造 4 条 approved + 1 条 pending，断言 facets 只统计 approved、计数、级联、未标注、考研 A/B 区、别名查询，全部通过；临时 `DATA_DIR` 库副本应用全部 15 份导出：1692 条批次、702 个专业、0 冲突、0 缺院校，二次执行 `新增 0 / 跳过 1692`，手工改一条 approved 后 dry-run 报 1 条冲突、`--overwrite` 恢复；Playwright 走查专升本筛选栏（省份前不渲染、选省后 2 个字段、选科类后提示补批次、选批次后出线、未标注可查）与 390px（无横向溢出、控制台零错误）；`npm run verify` 全绿。
+- **未做 / 已知**：本地 `data/vesta.db` 的 `scoreline_batches=0`，所以本地选完省份后两个字段不会出现；需要先人工导入或抓取复核产生 approved 数据。这是「没有可选值」的正确表现，不是控件丢失。`data/` 仍不入库，文件必须 `scp`；`update.sh` 不会同步数据文件（D1 阶段未做）。`scripts/scoreline-data.ts` 的 `crawl` / `export` 子命令未做。9.1 的 4（`parseStatus` 失败可见性）、9（院校名单脚本）仍未做；复核「修正后通过」仍后置。
 - **部署**：无表结构变更，`bash update.sh` 即可；回滚 `git revert` 对应提交。
 
 ## 本轮（2026-11-17）

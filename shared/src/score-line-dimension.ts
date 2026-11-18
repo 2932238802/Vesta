@@ -158,3 +158,11 @@ export function dimensionSortIndex(kind: DimensionKind, exam: ExamType, value: s
   const index = tableFor(kind, exam).findIndex((item) => item.value === value)
   return index === -1 ? Number.MAX_SAFE_INTEGER : index
 }
+
+/**
+ * 专升本按专业 / 细分科类划线的省（如山西「艺术类（舞蹈学类）」、陕西「电子商务（文）」），
+ * 括号里是区分不同批次的信息；归一成「艺术」会让多条线撞唯一键。这类值保留原名。
+ */
+export function shouldKeepRawTrack(exam: ExamType, raw: string): boolean {
+  return exam === 'upgrade' && /[（(]/.test(String(raw ?? '').trim())
+}

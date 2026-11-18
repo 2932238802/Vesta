@@ -4,7 +4,7 @@ import {
   resolveSubject,
   validateImportPayload
 } from '../../../shared/src/score-line'
-import { normalizeDimension } from '../../../shared/src/score-line-dimension'
+import { normalizeDimension, shouldKeepRawTrack } from '../../../shared/src/score-line-dimension'
 import type { DimensionKind } from '../../../shared/src/score-line-dimension'
 import { normalizeProvince } from '../../../shared/src/score-line-region'
 import { db } from '../db/connection'
@@ -59,6 +59,9 @@ function canonicalDimension(
 ): string {
   const text = String(value ?? '').trim()
   if (!text) return ''
+  // 专升本按专业 / 细分科类划线的省（如山西「艺术类（舞蹈学类）」、陕西「电子商务（文）」），
+  // 括号里是区分不同批次的信息；归一成「艺术」会让多条线撞唯一键。保留原名，不降置信度。
+  if (kind === 'track' && shouldKeepRawTrack(exam, text)) return text
   const normalized = normalizeDimension(kind, exam, text)
   if (normalized.matched) return normalized.value
   issues.push(`${DIMENSION_LABELS[kind]}认不出：${text}`)
