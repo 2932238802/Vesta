@@ -35,3 +35,8 @@ _scratch/
 .env.local
 *.log
 .DS_Store
+
+# 外部知识库压缩包与下载元数据，不入库
+在野咨询知识库.zip
+在野咨询知识库.zip:Zone.Identifier
+*.zip:Zone.Identifier
