@@ -147,7 +147,10 @@
       </nav>
 
       <div class="account">
-        <span class="account-name">{{ username || '管理员' }}</span>
+        <div class="account-meta">
+          <span class="account-name">{{ username || '管理员' }}</span>
+          <span class="app-version" title="产品版本">v{{ appVersion }}</span>
+        </div>
         <button class="btn quiet" type="button" @click="logout">退出</button>
       </div>
     </aside>
@@ -176,6 +179,8 @@ import SettingsNav from '@/components/SettingsNav.vue'
 
 const SIDEBAR_KEY = 'vesta.admin.sidebar'
 const GROUPS_KEY = 'vesta.admin.navGroups'
+// 构建时由 web/vite.config.ts 从根 package.json 注入，避免手写版本常量
+const appVersion = __APP_VERSION__
 
 type NavGroup = 'survey' | 'settings' | 'consult' | 'score'
 
@@ -488,9 +493,23 @@ async function logout() {
   gap: 8px;
 }
 
+.account-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .account-name {
   font-size: 12px;
   color: var(--ink-3);
+}
+
+.app-version {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .main {

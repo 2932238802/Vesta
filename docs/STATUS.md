@@ -7,11 +7,11 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 当前 CR | CR-014 大学常识所见即所得编辑与阅读页精简（v1.99 内追加；已交付） |
-| 当前门禁 | **G3 复审通过 + G4 豁免 + 已交付**（CR-014，2026-11-19；commit `19aa5ae` 已推送） |
-| 进行中任务 | 无；CR-014 已交付 |
+| 当前 CR | CR-015 发布 v2.0（版本规则、版本文档与后台左下角版本号） |
+| 当前门禁 | **G3 首评不通过（P1：check-version 放行文档领先），已返工待复审**（CR-015，2026-11-19；工作区未提交） |
+| 进行中任务 | T-050、T-051 返工完成，待 G3 复审 |
 | 阻塞 | 无 |
-| 下一步 | 用户执行 `bash update.sh` 发布；v2.0 相关内容整理待定 |
+| 下一步 | Review Agent 复审 CR-015；通过后由用户确认提交并执行 `bash update.sh` 发布 |
 | 文档根目录 | `docs/` |
 
 ## 角色记录
@@ -54,6 +54,15 @@
 - 2026-11-19：Dev SubAgent 完成 CR-014 / T-047 ~ T-049（v1.99 内追加，不升版本）。新增 `views/admin/components/RichTextEditor.vue` 与 `htmlToMarkdown.ts`（`contenteditable` + 9 项工具栏 + 粘贴纯文本）；替换 `basics/TopicEditorModal.vue`、`knowledge/ArticleEditorModal.vue`、`ConsultCollections.vue` 的 textarea 与“编辑 / 预览”切换；`TopicView.vue` 删除“更新于 / 管理员维护”；`consultBasics.css` / `knowledge.css` 调整编辑器样式。接口 / 数据 / 版本不变。`npm run verify` EXIT=0；Playwright 13 项断言全部通过（空正文拒绝、工具栏九项、粘贴纯文本、390px、Markdown 保存、阅读/编辑一致、专业知识汇总 / 收藏栏入口、其他页面回归），测试数据已清理。工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-19-富文本编辑.md`。
 - 2026-11-19：Review SubAgent 完成 CR-014 G3 首评，结论 **有条件通过**（P2-1 代码块 / 行内代码、P2-2 URL 规则；P3-1 图片 `//`、P3-4 `aria-label`；P3-2 / P3-3 记录）。Dev 已修复：`pre` 输出 ``` 围栏（含语言）、行内 `code` 输出反引号；URL 对齐 `markdown.ts`（http/https、单个 `/` 站内路径、普通相对路径，拒绝 `//host` 与其他协议）；图片同规则；编辑区补 `aria-label="正文编辑器"`。定向 13/13 + 集成用例通过，返工后 `npm run verify` EXIT=0。另按协调者要求将阅读页标题改为 20px / 650 / 1.4。待 G3 复审。
 - 2026-11-19：Dev 修复 P2-1/P2-2/P3-1/P3-4；Review 限定复审 **通过**（无 P0/P1/P2，仅 P3 记录）；用户明确确认跳过 G4（纯前端、无接口/数据变更，8 个代码文件按用户授权豁免）；`19aa5ae` 已推送。
+- 2026-11-19：Dev SubAgent 完成 CR-015 / T-050 ~ T-051（v2.0）。`package.json` 升至 `2.0.0`；`check-version.mjs` 允许 `major >= 1`、`patch === 0`，按 `v<major>.<minor>` 解析「已完成」行并取数值最高；`reference/README.md` / `development-history.md` / 归档版本规范 / `STATUS.md` / archive README 同步；`web/vite.config.ts` 从根 `package.json` 注入 `__APP_VERSION__`，`AdminLayout.vue` 左下角显示 `v2.0.0`。`npm run verify` 全绿。
+- 2026-11-19：Review SubAgent G3 首评 **不通过**，P1：`check-version.mjs` 允许「文档领先 1 个版本」通过，会掩盖 `package.json` 落后；另 2 项 P3。Dev 已返工：改回单向规则（相等通过、package 领先 1 个版本通过并提示、文档领先一律失败、差异 >1 失败），同步脚本与文档措辞；`development-history.md` 的 `T-050~T-052` 改回 `T-050~T-051`；`reference/README.md` 状态行改为「已确认（v2.0 待发布）」。复跑 9 组正反用例（README v2.1 + package 2.0.0 已 EXIT=1）与 `npm run verify` 全绿。待 G3 复审；报告落盘为 `docs/reports/dev-agent-2026-11-19-v2.0发布.md`。
+
+## 任务概览（CR-015）
+
+| 任务 | 状态 | 依赖 |
+| --- | --- | --- |
+| T-050 版本脚本与版本号 | DONE | 无 |
+| T-051 版本文档与左下角版本号 | DONE | T-050 |
 
 ## 任务概览（CR-014）
 
@@ -154,7 +163,7 @@
 
 ## 排队中
 
-- **发布 v2.0（CR-015）**：用户已确认发布；G0 / G1 通过，正在调整版本规则与文档。
+- **发布 v2.0（CR-015）**：G3 首评不通过（P1）已返工，待复审；版本脚本改为单向规则、版本文档与后台左下角版本号已同步，`npm run verify` 全绿。
 - **文章大纲（CR-013）**：已交付（`168a20d`，G3 通过；G4 豁免）。
 - **在野知识库导入（CR-012）**：试点已实现并 G3 通过（`kb_region_01`，6514 字）；内容包与导入脚本待提交。
 - **金句栏类别 P3（CR-011 后续）**：编辑态失焦保存会吞一次其他分类点击；拖动指针监听缺 window blur 兜底；长分类列表无边缘自动滚动。
@@ -170,10 +179,11 @@
 - **`stories.ts` 拆分（CR-005 后续）**：文件恰好 400 行，下次触碰先拆 `server/src/routes/consult/storyCategories.ts`。
 - **故事集全量 GET 观察项**：超过约 200 篇或响应 > 5MB 时加分页/虚拟滚动；首期不实现。
 - **旧库 `pinned_at` 兼容**：未上生产；旧本地库缺列会启动失败，需删库或换 `DATA_DIR`（已写入 `08-排障手册`）。
-- **工具修复：`check-version.mjs` 截断缺陷（待立项）**：脚本按「已完成」行首个「；」截断（`scripts/check-version.mjs`），本轮 v1.91 条目含「；」导致 v1.92 不被计入，Dev 把该处「；」改成「，」绕过。语义未变，但缺陷仍在，建议另立 CR（可并入 CR-004 运维优化）。
+- **工具修复：`check-version.mjs` 截断缺陷（已修复）**：CR-015 已将解析改为只按「后续」截断、解析整行全部 `v<major>.<minor>`，行内「；」不再导致版本漏计。
 
 ## 最近报告
 
+- [dev-agent-2026-11-19-v2.0发布.md](./reports/dev-agent-2026-11-19-v2.0发布.md) — CR-015 / T-050 ~ T-051 开发报告（G3 首评 P1 返工，待复审）
 - [review-agent-2026-11-19-富文本编辑.md](./reports/review-agent-2026-11-19-富文本编辑.md) — G3 复审：通过（P2 关闭；仅 P3 记录）
 - [dev-agent-2026-11-19-富文本编辑.md](./reports/dev-agent-2026-11-19-富文本编辑.md) — CR-014 / T-047 ~ T-049 开发报告（G2 自检，待 G3）
 - [review-agent-2026-11-19-文章大纲.md](./reports/review-agent-2026-11-19-文章大纲.md) — G3 评审：通过（无 P0/P1/P2；6 项 P3）
@@ -208,6 +218,7 @@
 
 ## 最近需求
 
+- CR-015 发布 v2.0（v2.0，G3 首评不通过后返工待复审）：`archive/20261119/9-v2.0发布-需求卡.md`、`archive/20261119/10-v2.0发布-开发文档.md`
 - CR-011 金句栏类别交互（v1.99，已交付 `f62bbe6`）：`archive/20261119/1-金句栏类别交互-需求卡.md`、`archive/20261119/2-金句栏类别交互-开发文档.md`
 - CR-010 大学常识（v1.98，已交付 `7872524`）：`archive/20261118/17-大学常识-需求卡.md`、`archive/20261118/18-大学常识-开发文档.md`
 - CR-009 咨询组导航顺序调整（v1.97，已交付 `ae3eedc`）：`archive/20261118/15-导航顺序调整-需求卡.md`、`archive/20261118/16-导航顺序调整-开发文档.md`

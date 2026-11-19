@@ -124,7 +124,7 @@
 ### 9. 版本号同步与工程元数据规范 —— 已修复（v1.70）
 
 - **问题**：根 `package.json` 是建项目时的 `0.1.0`，`server` / `web` 没有 `version`，真正的版本只活在文档文字里；代码里没有任何地方读版本号，三处不一致不会有人发现。线上 `/api/health` 只返回 `{ ok, time }`，`update.sh` 的 L5 一直走降级分支。
-- **唯一事实源**：根 `package.json` 的 `version`，格式 `1.<minor>.0`（`major` 恒为 1、`patch` 恒为 0），产品 `v1.<minor>` ↔ `1.<minor>.0`。`server` / `web` 保持 `private` 不带版本号。
+- **唯一事实源**：根 `package.json` 的 `version`，格式 `<major>.<minor>.0`（自 v2.0 起允许 `major` 递增、`patch` 恒为 0），产品 `v<major>.<minor>` ↔ `<major>.<minor>.0`。`server` / `web` 保持 `private` 不带版本号。
 - **校验**：新增 `scripts/check-version.mjs`：`package.json` 必须匹配 semver 且 `major=1 / patch=0`；`docs/README.md`「已完成」行的最大 `v1.<n>` 必须与 package minor 一致（允许 package 领先 1 个版本并给提示）；`development-history.md` 本轮小节的最大版本不得大于 README。失败信息点名两处数字。已接入 `npm run verify`。
 - **工程元数据**：根 `package.json` 增加 `engines.node = ">=24.0.0"`，新增 `.node-version`（`24`）；`docs/README.md` 技术栈写明 Node 24+，并新增「版本记录」表（回填到 v1.60）。
 - **部署强校验**：`update.sh` 重启前覆盖写 `data/deploy-info.json`（`commit` / `deployedAt` / `productVersion`）；`/api/health` 读取后返回 `commit` / `appVersion`，L5 从降级变为与 `git rev-parse --short=12 HEAD` 强一致。`appVersion` 故意不用 `version` 键名，避免 L5 把 semver 当 commit。

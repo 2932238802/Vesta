@@ -83,6 +83,6 @@
 
 - 改动涉及架构、认证、数据模型、部署流程或已确认需求时，同步更新 `docs/`。
 - 产品版本从 v1.60 起算，每完成一轮需求递增一个小版本（v1.61、v1.62……）；在 `development-history.md` 对应小节注明产品版本号。方案文档自身的 v1.0 / v1.1 与产品版本分开编号（见 `docs/reference/README.md`「版本约定」）。
-- **版本号三处同步**：根 `package.json` 的 `version` 是唯一事实源，产品 `v1.<minor>` ↔ `1.<minor>.0`（`major` 恒为 1、`patch` 恒为 0）；`docs/reference/README.md` 的「已完成」行与「版本记录」表、`docs/reference/development-history.md` 的本轮小节标题必须同步。`npm run check:version` 已接入 `npm run verify`，不一致会直接失败；不要为了通过去改脚本判定。
+- **版本号三处同步**：根 `package.json` 的 `version` 是唯一事实源，产品 `v<major>.<minor>` ↔ `<major>.<minor>.0`（自 v2.0 起允许 `major` 递增、`patch` 恒为 0）；`docs/reference/README.md` 的「已完成」行与「版本记录」表、`docs/reference/development-history.md` 的本轮小节标题必须同步。`npm run check:version` 已接入 `npm run verify`，不一致会直接失败；不要为了通过去改脚本判定。
 - 用户的新要求如果推翻旧实现，要在 `development-history.md` 记录“何时、改了什么、为什么”，避免后续 Agent 又把旧逻辑加回来。
 - 开发设计文档统一放 `docs/archive/`；同一天的文档收进 `docs/archive/YYYYMMDD/`（如 `docs/archive/20261112/`），文件名按 `1-标题.md`、`2-标题.md` 依次递增。`docs/` 根目录只保留入口索引 `README.md`；问卷 / 咨询 / 规则 / 历史 / 工程全貌等长期口径统一放 `docs/reference/`，一种功能一个文件。
