@@ -7,11 +7,11 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 当前 CR | CR-014 大学常识所见即所得编辑与阅读页精简（v1.99 内追加） |
-| 当前门禁 | **G3 复审待办**（CR-014 首评“有条件通过”；P2-1 / P2-2 / P3-1 / P3-4 已修复，P3-2 / P3-3 记录；工作区未提交） |
-| 进行中任务 | T-047 / T-048 / T-049 已完成；G3 返工已修复，待复审 |
+| 当前 CR | CR-014 大学常识所见即所得编辑与阅读页精简（v1.99 内追加；已交付） |
+| 当前门禁 | **G3 复审通过 + G4 豁免 + 已交付**（CR-014，2026-11-19；commit `19aa5ae` 已推送） |
+| 进行中任务 | 无；CR-014 已交付 |
 | 阻塞 | 无 |
-| 下一步 | Review Agent 评审 CR-014；评审通过后按用户确认提交 |
+| 下一步 | 用户执行 `bash update.sh` 发布；v2.0 相关内容整理待定 |
 | 文档根目录 | `docs/` |
 
 ## 角色记录
@@ -53,6 +53,7 @@
 - 2026-11-19：Review SubAgent 完成 CR-013 G3 评审，结论 **通过**（无 P0/P1/P2；6 项 P3）。Dev 处理 P3-1（上沿调到 1340px）、P3-2（锚点占用集合 + while 后缀）、P3-3 最小项（Esc 关闭、`aria-expanded`）、P3-4（`matchMedia` 跨断点关闭浮层）、P3-5（landmark 去重）；`npm run verify` EXIT=0、Playwright 44/44。工作区仍未提交，待 G4。
 - 2026-11-19：Dev SubAgent 完成 CR-014 / T-047 ~ T-049（v1.99 内追加，不升版本）。新增 `views/admin/components/RichTextEditor.vue` 与 `htmlToMarkdown.ts`（`contenteditable` + 9 项工具栏 + 粘贴纯文本）；替换 `basics/TopicEditorModal.vue`、`knowledge/ArticleEditorModal.vue`、`ConsultCollections.vue` 的 textarea 与“编辑 / 预览”切换；`TopicView.vue` 删除“更新于 / 管理员维护”；`consultBasics.css` / `knowledge.css` 调整编辑器样式。接口 / 数据 / 版本不变。`npm run verify` EXIT=0；Playwright 13 项断言全部通过（空正文拒绝、工具栏九项、粘贴纯文本、390px、Markdown 保存、阅读/编辑一致、专业知识汇总 / 收藏栏入口、其他页面回归），测试数据已清理。工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-19-富文本编辑.md`。
 - 2026-11-19：Review SubAgent 完成 CR-014 G3 首评，结论 **有条件通过**（P2-1 代码块 / 行内代码、P2-2 URL 规则；P3-1 图片 `//`、P3-4 `aria-label`；P3-2 / P3-3 记录）。Dev 已修复：`pre` 输出 ``` 围栏（含语言）、行内 `code` 输出反引号；URL 对齐 `markdown.ts`（http/https、单个 `/` 站内路径、普通相对路径，拒绝 `//host` 与其他协议）；图片同规则；编辑区补 `aria-label="正文编辑器"`。定向 13/13 + 集成用例通过，返工后 `npm run verify` EXIT=0。另按协调者要求将阅读页标题改为 20px / 650 / 1.4。待 G3 复审。
+- 2026-11-19：Dev 修复 P2-1/P2-2/P3-1/P3-4；Review 限定复审 **通过**（无 P0/P1/P2，仅 P3 记录）；用户明确确认跳过 G4（纯前端、无接口/数据变更，8 个代码文件按用户授权豁免）；`19aa5ae` 已推送。
 
 ## 任务概览（CR-014）
 
@@ -172,6 +173,7 @@
 
 ## 最近报告
 
+- [review-agent-2026-11-19-富文本编辑.md](./reports/review-agent-2026-11-19-富文本编辑.md) — G3 复审：通过（P2 关闭；仅 P3 记录）
 - [dev-agent-2026-11-19-富文本编辑.md](./reports/dev-agent-2026-11-19-富文本编辑.md) — CR-014 / T-047 ~ T-049 开发报告（G2 自检，待 G3）
 - [review-agent-2026-11-19-文章大纲.md](./reports/review-agent-2026-11-19-文章大纲.md) — G3 评审：通过（无 P0/P1/P2；6 项 P3）
 - [dev-agent-2026-11-19-文章大纲.md](./reports/dev-agent-2026-11-19-文章大纲.md) — CR-013 / T-044 ~ T-046 开发报告（G2 自检，待 G3）
