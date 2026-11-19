@@ -74,8 +74,10 @@
           </button>
           <div class="nav-links" :class="{ closed: !groups.consult }">
             <RouterLink to="/admin/consult" exact-active-class="on">写咨询稿</RouterLink>
-            <RouterLink to="/admin/consult/purposes" active-class="on">咨询树</RouterLink>
+            <RouterLink to="/admin/consult/quotes" active-class="on">金句栏</RouterLink>
+            <RouterLink to="/admin/consult/stories" active-class="on">故事集</RouterLink>
             <RouterLink to="/admin/consult/questions" active-class="on">有效的提问</RouterLink>
+            <RouterLink to="/admin/consult/purposes" active-class="on">咨询树</RouterLink>
           </div>
         </section>
 
@@ -102,8 +104,6 @@
           </button>
           <div class="nav-links" :class="{ closed: !groups.score }">
             <RouterLink to="/admin/score-lines" active-class="on">升学分数线查询</RouterLink>
-            <RouterLink to="/admin/consult/quotes" active-class="on">金句栏</RouterLink>
-            <RouterLink to="/admin/consult/stories" active-class="on">故事集</RouterLink>
             <RouterLink
               to="/admin/knowledge"
               active-class="on"
@@ -187,13 +187,9 @@ const groups = ref<Record<NavGroup, boolean>>({
 
 const activeGroup = computed<NavGroup | null>(() => {
   const path = route.path
-  // 金句栏、故事集与专业知识汇总迁入「知识库 & 数据库」，但前两者路由仍在 /admin/consult 下。
-  // 收藏栏保留页面与直达路由，入口已移除，仍归「咨询」组。
-  if (
-    path.startsWith('/admin/consult/quotes') ||
-    path.startsWith('/admin/consult/stories') ||
-    path.startsWith('/admin/knowledge')
-  ) {
+  // 金句栏、故事集已回到「咨询」组，路由仍在 /admin/consult 下，走下方通用判断。
+  // 专业知识汇总归「知识库 & 数据库」；收藏栏保留页面与直达路由，入口已移除，仍归「咨询」组。
+  if (path.startsWith('/admin/knowledge')) {
     return 'score'
   }
   if (path.startsWith('/admin/consult')) return 'consult'
