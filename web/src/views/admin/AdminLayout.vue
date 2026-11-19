@@ -179,8 +179,15 @@ import SettingsNav from '@/components/SettingsNav.vue'
 
 const SIDEBAR_KEY = 'vesta.admin.sidebar'
 const GROUPS_KEY = 'vesta.admin.navGroups'
-// 构建时由 web/vite.config.ts 从根 package.json 注入，避免手写版本常量
-const appVersion = __APP_VERSION__
+// 构建时由 web/vite.config.ts 从根 package.json 注入，避免手写版本常量。
+// 产品版本按 v<major>.<minor 两位> 展示：2.1.0 → v2.01，2.10.0 → v2.10。
+function formatVersion(version: string): string {
+  const [major, minor] = version.split('.')
+  const minorNumber = Number(minor)
+  if (!Number.isInteger(minorNumber)) return version
+  return `${major}.${String(minorNumber).padStart(2, '0')}`
+}
+const appVersion = formatVersion(__APP_VERSION__)
 
 type NavGroup = 'survey' | 'settings' | 'consult' | 'score'
 

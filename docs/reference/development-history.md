@@ -6,6 +6,19 @@
 
 ## 本轮（2026-11-19）
 
+### 拆分巨型文件（第一批：migrations / runs / ReportView）（2026-11-19，产品版本 v2.01）
+
+- 依据：`docs/archive/20261119/11-拆分巨型文件-需求卡.md`（CR-016，G0 已确认）与 `docs/archive/20261119/12-拆分巨型文件-开发文档.md`（R-016 / AC-016-1~6 / T-052~T-055）。
+- **为什么要做**：`runs.ts`（1293 行）、`ReportView.vue`（1210 行）、`migrations.ts`（725 行）都超过或接近硬线，继续加功能风险高、阅读成本大；v2.01 做第一批纯拆分，不改行为。
+- **migrations**：入口 `server/src/db/migrations.ts` 只保留 `runMigrations()` 编排与导出（42 行）；按职责拆为 `db/migrations/{columns,survey,template,consult-quotes,scoreline,seed}.ts`。执行顺序与原 `runMigrations()` 完全一致：列补齐 → roster → 事件回填 → 会话 → seed → skill → 问卷 → 模板 → 报告模式回填 → 分数线迁移 / 列 / 来源 → 金句种子；每步仍幂等。
+- **runs**：`routes/consult/runs.ts` 改为 `routes/consult/runs/index.ts`（23 行）只装配 router；拆为 `crud.ts`（列表 / 创建 / 详情 / retry / outcome）、`sections.ts`（章节增改删 / beats / regenerate）、`export.ts`、`shared.ts`（行映射、查询、校验、序列化），以及 `jobs.ts` / `sentence-job.ts` / `purpose-job.ts`（生成任务，按职责再拆以保持单文件 ≤400 行）。11 条路由注册顺序与拆分前逐条一致（GET/POST `/runs` → 详情 → 导出 → 章节 → retry → outcome）。
+- **ReportView**：页面骨架降到 96 行；模板区块拆为 `components/report/{ReportActions,ReportStatus,ReportClaim,ReportShot}.vue`；加载轮询与导出逻辑拆为 `useReportLoader.ts` / `useReportExport.ts`；样式移到各组件独立 CSS（`<style scoped src>`，共 5 个文件），保持 scoped 作用域。
+- **版本与显示**：根 `package.json` `2.0.0` → `2.1.0`；后台左下角改为 `v<major>.<minor 两位>`（`2.1.0` → `v2.01`），仍由 `web/vite.config.ts` 从 `package.json` 注入 `__APP_VERSION__`，不手写常量。`check-version.mjs` 已能把 README 的 `v2.01` 与 `2.1.0` 按数值视为同一版本（`v(\d+)\.(\d+)` + `Number()`，`01` = 1）。
+- **不改**：任何业务流程、接口路径 / 方法 / 状态码 / 响应结构、数据表与字段、页面文案与视觉；无新增依赖。
+- **验证**：`npm run verify` 全绿；`check:size` 通过并移除 `runs.ts` / `ReportView.vue` 两条基线；全新 `DATA_DIR` 与拆分前 HEAD 的 settings / 种子行数 / 表清单一致，重复启动幂等，既有库启动成功；runs 11 条路由的空库与成功路径状态码 / 响应结构与拆分前 HEAD 逐条一致（含导出 txt/html/docx、章节增改删、outcome 409、retry 503）；报告页在 1280 / 390 / print 三种视图下与拆分前 DOM（去 scoped 属性）、文案与关键计算样式完全一致。
+- **状态**：G2 自检完成，待 G3 评审；工作区未提交。
+- **部署/回滚**：随 `bash update.sh` 构建发布；回滚 `git revert` 后再次执行 `update.sh`；无数据迁移、无功能开关。
+
 ### 发布 v2.0：版本规则调整与知识库导入体验（2026-11-19，产品版本 v2.0）
 
 - 依据：`docs/archive/20261119/9-v2.0发布-需求卡.md`（CR-015，G0 / G1 已确认）与 `docs/archive/20261119/10-v2.0发布-开发文档.md`（R-015 / AC-015-1~7 / T-050~T-051）。

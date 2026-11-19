@@ -1,0 +1,205 @@
+.claim-section {
+  margin-top: 32px;
+}
+
+.claim-card {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 5%, var(--surface)) 0%,
+      var(--surface) 58%
+    );
+  border: 1px solid color-mix(in srgb, var(--accent) 12%, var(--line));
+  border-radius: 24px;
+  padding: 36px 40px;
+  box-shadow: 0 24px 60px -54px rgba(27, 26, 23, 0.35);
+}
+
+.claim-card h2 {
+  margin-top: 10px;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.desc {
+  margin-top: 14px;
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--ink-2);
+  max-width: 32em;
+}
+
+.free {
+  margin-top: 10px;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--ink-3);
+  max-width: 34em;
+}
+
+.claim-form {
+  margin-top: 28px;
+  display: grid;
+  gap: 16px;
+}
+
+.claim-form .input {
+  border-radius: 12px;
+}
+
+.claim-form .field span {
+  font-size: 12px;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
+
+.agree {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ink-3);
+  line-height: 1.6;
+  align-items: flex-start;
+}
+
+.agree input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.claim-error {
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.claimed h3 {
+  margin-top: 8px;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.claimed p {
+  margin-top: 8px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+
+.claimed .claimed-meta {
+  font-size: 12px;
+  color: var(--ink-3);
+  line-height: 1.7;
+}
+
+.privacy {
+  margin-top: 18px;
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+}
+
+.claim-section {
+  margin-top: 40px;
+}
+
+.claim-card {
+  border: 0;
+  border-radius: 22px;
+  padding: 40px 44px;
+  box-shadow: 0 30px 80px -72px rgba(27, 26, 23, 0.38);
+}
+
+.claim-card h2 {
+  font-size: 25px;
+}
+
+.desc {
+  font-size: 15px;
+  line-height: 1.9;
+}
+
+.free {
+  font-size: 13.5px;
+}
+
+.claim-form {
+  gap: 18px;
+}
+
+.claim-form .input {
+  min-height: 48px;
+}
+
+.claim-form .field span {
+  font-size: 13px;
+}
+
+.agree {
+  min-height: 44px;
+  align-items: center;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.agree input {
+  width: 18px;
+  height: 18px;
+  margin-top: 0;
+}
+
+.claim-error {
+  font-size: 14px;
+}
+
+.claimed p {
+  font-size: 14.5px;
+}
+
+.privacy {
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+@media (max-width: 680px) {
+  .claim-card {
+    padding: 28px 22px;
+    border-radius: 18px;
+  }
+
+  .claim-card h2 {
+    font-size: 21px;
+  }
+}
+
+@media (max-width: 720px) {
+  .claim-section {
+    margin-top: 26px;
+  }
+
+  .claim-card {
+    border-radius: 16px;
+    padding: 26px 20px;
+  }
+
+  .claim-card h2 {
+    font-size: 22px;
+  }
+
+  .desc,
+  .claim-form .field span,
+  .agree {
+    font-size: 14px;
+  }
+
+  .free,
+  .claimed p,
+  .claimed .claimed-meta,
+  .privacy {
+    font-size: 13px;
+  }
+}
+
+@media print {
+  .claim-section {
+    display: none;
+  }
+}

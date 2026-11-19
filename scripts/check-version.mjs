@@ -30,7 +30,8 @@ function versionKey(major, minor) {
 }
 
 function describe(version) {
-  return `v${version.major}.${version.minor}`
+  // 与后台左下角展示一致：minor 补两位（2.1.0 → v2.01）。仅影响提示文本，比较仍按数值。
+  return `v${version.major}.${String(version.minor).padStart(2, '0')}`
 }
 
 function maxVersion(versions) {

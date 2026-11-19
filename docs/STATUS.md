@@ -7,11 +7,11 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 当前 CR | CR-015 发布 v2.0（版本规则、版本文档与后台左下角版本号） |
-| 当前门禁 | **G3 复审通过**（CR-015，2026-11-19；P1 已修，无 P0/P1/P2）；commit `876ba8c` 已推送；G4 待用户决策 |
-| 进行中任务 | 无；v2.0 已提交 |
+| 当前 CR | CR-016 拆分巨型文件（第一批：migrations / runs / ReportView，纯重构；v2.01） |
+| 当前门禁 | **G2 自检完成**（CR-016，2026-11-19；R-016 / AC-016-1~6，工作区未提交，待 G3 评审） |
+| 进行中任务 | T-052~T-055 均已实现，待评审 |
 | 阻塞 | 无 |
-| 下一步 | 用户确认 G4 豁免后执行 `bash update.sh` 发布 v2.0；v2.1 拆分巨型文件待定范围 |
+| 下一步 | Review 通过 → Meta G4 → 发布 v2.01（`bash update.sh`） |
 | 文档根目录 | `docs/` |
 
 ## 角色记录
@@ -57,6 +57,17 @@
 - 2026-11-19：Dev 修复 P2-1/P2-2/P3-1/P3-4；Review 限定复审 **通过**（无 P0/P1/P2，仅 P3 记录）；用户明确确认跳过 G4（纯前端、无接口/数据变更，8 个代码文件按用户授权豁免）；`19aa5ae` 已推送。
 - 2026-11-19：Dev SubAgent 完成 CR-015 / T-050 ~ T-051（v2.0）。`package.json` 升至 `2.0.0`；`check-version.mjs` 允许 `major >= 1`、`patch === 0`，按 `v<major>.<minor>` 解析「已完成」行并取数值最高；`reference/README.md` / `development-history.md` / 归档版本规范 / `STATUS.md` / archive README 同步；`web/vite.config.ts` 从根 `package.json` 注入 `__APP_VERSION__`，`AdminLayout.vue` 左下角显示 `v2.0.0`。`npm run verify` 全绿。
 - 2026-11-19：Review SubAgent G3 首评 **不通过**，P1：`check-version.mjs` 允许「文档领先 1 个版本」通过，会掩盖 `package.json` 落后；另 2 项 P3。Dev 已返工：改回单向规则（相等通过、package 领先 1 个版本通过并提示、文档领先一律失败、差异 >1 失败），同步脚本与文档措辞；`development-history.md` 的 `T-050~T-052` 改回 `T-050~T-051`；`reference/README.md` 状态行改为「已确认（v2.0 待发布）」。复跑 9 组正反用例（README v2.1 + package 2.0.0 已 EXIT=1）与 `npm run verify` 全绿。待 G3 复审；报告落盘为 `docs/reports/dev-agent-2026-11-19-v2.0发布.md`。
+
+- 2026-11-19：Dev SubAgent 完成 CR-016 / T-052 ~ T-055（v2.01）。三个巨型文件纯拆分：`db/migrations.ts` 42 行 + 6 个迁移模块；`routes/consult/runs.ts` 改为 `runs/index.ts` 23 行 + 7 个职责模块（11 条路由注册顺序不变）；`ReportView.vue` 96 行 + 4 个子组件、2 个 composable、5 个 scoped CSS。`package.json` `2.0.0 → 2.1.0`，后台左下角按 `v<major>.<minor 两位>` 显示 `v2.01`；`check:size` 基线移除两条。`npm run verify` 全绿；迁移 fresh / 幂等 / 既有库与拆分前一致；runs 接口状态码 / 响应结构与拆分前 HEAD 逐条一致；报告页 1280 / 390 / print 的 DOM、文案与关键计算样式完全一致。工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-19-拆分巨型文件.md`。
+
+## 任务概览（CR-016）
+
+| 任务 | 状态 | 依赖 |
+| --- | --- | --- |
+| T-052 拆分 migrations | DONE | 无 |
+| T-053 拆分 runs 路由 | DONE | 无 |
+| T-054 拆分 ReportView | DONE | 无 |
+| T-055 验证、版本与文档 | DONE | T-052、T-053、T-054 |
 
 ## 任务概览（CR-015）
 
