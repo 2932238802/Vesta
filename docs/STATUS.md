@@ -7,11 +7,11 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 当前 CR | CR-017 拆分巨型文件（第二批；v2.02，开发中） |
-| 当前门禁 | **G2 自检完成，待 G3 评审**（CR-017，2026-11-19；工作区未提交） |
-| 进行中任务 | T-056 ~ T-059 已完成，待评审 |
+| 当前 CR | CR-017 拆分巨型文件（第二批；v2.02，已交付） |
+| 当前门禁 | **G3 通过 + G4 豁免 + 已交付**（CR-017，2026-11-19；用户明确确认跳过 G4；commit `c686862`） |
+| 进行中任务 | 无；第二批已交付 |
 | 阻塞 | 无 |
-| 下一步 | Review Agent 执行 G3 评审；通过后按用户要求提交与发布 |
+| 下一步 | 用户执行 `bash update.sh` 发布 v2.02；第三批拆分待定 |
 | 文档根目录 | `docs/` |
 
 ## 角色记录
@@ -60,6 +60,7 @@
 
 - 2026-11-19：Dev SubAgent 完成 CR-016 / T-052 ~ T-055（v2.01）。三个巨型文件纯拆分：`db/migrations.ts` 42 行 + 6 个迁移模块；`routes/consult/runs.ts` 改为 `runs/index.ts` 23 行 + 7 个职责模块（11 条路由注册顺序不变）；`ReportView.vue` 96 行 + 4 个子组件、2 个 composable、5 个 scoped CSS。`package.json` `2.0.0 → 2.1.0`，后台左下角按 `v<major>.<minor 两位>` 显示 `v2.01`；`check:size` 基线移除两条。`npm run verify` 全绿；迁移 fresh / 幂等 / 既有库与拆分前一致；runs 接口状态码 / 响应结构与拆分前 HEAD 逐条一致；报告页 1280 / 390 / print 的 DOM、文案与关键计算样式完全一致。工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-19-拆分巨型文件.md`。
 - 2026-11-19：Dev SubAgent 完成 CR-017 / T-056 ~ T-059（v2.02）。三个后台编辑页纯拆分：`SurveyEditor.vue` 1138 → 110 行 + `survey/` 7 个子组件与 `useSurveyEditor.ts`；`ReportEditor.vue` 1086 → 105 行 + `report/` 9 个子组件与 `useReportEditor.ts`；`ConsultCollections.vue` 989 → 108 行 + `collections/` 3 个子组件与 `useCollections.ts`。`package.json` `2.1.0 → 2.2.0`，后台左下角显示 `v2.02`；`check:size` 移除三个入口基线与 `ReportEditor.vue#template`。`npm run verify` 全绿；HEAD worktree 与当前实现的 DOM / 表单值 / 关键计算样式逐项一致，1280 / 390 截图差异 < 0.02%；Playwright 21 项交互断言 + Word 导入定向断言通过。工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-19-拆分巨型文件第二批.md`。
+- 2026-11-19：Review SubAgent 完成 CR-017 G3 评审，结论 **通过**（无 P0/P1/P2；3 项 P3：子组件计数、拖拽措辞、重复 CSS）；用户明确确认跳过 G4；`c686862` 已推送。
 
 ## 任务概览（CR-017）
 
