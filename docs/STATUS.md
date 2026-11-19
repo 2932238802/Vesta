@@ -8,10 +8,10 @@
 | 项 | 内容 |
 | --- | --- |
 | 当前 CR | CR-015 发布 v2.0（版本规则、版本文档与后台左下角版本号） |
-| 当前门禁 | **G3 首评不通过（P1：check-version 放行文档领先），已返工待复审**（CR-015，2026-11-19；工作区未提交） |
-| 进行中任务 | T-050、T-051 返工完成，待 G3 复审 |
+| 当前门禁 | **G3 复审通过**（CR-015，2026-11-19；P1 已修，无 P0/P1/P2）；commit `876ba8c` 已推送；G4 待用户决策 |
+| 进行中任务 | 无；v2.0 已提交 |
 | 阻塞 | 无 |
-| 下一步 | Review Agent 复审 CR-015；通过后由用户确认提交并执行 `bash update.sh` 发布 |
+| 下一步 | 用户确认 G4 豁免后执行 `bash update.sh` 发布 v2.0；v2.1 拆分巨型文件待定范围 |
 | 文档根目录 | `docs/` |
 
 ## 角色记录
@@ -53,6 +53,7 @@
 - 2026-11-19：Review SubAgent 完成 CR-013 G3 评审，结论 **通过**（无 P0/P1/P2；6 项 P3）。Dev 处理 P3-1（上沿调到 1340px）、P3-2（锚点占用集合 + while 后缀）、P3-3 最小项（Esc 关闭、`aria-expanded`）、P3-4（`matchMedia` 跨断点关闭浮层）、P3-5（landmark 去重）；`npm run verify` EXIT=0、Playwright 44/44。工作区仍未提交，待 G4。
 - 2026-11-19：Dev SubAgent 完成 CR-014 / T-047 ~ T-049（v1.99 内追加，不升版本）。新增 `views/admin/components/RichTextEditor.vue` 与 `htmlToMarkdown.ts`（`contenteditable` + 9 项工具栏 + 粘贴纯文本）；替换 `basics/TopicEditorModal.vue`、`knowledge/ArticleEditorModal.vue`、`ConsultCollections.vue` 的 textarea 与“编辑 / 预览”切换；`TopicView.vue` 删除“更新于 / 管理员维护”；`consultBasics.css` / `knowledge.css` 调整编辑器样式。接口 / 数据 / 版本不变。`npm run verify` EXIT=0；Playwright 13 项断言全部通过（空正文拒绝、工具栏九项、粘贴纯文本、390px、Markdown 保存、阅读/编辑一致、专业知识汇总 / 收藏栏入口、其他页面回归），测试数据已清理。工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-19-富文本编辑.md`。
 - 2026-11-19：Review SubAgent 完成 CR-014 G3 首评，结论 **有条件通过**（P2-1 代码块 / 行内代码、P2-2 URL 规则；P3-1 图片 `//`、P3-4 `aria-label`；P3-2 / P3-3 记录）。Dev 已修复：`pre` 输出 ``` 围栏（含语言）、行内 `code` 输出反引号；URL 对齐 `markdown.ts`（http/https、单个 `/` 站内路径、普通相对路径，拒绝 `//host` 与其他协议）；图片同规则；编辑区补 `aria-label="正文编辑器"`。定向 13/13 + 集成用例通过，返工后 `npm run verify` EXIT=0。另按协调者要求将阅读页标题改为 20px / 650 / 1.4。待 G3 复审。
+- 2026-11-19：Dev 完成 CR-015（v2.0）；G3 首评发现 `check-version` 允许文档领先，判为 P1 不通过；返工改为单向规则（文档领先一律失败）后 G3 复审通过；`876ba8c [release] 发布 v2.0` 已推送。
 - 2026-11-19：Dev 修复 P2-1/P2-2/P3-1/P3-4；Review 限定复审 **通过**（无 P0/P1/P2，仅 P3 记录）；用户明确确认跳过 G4（纯前端、无接口/数据变更，8 个代码文件按用户授权豁免）；`19aa5ae` 已推送。
 - 2026-11-19：Dev SubAgent 完成 CR-015 / T-050 ~ T-051（v2.0）。`package.json` 升至 `2.0.0`；`check-version.mjs` 允许 `major >= 1`、`patch === 0`，按 `v<major>.<minor>` 解析「已完成」行并取数值最高；`reference/README.md` / `development-history.md` / 归档版本规范 / `STATUS.md` / archive README 同步；`web/vite.config.ts` 从根 `package.json` 注入 `__APP_VERSION__`，`AdminLayout.vue` 左下角显示 `v2.0.0`。`npm run verify` 全绿。
 - 2026-11-19：Review SubAgent G3 首评 **不通过**，P1：`check-version.mjs` 允许「文档领先 1 个版本」通过，会掩盖 `package.json` 落后；另 2 项 P3。Dev 已返工：改回单向规则（相等通过、package 领先 1 个版本通过并提示、文档领先一律失败、差异 >1 失败），同步脚本与文档措辞；`development-history.md` 的 `T-050~T-052` 改回 `T-050~T-051`；`reference/README.md` 状态行改为「已确认（v2.0 待发布）」。复跑 9 组正反用例（README v2.1 + package 2.0.0 已 EXIT=1）与 `npm run verify` 全绿。待 G3 复审；报告落盘为 `docs/reports/dev-agent-2026-11-19-v2.0发布.md`。
