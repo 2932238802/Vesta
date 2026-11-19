@@ -17,7 +17,7 @@
 - **数据**：新增 `consult_topics`（`title`、`body`、`sort_order`、`created_at`、`updated_at`）与 1 条索引 `idx_consult_topics_order`；无种子、无迁移、无 `settings` 标记，启动时 `initSchema()` 幂等建表。库内表 / 索引总数 36 / 49。
 - **接口**：`GET/POST /api/admin/consult/topics`、`GET/PATCH/DELETE /api/admin/consult/topics/:id`、`PUT /api/admin/consult/topics/order`。列表只返回摘要（不含正文），正文按篇读取；标题 `trim` 后 1–120 字、正文 `trim` 后 1–50000 字；未登录 401、参数非法 400、不存在 404；排序 `ids` 必须恰好是现有全部话题的完整排列，单事务写入。日志 `consult.topic_*` 只记录 `id` / `count` 与 `reqId`，不记录标题与正文。
 - **验证**：`npm run verify` 全绿；临时 `DATA_DIR` + 空闲端口 + `SCORELINE_CRAWL=off`，接口断言 33/33（401、空库、标题 / 正文空与 120 / 121、50000 / 50001 边界、列表不含正文、404、排序完整排列 / 缺失 / 重复 / 非字符串、排序后刷新保持、删除、字段与计数 36 / 49、日志不含标题正文）；Playwright 70/70（导航顺序与高亮、搜索与计数、选中 / 深链 / 默认第一篇 / 面包屑、Markdown 与 XSS、新建 / 编辑 / 删除、拖动排序刷新保持、搜索禁用拖动、保存失败回滚、错误重试（含不存在话题 404）、390px 阅读视图与返回、金句栏 140 条 / 故事集 / 有效的提问 / 咨询树 / 专业知识汇总回归）。
-- **状态**：开发完成（v1.98，工作区未提交，待 G3 评审）。
+- **状态**：已交付（v1.98，commit `7872524`，G3 / G4 通过）。
 - **部署/回滚**：随 `bash update.sh` 前端构建发布，服务重启自动建表；回滚 `git revert` 后新表保留，旧代码不读写，其他模块数据不受影响；无开关、无迁移、无可观测性变更（新增结构化日志）。
 
 ### 咨询组导航顺序调整：金句栏、故事集回到咨询（2026-11-19，产品版本 v1.97）
@@ -28,7 +28,7 @@
 - **改动**：只改 `web/src/views/admin/AdminLayout.vue`：咨询组插入金句栏、故事集两个 `RouterLink`（顺序如上），知识库组删除这两个链接；`activeGroup` 移除 `/admin/consult/quotes`、`/admin/consult/stories` 归 `score` 的分支，使其落到通用 `/admin/consult` → `consult`；`/admin/knowledge` 仍归 `score`。路由表、页面、接口、数据、CSS、其他分组均未改。
 - **兼容**：`/admin/consult/quotes`、`/admin/consult/stories` 路由不变，旧链接与书签可直接访问；收藏栏直达仍归咨询组。
 - **验证**：`npm run verify` EXIT=0；临时 `DATA_DIR` + Playwright 46/46 断言通过：四组与组内顺序、金句栏 11 类 140 条与复制 / 置顶 / 分类管理、故事集分类新增与两篇故事的新增 / 搜索 / 复制 / 置顶 / 编辑 / 删除 / 空分类删除、14 条路由高亮映射、390px 五入口完整无溢出无重叠。
-- **状态**：开发完成（v1.97，工作区未提交，待 G3 评审）。
+- **状态**：已交付（v1.97，commit `ae3eedc`，G3 通过；G4 豁免）。
 - **部署/回滚**：随 `bash update.sh` 前端构建发布；回滚 `git revert` 后入口回到知识库组，无数据影响；无迁移、无开关、无可观测性变更。
 
 ## 本轮（2026-11-18）

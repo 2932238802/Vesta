@@ -7,11 +7,11 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 当前 CR | CR-010 大学常识（v1.98，G3 通过，待提交） |
-| 当前门禁 | **G3 通过**（CR-010，2026-11-19；无 P0/P1，4 项 P3）；commit `7872524` 已推送；待 G4 |
-| 进行中任务 | T-034 ~ T-038 DONE；待 G4 总审 |
+| 当前 CR | CR-010 大学常识（v1.98，已交付） |
+| 当前门禁 | **G4 通过**（CR-010，2026-11-19；0 P0/P1；4 项 P3）；commit `7872524` 已推送 |
+| 进行中任务 | 无；CR-010 已交付 |
 | 阻塞 | 无 |
-| 下一步 | Meta Review Agent 总审 CR-010（G4） |
+| 下一步 | 用户执行 `bash update.sh` 发布 v1.98；v2.0 需求待确认 |
 | 文档根目录 | `docs/` |
 
 ## 角色记录
@@ -44,6 +44,7 @@
 - 2026-11-19：Review SubAgent 完成 CR-009 G3 评审，结论 **通过**（无 P0/P1/P2；1 项 P3）。报告落盘为 `docs/reports/review-agent-2026-11-19-导航顺序调整.md`。
 - 2026-11-19：Dev SubAgent 完成 CR-010 / T-034 ~ T-038（v1.98）。新增 `consult_topics` 一张表与 1 条索引、`shared/src/consult-topic.ts`、`server/src/routes/consult/topics.ts`（6 个接口，挂载在故事集之后）、`ConsultBasics.vue` 与 `basics/{TopicRail,TopicView,TopicEditorModal}.vue`、`basics/useBasics.ts`、`consultBasics.css`；咨询组导航新增 大学常识（有效的提问与咨询树之间）；`npm run verify` 全绿；临时 `DATA_DIR` 接口断言 33/33、Playwright 70/70；库内表 / 索引 36 / 49；工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-19-大学常识.md`。
 - 2026-11-19：Review SubAgent 完成 CR-010 G3 评审，结论 **通过**（无 P0/P1；4 项 P3：重复首篇请求、≤1000px 排序失败提示不可见、触屏拖拽可能抢占滚动、PATCH 空对象刷新 updated_at）；`npm run verify` EXIT=0、表/索引 36/49。报告落盘为 `docs/reports/review-agent-2026-11-19-大学常识.md`。
+- 2026-11-19：Meta Review SubAgent 完成 CR-010 G4 总审，结论 **通过**（0 P0/P1；4 项 P3）；`npm run verify` EXIT=0，36/49 与导航/接口/排序/XSS 代码级复核通过。报告落盘为 `docs/reports/meta-agent-2026-11-19-大学常识.md`。
 
 ## 任务概览（CR-010）
 
@@ -135,6 +136,7 @@
 
 ## 最近报告
 
+- [meta-agent-2026-11-19-大学常识.md](./reports/meta-agent-2026-11-19-大学常识.md) — G4 总审：通过（0 P0/P1；4 项 P3）
 - [review-agent-2026-11-19-大学常识.md](./reports/review-agent-2026-11-19-大学常识.md) — G3 评审：通过（无 P0/P1；4 项 P3）
 - [dev-agent-2026-11-19-大学常识.md](./reports/dev-agent-2026-11-19-大学常识.md) — CR-010 / T-034 ~ T-038 开发报告（G2 自检）
 - [review-agent-2026-11-19-导航顺序调整.md](./reports/review-agent-2026-11-19-导航顺序调整.md) — G3 评审：通过（无 P0/P1/P2；1 项 P3）
@@ -162,7 +164,7 @@
 
 ## 最近需求
 
-- CR-010 大学常识（v1.98，G3 通过待 G4）：`archive/20261118/17-大学常识-需求卡.md`、`archive/20261118/18-大学常识-开发文档.md`
+- CR-010 大学常识（v1.98，已交付 `7872524`）：`archive/20261118/17-大学常识-需求卡.md`、`archive/20261118/18-大学常识-开发文档.md`
 - CR-009 咨询组导航顺序调整（v1.97，已交付 `ae3eedc`）：`archive/20261118/15-导航顺序调整-需求卡.md`、`archive/20261118/16-导航顺序调整-开发文档.md`
 - CR-008 有效的提问（v1.96，已交付 `9478405`）：`archive/20261118/13-有效提问-需求卡.md`、`archive/20261118/14-有效提问-开发文档.md`
 - CR-007 故事集迁移（v1.95，已交付 `21c4ca2`）：`archive/20261118/11-故事集迁移-需求卡.md`、`archive/20261118/12-故事集迁移-开发文档.md`
