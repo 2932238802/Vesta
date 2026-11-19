@@ -1,6 +1,6 @@
 <template>
   <div class="invites-page">
-    <AdminPageHeader eyebrow="学员" title="邀请链接" subtitle="生成问卷链接，发给学员填写" />
+    <AdminPageHeader eyebrow="学员" title="邀请链接" />
 
     <section v-if="!created.length" class="card generator-card">
       <form class="form" @submit.prevent="generate">

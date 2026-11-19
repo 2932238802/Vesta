@@ -3,7 +3,6 @@
     <AdminPageHeader
       eyebrow="知识库 & 数据库"
       title="专业知识汇总"
-      subtitle="按专业整理通话中能直接讲的内容"
     >
       <template #actions>
         <span class="count">{{ displayMajors.length }} 个专业 · {{ articles.length }} 个知识点</span>

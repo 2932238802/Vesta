@@ -3,7 +3,6 @@
     <AdminPageHeader
       eyebrow="咨询"
       title="大学常识"
-      subtitle="一个话题一篇内容。咨询师通话中按话题查，右侧直接阅读；只做内部参考。"
     >
       <template #actions>
         <span class="count">{{ topics.length }} 个话题</span>
