@@ -6,6 +6,20 @@
 
 ## 本轮（2026-11-19）
 
+### 大学常识：所见即所得编辑与阅读页精简（2026-11-19，随 v1.99 发布，不单独升版本）
+
+- 依据：`docs/archive/20261119/7-富文本编辑-需求卡.md`（CR-014，G0 / G1 已确认）与 `docs/archive/20261119/8-富文本编辑-开发文档.md`（R-014 / AC-014-1~9 / T-047~T-049）。
+- **为什么要做**：Markdown 文本框对咨询师不友好，改标题、加粗、列表要先懂语法；阅读页顶部的“更新于 … · 管理员维护”对使用者没有价值。
+- **编辑器**：新增 `RichTextEditor.vue`（方案 A，不新增依赖）：`contenteditable` + 9 项工具栏（正文 / 二级标题 / 三级标题 / 加粗 / 斜体 / 无序列表 / 有序列表 / 引用 / 链接），按钮 `mousedown.prevent` 保持选区；初始化用 `renderMarkdown(modelValue)`，输入时用新增的 `htmlToMarkdown.ts` 写回 Markdown；粘贴只取 `text/plain`，不保留外部 HTML / 样式；链接只接受 http/https。
+- **转换器**：覆盖 `h1~h6`（编辑器提供 h2 / h3，保留已有更高层级标题避免降级）、段落 / 容器、加粗 / 斜体、有序 / 无序列表、引用、链接、换行；`img` 保留 Markdown 图片语法，表格与其他标签降级为文本；输出稳定。
+- **替换入口**：`basics/TopicEditorModal.vue`、`knowledge/ArticleEditorModal.vue`、`ConsultCollections.vue` 的实际编辑弹窗删除 textarea 与“编辑 / 预览”切换；`ConsultCollectionDetail.vue` 只是跳回列表并带 `?edit=`，无编辑控件，未改。空正文 / 空白正文保存仍拒绝，标题必填不变。
+- **阅读页**：`TopicView.vue` 删除 `.topic-meta`（更新于 / 管理员维护），面包屑、标题、正文、编辑 / 删除保留。
+- **样式**：`consultBasics.css` / `knowledge.css` 删除旧 mode-tabs / preview 样式，增加弹窗内编辑区高度；组件自带工具栏横向滚动与 390px 编辑区 `min-width: 0` / `overflow-x: hidden`。
+- **不改**：后端、接口、字段、表结构与版本号（保持 1.99.0）；其他页面不受影响。
+- **验证**：`npm run verify` EXIT=0；Playwright 13 项断言覆盖空正文 / 空白正文拒绝、工具栏九项、粘贴纯文本、390px 无横向溢出、保存为 Markdown、阅读页与编辑态一致、重开一致、专业知识汇总与收藏栏编辑入口，以及金句栏 / 故事集 / 有效的提问 / 咨询树回归；测试数据已清理。
+- **状态**：G2 自检完成，待 G3 评审；工作区未提交。
+- **部署/回滚**：随 `bash update.sh` 前端构建发布；回滚 `git revert`，无接口 / 数据 / 迁移 / 开关变化。
+
 ### 大学常识：Markdown 文章大纲（2026-11-19，随 v1.99 发布，不单独升版本）
 
 - 依据：`docs/archive/20261119/5-文章大纲-需求卡.md`（CR-013，G0 / G1 已确认）与 `docs/archive/20261119/6-文章大纲-开发文档.md`（R-013 / AC-013-1~8 / T-044~T-046）。

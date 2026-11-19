@@ -18,39 +18,14 @@
           >
         </label>
 
-        <div class="mode-tabs" role="tablist" aria-label="正文模式">
-          <button
-            class="mode-tab"
-            :class="{ on: mode === 'edit' }"
-            type="button"
-            role="tab"
-            :aria-selected="mode === 'edit'"
-            @click="mode = 'edit'"
-          >编辑</button>
-          <button
-            class="mode-tab"
-            :class="{ on: mode === 'preview' }"
-            type="button"
-            role="tab"
-            :aria-selected="mode === 'preview'"
-            @click="mode = 'preview'"
-          >预览</button>
-        </div>
-
-        <label v-if="mode === 'edit'" class="field">
-          <span>正文（支持 Markdown：标题、加粗、列表、链接、代码）</span>
-          <textarea
+        <div class="field">
+          <span>正文</span>
+          <RichTextEditor
             v-model="form.body"
-            class="textarea body-input"
-            rows="16"
             :maxlength="CONSULT_TOPIC_BODY_MAX"
+            :disabled="saving"
             placeholder="把要讲的内容写在这里；引用真实政策时请先核对时效。"
-          ></textarea>
-        </label>
-        <div v-else class="preview-pane">
-          <p v-if="!form.body.trim()" class="quiet">正文为空，没有可预览的内容。</p>
-          <!-- 预览与阅读页共用 renderMarkdown，先转义再插入固定标签。 -->
-          <div v-else class="topic-body" v-html="previewHtml"></div>
+          />
         </div>
 
         <p class="char-count">{{ form.body.length }} / {{ CONSULT_TOPIC_BODY_MAX }}</p>
@@ -70,11 +45,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { CONSULT_TOPIC_BODY_MAX, CONSULT_TOPIC_TITLE_MAX } from '@shared/consult-topic'
 import Modal from '@/components/Modal.vue'
+import RichTextEditor from '../components/RichTextEditor.vue'
 import type { ConsultTopic, ConsultTopicInput } from '@/api'
-import { renderMarkdown } from '@/markdown'
 
 const props = defineProps<{
   open: boolean
@@ -89,9 +64,7 @@ const emit = defineEmits<{
 }>()
 
 const form = ref({ title: '', body: '' })
-const mode = ref<'edit' | 'preview'>('edit')
 const localError = ref('')
-const previewHtml = computed(() => renderMarkdown(form.value.body))
 
 watch(
   () => props.open,
@@ -101,7 +74,6 @@ watch(
       title: props.topic?.title ?? '',
       body: props.topic?.body ?? ''
     }
-    mode.value = 'edit'
     localError.value = ''
   }
 )

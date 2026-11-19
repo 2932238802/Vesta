@@ -7,11 +7,11 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 当前 CR | CR-013 大学常识 Markdown 文章大纲（v1.99 内追加；已交付） |
-| 当前门禁 | **G3 通过 + G4 豁免 + 已交付**（CR-013，2026-11-19；commit `168a20d` 已推送） |
-| 进行中任务 | 无；CR-013 已交付；待开始 CR-014 富文本编辑 |
+| 当前 CR | CR-014 大学常识所见即所得编辑与阅读页精简（v1.99 内追加） |
+| 当前门禁 | **G3 复审待办**（CR-014 首评“有条件通过”；P2-1 / P2-2 / P3-1 / P3-4 已修复，P3-2 / P3-3 记录；工作区未提交） |
+| 进行中任务 | T-047 / T-048 / T-049 已完成；G3 返工已修复，待复审 |
 | 阻塞 | 无 |
-| 下一步 | 开始 CR-014（富文本编辑器 + 移除元信息） |
+| 下一步 | Review Agent 评审 CR-014；评审通过后按用户确认提交 |
 | 文档根目录 | `docs/` |
 
 ## 角色记录
@@ -51,6 +51,16 @@
 - 2026-11-19：Review SubAgent 完成 CR-011 G3 评审，结论 **通过**（无 P0/P1；4 项 P3：编辑态失焦吞一次点击、指针监听失焦兜底、G1 回填、check-version 口径）；`npm run verify` EXIT=0。报告落盘为 `docs/reports/review-agent-2026-11-19-金句栏类别交互.md`。
 - 2026-11-19：Dev SubAgent 完成 CR-013 / T-044 ~ T-046（v1.99 内追加，不升版本）。仅前端 3 个文件：新增 `basics/MarkdownOutline.vue`，`TopicView.vue` 提取 `h2/h3` 生成 slug 锚点、桌面 sticky 大纲、点击平滑滚动与滚动高亮、≤1000px 目录浮层、切换话题 / 编辑后重建；`consultBasics.css` 增加两列布局、当前项、浮层与 390px 适配。`npm run verify` 全绿；本地 `DATA_DIR` + Playwright 39 条断言通过（16 条提纲、点击 / 中段跟随、深链、重复锚点、无标题、900px 浮层、390px，以及其他页面与收藏详情直达回归）。工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-19-文章大纲.md`。
 - 2026-11-19：Review SubAgent 完成 CR-013 G3 评审，结论 **通过**（无 P0/P1/P2；6 项 P3）。Dev 处理 P3-1（上沿调到 1340px）、P3-2（锚点占用集合 + while 后缀）、P3-3 最小项（Esc 关闭、`aria-expanded`）、P3-4（`matchMedia` 跨断点关闭浮层）、P3-5（landmark 去重）；`npm run verify` EXIT=0、Playwright 44/44。工作区仍未提交，待 G4。
+- 2026-11-19：Dev SubAgent 完成 CR-014 / T-047 ~ T-049（v1.99 内追加，不升版本）。新增 `views/admin/components/RichTextEditor.vue` 与 `htmlToMarkdown.ts`（`contenteditable` + 9 项工具栏 + 粘贴纯文本）；替换 `basics/TopicEditorModal.vue`、`knowledge/ArticleEditorModal.vue`、`ConsultCollections.vue` 的 textarea 与“编辑 / 预览”切换；`TopicView.vue` 删除“更新于 / 管理员维护”；`consultBasics.css` / `knowledge.css` 调整编辑器样式。接口 / 数据 / 版本不变。`npm run verify` EXIT=0；Playwright 13 项断言全部通过（空正文拒绝、工具栏九项、粘贴纯文本、390px、Markdown 保存、阅读/编辑一致、专业知识汇总 / 收藏栏入口、其他页面回归），测试数据已清理。工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-19-富文本编辑.md`。
+- 2026-11-19：Review SubAgent 完成 CR-014 G3 首评，结论 **有条件通过**（P2-1 代码块 / 行内代码、P2-2 URL 规则；P3-1 图片 `//`、P3-4 `aria-label`；P3-2 / P3-3 记录）。Dev 已修复：`pre` 输出 ``` 围栏（含语言）、行内 `code` 输出反引号；URL 对齐 `markdown.ts`（http/https、单个 `/` 站内路径、普通相对路径，拒绝 `//host` 与其他协议）；图片同规则；编辑区补 `aria-label="正文编辑器"`。定向 13/13 + 集成用例通过，返工后 `npm run verify` EXIT=0。另按协调者要求将阅读页标题改为 20px / 650 / 1.4。待 G3 复审。
+
+## 任务概览（CR-014）
+
+| 任务 | 状态 | 依赖 |
+| --- | --- | --- |
+| T-047 移除阅读页元信息 | DONE | 无 |
+| T-048 富文本编辑器与转换 | DONE | 无 |
+| T-049 验证与文档 | DONE | T-047、T-048 |
 
 ## 任务概览（CR-013）
 
@@ -162,6 +172,7 @@
 
 ## 最近报告
 
+- [dev-agent-2026-11-19-富文本编辑.md](./reports/dev-agent-2026-11-19-富文本编辑.md) — CR-014 / T-047 ~ T-049 开发报告（G2 自检，待 G3）
 - [review-agent-2026-11-19-文章大纲.md](./reports/review-agent-2026-11-19-文章大纲.md) — G3 评审：通过（无 P0/P1/P2；6 项 P3）
 - [dev-agent-2026-11-19-文章大纲.md](./reports/dev-agent-2026-11-19-文章大纲.md) — CR-013 / T-044 ~ T-046 开发报告（G2 自检，待 G3）
 - [review-agent-2026-11-19-金句栏类别交互.md](./reports/review-agent-2026-11-19-金句栏类别交互.md) — G3 评审：通过（无 P0/P1；4 项 P3）

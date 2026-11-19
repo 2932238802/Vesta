@@ -155,34 +155,12 @@
         </label>
 
         <div v-else class="field">
-          <span class="field-head">
-            <span>{{ form.kind === 'script' ? '咨询稿原文' : '内容' }} · 支持 Markdown</span>
-            <span class="md-switch">
-              <button
-                class="md-switch-btn"
-                :class="{ on: !previewing }"
-                type="button"
-                @click="previewing = false"
-              >编辑</button>
-              <button
-                class="md-switch-btn"
-                :class="{ on: previewing }"
-                type="button"
-                @click="previewing = true"
-              >预览</button>
-            </span>
-          </span>
-          <textarea
-            v-if="!previewing"
+          <span>{{ form.kind === 'script' ? '咨询稿原文' : '内容' }}</span>
+          <RichTextEditor
             v-model="form.content"
-            :rows="form.kind === 'script' ? 14 : 6"
-            :placeholder="form.kind === 'script' ? '粘贴完整咨询稿，保留原始对话和分段；支持 Markdown' : '粘贴金句或片段；支持 **加粗**、列表、链接等 Markdown'"
-          ></textarea>
-          <div
-            v-else
-            class="md-preview md-body"
-            v-html="renderMarkdown(form.content || '（还没有内容）')"
-          ></div>
+            :disabled="saving"
+            :placeholder="form.kind === 'script' ? '粘贴完整咨询稿，保留原始对话和分段' : '粘贴金句或片段，可直接加粗、列表、链接'"
+          />
         </div>
 
         <div class="form-row">
@@ -243,8 +221,8 @@ import {
   consultCollectionKinds
 } from '@shared/consult-collection'
 import { formatDate } from '@/format'
-import { renderMarkdown } from '@/markdown'
 import AdminPageHeader from '@/components/AdminPageHeader.vue'
+import RichTextEditor from './components/RichTextEditor.vue'
 import { confirmAction } from '@/useConfirm'
 
 interface CollectionForm {
@@ -271,7 +249,6 @@ const copiedId = ref('')
 const form = ref<CollectionForm | null>(null)
 const formError = ref('')
 const saving = ref(false)
-const previewing = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const importing = ref(false)
 const importMessage = ref('')
@@ -416,7 +393,6 @@ async function onFilesPicked(event: Event) {
 
 function startCreate(kind: ConsultCollectionKind = 'quote') {
   formError.value = ''
-  previewing.value = false
   form.value = {
     id: '',
     kind,
@@ -432,7 +408,6 @@ function startCreate(kind: ConsultCollectionKind = 'quote') {
 
 function startEdit(item: ConsultCollectionItem) {
   formError.value = ''
-  previewing.value = false
   form.value = {
     id: item.id,
     kind: item.kind,
@@ -777,16 +752,6 @@ onMounted(async () => {
   overflow-wrap: anywhere;
 }
 
-.md-preview {
-  min-height: 140px;
-  max-height: 360px;
-  padding: 12px;
-  border: 1px dashed var(--line-strong);
-  border-radius: 9px;
-  background: var(--paper);
-  overflow: auto;
-}
-
 .item-summary {
   margin: 0;
   color: var(--ink-2);
@@ -947,36 +912,16 @@ onMounted(async () => {
   line-height: 1.6;
 }
 
-.field-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.md-switch {
-  display: inline-flex;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.md-switch-btn {
-  padding: 3px 9px;
-  border: 0;
-  background: transparent;
-  color: var(--ink-3);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.md-switch-btn.on {
-  background: var(--accent-soft);
-  color: var(--ink);
-}
-
 .field textarea {
   resize: vertical;
+}
+
+.collections-page :deep(.rich-text-editor) {
+  width: 100%;
+}
+
+.collections-page :deep(.rte-surface) {
+  min-height: 160px;
 }
 
 .field input:focus,

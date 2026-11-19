@@ -14,11 +14,6 @@
       <div class="topic-head-main">
         <p class="eyebrow">大学常识</p>
         <h2 class="topic-title">{{ topic.title }}</h2>
-        <p class="topic-meta">
-          <span>更新于 {{ formatDate(topic.updatedAt) }}</span>
-          <span aria-hidden="true">·</span>
-          <span>管理员维护</span>
-        </p>
       </div>
       <div class="topic-tools">
         <button
@@ -61,7 +56,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import type { ConsultTopic } from '@/api'
-import { formatDate } from '@/format'
 import { renderMarkdown } from '@/markdown'
 import MarkdownOutline, { type OutlineHeading } from './MarkdownOutline.vue'
 
