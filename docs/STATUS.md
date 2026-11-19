@@ -175,6 +175,7 @@
 
 ## 排队中
 
+- **拆分巨型文件第二批（CR-017）**：G0 / G1 已确认（SurveyEditor / ReportEditor / ConsultCollections，v2.02）；开发中。
 - **拆分巨型文件（CR-016）**：G0 / G1 已确认（v2.01 第一批：migrations / runs / ReportView）；开发中。
 - **发布 v2.0（CR-015）**：G3 首评不通过（P1）已返工，待复审；版本脚本改为单向规则、版本文档与后台左下角版本号已同步，`npm run verify` 全绿。
 - **文章大纲（CR-013）**：已交付（`168a20d`，G3 通过；G4 豁免）。
