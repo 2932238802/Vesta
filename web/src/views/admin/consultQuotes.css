@@ -51,6 +51,50 @@
   font-weight: 600;
 }
 
+.cat-item-draggable {
+  cursor: grab;
+}
+
+.cat-item.dragging {
+  position: relative;
+  z-index: 1;
+  cursor: grabbing;
+  background: var(--paper);
+  color: var(--ink);
+  outline: 1px solid var(--accent);
+  box-shadow: 0 6px 18px rgba(27, 26, 23, 0.16);
+  opacity: 0.94;
+}
+
+.category-panel.dragging {
+  user-select: none;
+}
+
+.cat-item-editing {
+  gap: 8px;
+  padding: 5px 6px 5px 8px;
+  background: var(--paper);
+  outline: 1px solid var(--accent);
+}
+
+.cat-rename-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 2px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.cat-rename-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .cat-name {
   flex: 1;
   min-width: 0;
@@ -179,6 +223,11 @@
     padding: 9px 10px;
     border-bottom: 0;
     border-radius: 9px;
+  }
+
+  .cat-item-editing {
+    flex: 0 0 200px;
+    width: 200px;
   }
 
   .manage-btn {

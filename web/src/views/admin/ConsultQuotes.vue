@@ -21,7 +21,11 @@
     </div>
 
     <div v-else class="quote-layout">
-      <aside class="card category-panel" aria-label="金句分类">
+      <aside
+        class="card category-panel"
+        :class="{ dragging: dragActive }"
+        aria-label="金句分类"
+      >
         <button
           class="cat-item"
           :class="{ on: selected === 'all' }"
@@ -40,17 +44,41 @@
           <span class="cat-name">置顶</span>
           <span class="cat-count">{{ pinnedCount }}</span>
         </button>
-        <button
-          v-for="category in displayCategories"
-          :key="category.id"
-          class="cat-item"
-          :class="{ on: selected === category.id }"
-          type="button"
-          @click="selected = category.id"
-        >
-          <span class="cat-name">{{ category.name }}</span>
-          <span class="cat-count">{{ category.count }}</span>
-        </button>
+        <template v-for="category in visibleCategories" :key="category.id">
+          <div v-if="editingCategoryId === category.id" class="cat-item cat-item-editing">
+            <input
+              :ref="setRenameInput"
+              v-model="categoryDraft"
+              class="cat-rename-input"
+              type="text"
+              maxlength="30"
+              aria-label="分类名"
+              :disabled="categorySaving"
+              @click.stop
+              @pointerdown.stop
+              @keydown.enter.prevent="commitRename"
+              @keydown.esc.prevent="cancelRename"
+              @blur="commitRename()"
+            >
+            <span class="cat-count">{{ category.count }}</span>
+          </div>
+          <button
+            v-else
+            :ref="(el) => setCategoryRef(category.id, el)"
+            class="cat-item cat-item-draggable"
+            :class="{
+              on: selected === category.id,
+              dragging: dragActive && dragCategoryId === category.id
+            }"
+            type="button"
+            @click="selectCategory(category.id)"
+            @dblclick.stop="startRename(category)"
+            @pointerdown="onCategoryPointerDown($event, category.id)"
+          >
+            <span class="cat-name">{{ category.name }}</span>
+            <span class="cat-count">{{ category.count }}</span>
+          </button>
+        </template>
         <button class="manage-btn" type="button" @click="categoryOpen = true">管理分类</button>
       </aside>
 
@@ -130,8 +158,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import type { ConsultQuote, ConsultQuoteInput } from '@/api'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
+import type { ConsultQuote, ConsultQuoteCategory, ConsultQuoteInput } from '@/api'
 import AdminPageHeader from '@/components/AdminPageHeader.vue'
 import Modal from '@/components/Modal.vue'
 import { confirmAction } from '@/useConfirm'
@@ -152,7 +181,8 @@ const {
   pinnedCount,
   filteredQuotes,
   categoryName,
-  load
+  load,
+  reorderCategories
 } = shelf
 
 const pageError = ref('')
@@ -270,6 +300,176 @@ function onMoveCategory(id: string, offset: -1 | 1) {
 function onRemoveCategory(id: string) {
   void runCategoryAction(() => shelf.removeCategory(id))
 }
+
+// —— 行内改名 ——
+const editingCategoryId = ref<string | null>(null)
+const categoryDraft = ref('')
+const categorySaving = ref(false)
+const renameInput = ref<HTMLInputElement | null>(null)
+let renameOriginalName = ''
+
+function setRenameInput(el: Element | ComponentPublicInstance | null) {
+  renameInput.value = el instanceof HTMLInputElement ? el : null
+}
+
+async function startRename(category: ConsultQuoteCategory) {
+  if (dragActive.value || categorySaving.value) return
+  editingCategoryId.value = category.id
+  renameOriginalName = category.name
+  categoryDraft.value = category.name
+  pageError.value = ''
+  await nextTick()
+  renameInput.value?.focus()
+  renameInput.value?.select()
+}
+
+function cancelRename() {
+  if (!editingCategoryId.value) return
+  editingCategoryId.value = null
+  categoryDraft.value = ''
+}
+
+async function commitRename() {
+  const id = editingCategoryId.value
+  if (!id || categorySaving.value) return
+  const name = categoryDraft.value.trim()
+  if (!name) {
+    editingCategoryId.value = null
+    categoryDraft.value = ''
+    pageError.value = '分类名不能为空'
+    return
+  }
+  if (name === renameOriginalName) {
+    cancelRename()
+    return
+  }
+  categorySaving.value = true
+  pageError.value = ''
+  try {
+    await shelf.renameCategory(id, name)
+    editingCategoryId.value = null
+    categoryDraft.value = ''
+  } catch (error) {
+    editingCategoryId.value = null
+    categoryDraft.value = ''
+    pageError.value = error instanceof Error ? error.message : '分类改名失败'
+  } finally {
+    categorySaving.value = false
+  }
+}
+
+// —— 拖拽排序（仅鼠标；触屏不在保证范围，沿用 A-037 口径）——
+const DRAG_THRESHOLD = 4
+const dragActive = ref(false)
+const dragCategoryId = ref('')
+const dragList = ref<ConsultQuoteCategory[] | null>(null)
+const categoryEls = new Map<string, HTMLElement>()
+let dragCandidateId = ''
+let dragStartX = 0
+let dragStartY = 0
+let suppressClickUntil = 0
+
+const visibleCategories = computed(() => dragList.value ?? displayCategories.value)
+
+function setCategoryRef(id: string, el: Element | ComponentPublicInstance | null) {
+  if (el instanceof HTMLElement) categoryEls.set(id, el)
+  else categoryEls.delete(id)
+}
+
+function selectCategory(id: string) {
+  if (Date.now() < suppressClickUntil) return
+  if (editingCategoryId.value) return
+  selected.value = id
+}
+
+function onCategoryPointerDown(event: PointerEvent, id: string) {
+  if (event.pointerType !== 'mouse' || event.button !== 0) return
+  if (editingCategoryId.value || categorySaving.value || dragActive.value) return
+  dragCandidateId = id
+  dragStartX = event.clientX
+  dragStartY = event.clientY
+  window.addEventListener('pointermove', onCategoryPointerMove, { passive: false })
+  window.addEventListener('pointerup', onCategoryPointerUp)
+  window.addEventListener('pointercancel', onCategoryPointerCancel)
+}
+
+function onCategoryPointerMove(event: PointerEvent) {
+  if (!dragCandidateId) return
+  if (!dragActive.value) {
+    if (Math.hypot(event.clientX - dragStartX, event.clientY - dragStartY) < DRAG_THRESHOLD) return
+    dragActive.value = true
+    dragCategoryId.value = dragCandidateId
+    dragList.value = displayCategories.value.map((category) => ({ ...category }))
+  }
+  event.preventDefault()
+  moveDrag(event.clientX, event.clientY)
+}
+
+function moveDrag(clientX: number, clientY: number) {
+  const list = dragList.value
+  if (!list) return
+  const currentIndex = list.findIndex((category) => category.id === dragCategoryId.value)
+  if (currentIndex < 0) return
+  const horizontal = window.matchMedia('(max-width: 1000px)').matches
+  const pointer = horizontal ? clientX : clientY
+
+  // 以其余分类的中线为界，计算拖拽项应插入的位置。
+  let insertAt = 0
+  for (const category of list) {
+    if (category.id === dragCategoryId.value) continue
+    const element = categoryEls.get(category.id)
+    if (!element) continue
+    const rect = element.getBoundingClientRect()
+    const middle = horizontal ? rect.left + rect.width / 2 : rect.top + rect.height / 2
+    if (pointer < middle) break
+    insertAt += 1
+  }
+
+  const dragged = list[currentIndex]
+  const without = list.filter((category) => category.id !== dragCategoryId.value)
+  without.splice(insertAt, 0, dragged)
+  if (without.some((category, index) => category.id !== list[index].id)) {
+    dragList.value = without
+  }
+}
+
+function finishDrag(persist: boolean) {
+  window.removeEventListener('pointermove', onCategoryPointerMove)
+  window.removeEventListener('pointerup', onCategoryPointerUp)
+  window.removeEventListener('pointercancel', onCategoryPointerCancel)
+  dragCandidateId = ''
+  if (!dragActive.value) return
+  const ids = dragList.value?.map((category) => category.id) ?? []
+  const originalIds = displayCategories.value.map((category) => category.id)
+  dragActive.value = false
+  dragCategoryId.value = ''
+  dragList.value = null
+  if (!persist) return
+  suppressClickUntil = Date.now() + 300
+  if (ids.join('\u0000') === originalIds.join('\u0000')) return
+  void saveCategoryOrder(ids)
+}
+
+async function saveCategoryOrder(ids: string[]) {
+  pageError.value = ''
+  try {
+    await reorderCategories(ids)
+  } catch (error) {
+    pageError.value = error instanceof Error ? error.message : '调整顺序失败'
+  }
+}
+
+function onCategoryPointerUp() {
+  finishDrag(true)
+}
+
+function onCategoryPointerCancel() {
+  finishDrag(false)
+}
+
+onBeforeUnmount(() => {
+  finishDrag(false)
+})
 
 function drawRandom() {
   const pool = [...filteredQuotes.value]

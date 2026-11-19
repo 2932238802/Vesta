@@ -142,6 +142,23 @@ export function useQuoteShelf() {
     categories.value = result.categories
   }
 
+  /** 拖拽排序：先本地重排，保存失败时恢复到拖动前的顺序。 */
+  async function reorderCategories(ids: string[]): Promise<void> {
+    const snapshot = categories.value.map((category) => ({ ...category }))
+    const order = new Map(ids.map((id, index) => [id, index + 1]))
+    categories.value = categories.value.map((category) => ({
+      ...category,
+      sortOrder: order.get(category.id) ?? category.sortOrder
+    }))
+    try {
+      const result = await api.reorderConsultQuoteCategories(ids)
+      categories.value = result.categories
+    } catch (error) {
+      categories.value = snapshot
+      throw error
+    }
+  }
+
   async function removeCategory(id: string): Promise<void> {
     await api.deleteConsultQuoteCategory(id)
     categories.value = categories.value.filter((category) => category.id !== id)
@@ -168,6 +185,7 @@ export function useQuoteShelf() {
     addCategory,
     renameCategory,
     moveCategory,
+    reorderCategories,
     removeCategory
   }
 }
