@@ -1,0 +1,60 @@
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button {
+  border: 0;
+  background: transparent;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--ink-3);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.tabs button.on {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.panel {
+  padding: 24px 26px 28px;
+  min-height: 420px;
+}
+
+.preview {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.preview-title {
+  font-size: 26px;
+  font-weight: 500;
+  margin-bottom: 26px;
+}
+
+.preview-group {
+  padding-top: 22px;
+}
+
+.preview-group h3 {
+  margin-top: 6px;
+  font-size: 19px;
+  font-weight: 500;
+}
+
+@media (max-width: 1080px) {
+  .editor-grid {
+    grid-template-columns: 1fr;
+  }
+}

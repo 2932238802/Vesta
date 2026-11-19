@@ -1,0 +1,187 @@
+.collection-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-top: 3px solid var(--line);
+  min-width: 0;
+}
+
+.collection-card.quote {
+  border-top-color: #8a6a3b;
+}
+
+.collection-card.script {
+  border-top-color: var(--accent);
+}
+
+.collection-card.link {
+  border-top-color: #416a8a;
+}
+
+.collection-card.other {
+  border-top-color: var(--line-strong);
+}
+
+.collection-card.pinned {
+  box-shadow: 0 2px 10px rgba(27, 26, 23, 0.08);
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 22px;
+}
+
+.kind-badge {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink-2);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+}
+
+.kind-badge.quote {
+  background: #f6efe2;
+  color: #6e522c;
+}
+
+.kind-badge.script {
+  background: var(--accent-soft);
+  color: var(--accent-ink, #2f5d46);
+}
+
+.kind-badge.link {
+  background: #e8f0f5;
+  color: #335a78;
+}
+
+.pin-flag {
+  color: #8a6a3b;
+  font-size: 10.5px;
+}
+
+.card-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.icon-btn {
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  border-color: var(--line);
+  background: var(--paper);
+}
+
+.icon-btn.danger:hover {
+  color: #a33a2c;
+  border-color: rgba(163, 58, 44, 0.35);
+}
+
+.item-title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.item-host {
+  margin: -4px 0 0;
+  color: var(--ink-3);
+  font-size: 11px;
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.item-summary {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.item-summary.one-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-hint {
+  color: var(--ink-3);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.collection-card:hover .card-hint,
+.collection-card:focus-visible .card-hint {
+  opacity: 1;
+}
+
+.collection-card:focus-visible {
+  outline: 2px solid rgba(47, 93, 70, 0.55);
+  outline-offset: 2px;
+}
+
+.link-btn {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.source-text {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-link {
+  color: var(--ink-2);
+}
+
+.tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: 11px;
+}

@@ -6,6 +6,19 @@
 
 ## 本轮（2026-11-19）
 
+### 拆分巨型文件（第二批：SurveyEditor / ReportEditor / ConsultCollections）（2026-11-19，产品版本 v2.02）
+
+- 依据：`docs/archive/20261119/13-拆分巨型文件第二批-需求卡.md`（CR-017，G0 / G1 已确认）与 `docs/archive/20261119/14-拆分巨型文件第二批-开发文档.md`（R-017 / AC-017-1~6 / T-056~T-059）。
+- **为什么要做**：三个后台编辑页 989–1138 行，模板、脚本、样式混在一起；本轮只做纯拆分，不改行为、接口与数据。
+- **SurveyEditor**：1138 → 110 行。`views/admin/survey/` 下拆出 `SurveyBuilder`、`QuestionEditor`、`QuestionOptionsEditor`、`QuestionMatrixEditor`、`QuestionTextEditor`、`GroupEditor`、`SurveyMetaPanel`；状态、脏标记、保存、题型切换与增删改逻辑全部进入 `useSurveyEditor.ts`（372 行）。条件链与模板结构原样移动。
+- **ReportEditor**：1086 → 105 行。`views/admin/report/` 下拆出文案区（Hero / Target / Basics / Cognition / Actions + CopyPanel）、主题与模块、维度文案、领取与页脚；加载、脏标记、保存、预览进入 `useReportEditor.ts`（169 行）。拆分前后该页均没有拖拽排序入口，模块顺序仍由模板数据固定，本轮不新增交互。
+- **ConsultCollections**：989 → 108 行。`views/admin/collections/` 下拆出工具栏、收藏卡片、编辑弹窗；读取、筛选、导入 Word、保存、置顶、删除、复制与详情跳转进入 `useCollections.ts`（345 行）；富文本继续沿用 `RichTextEditor`。scoped 样式按组件拆分，原页面样式移到独立 CSS。
+- **规模与版本**：三个入口 110 / 105 / 108 行，新增 `.vue` / `.ts` 最大 372 行；`scripts/file-size-baseline.json` 移除三条入口基线与 `ReportEditor.vue#template`。根 `package.json` `2.1.0 → 2.2.0`，后台左下角按现有格式化规则显示 `v2.02`。
+- **不改**：任何业务逻辑、条件链、文案、接口路径 / 方法 / 响应结构、数据表与字段、依赖与页面视觉。
+- **验证**：`npm run verify` 全绿；HEAD worktree 与当前实现共用同一临时后端，三个页面的初始态、Survey 预览、Report 四个标签页、Collections 编辑弹窗的 DOM（去 scoped 属性）、表单值与关键计算样式逐项一致；1280 / 390 截图像素差异均 < 0.02%；Playwright 21 项交互断言与 Word 导入定向断言通过（题目增删改 / 题型切换 / 保存 / 脏状态 / 刷新保持，报告文案 / 模块开关 / 预览 / 保存，收藏搜索 / 富文本新增编辑 / 置顶 / 导入 / 删除，三页 390px 无横向溢出，控制台无报错）。
+- **状态**：G2 自检完成，待 G3 评审；工作区未提交。
+- **部署/回滚**：随 `bash update.sh` 前端构建发布；回滚 `git revert` 后再次执行 `update.sh`；无数据迁移、无功能开关、无可观测性变更。
+
 ### 拆分巨型文件（第一批：migrations / runs / ReportView）（2026-11-19，产品版本 v2.01）
 
 - 依据：`docs/archive/20261119/11-拆分巨型文件-需求卡.md`（CR-016，G0 已确认）与 `docs/archive/20261119/12-拆分巨型文件-开发文档.md`（R-016 / AC-016-1~6 / T-052~T-055）。

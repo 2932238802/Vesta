@@ -8,9 +8,5 @@
   "web/src/components/consult/ConsultPurposeDetail.vue": 660,
   "web/src/components/consult/ConsultRunEditor.vue": 635,
   "web/src/views/Quiz.vue": 872,
-  "web/src/views/admin/ConsultCollections.vue": 1044,
-  "web/src/views/admin/ReportEditor.vue": 1086,
-  "web/src/views/admin/ReportEditor.vue#template": 726,
-  "web/src/views/admin/SkillEditor.vue": 711,
-  "web/src/views/admin/SurveyEditor.vue": 1138
+  "web/src/views/admin/SkillEditor.vue": 711
 }

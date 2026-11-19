@@ -1,0 +1,48 @@
+.section-card {
+  padding: 20px 22px 22px;
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.section-head h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.field.full,
+.check.full {
+  grid-column: 1 / -1;
+}
+
+.option-grid {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+.quiet {
+  color: var(--ink-3);
+}
+
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

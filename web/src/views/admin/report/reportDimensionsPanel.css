@@ -1,0 +1,60 @@
+.dimension-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.dim-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.dim-card summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.dim-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.dim-card[open] summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.dim-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+.quiet {
+  color: var(--ink-3);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.field.full {
+  grid-column: 1 / -1;
+}
+
+.dim-card .form-grid {
+  padding: 18px 20px 20px;
+}
+
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

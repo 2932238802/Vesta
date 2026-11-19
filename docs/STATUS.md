@@ -7,11 +7,11 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 当前 CR | CR-016 拆分巨型文件（第一批；v2.01，已交付） |
-| 当前门禁 | **G3 通过 + G4 豁免 + 已交付**（CR-016，2026-11-19；用户明确确认跳过 G4；commit `f66947b` 已推送） |
-| 进行中任务 | 无；CR-016 第一批已交付 |
+| 当前 CR | CR-017 拆分巨型文件（第二批；v2.02，开发中） |
+| 当前门禁 | **G2 自检完成，待 G3 评审**（CR-017，2026-11-19；工作区未提交） |
+| 进行中任务 | T-056 ~ T-059 已完成，待评审 |
 | 阻塞 | 无 |
-| 下一步 | 用户执行 `bash update.sh` 发布 v2.01；第二批拆分待定 |
+| 下一步 | Review Agent 执行 G3 评审；通过后按用户要求提交与发布 |
 | 文档根目录 | `docs/` |
 
 ## 角色记录
@@ -59,6 +59,16 @@
 - 2026-11-19：Review SubAgent G3 首评 **不通过**，P1：`check-version.mjs` 允许「文档领先 1 个版本」通过，会掩盖 `package.json` 落后；另 2 项 P3。Dev 已返工：改回单向规则（相等通过、package 领先 1 个版本通过并提示、文档领先一律失败、差异 >1 失败），同步脚本与文档措辞；`development-history.md` 的 `T-050~T-052` 改回 `T-050~T-051`；`reference/README.md` 状态行改为「已确认（v2.0 待发布）」。复跑 9 组正反用例（README v2.1 + package 2.0.0 已 EXIT=1）与 `npm run verify` 全绿。待 G3 复审；报告落盘为 `docs/reports/dev-agent-2026-11-19-v2.0发布.md`。
 
 - 2026-11-19：Dev SubAgent 完成 CR-016 / T-052 ~ T-055（v2.01）。三个巨型文件纯拆分：`db/migrations.ts` 42 行 + 6 个迁移模块；`routes/consult/runs.ts` 改为 `runs/index.ts` 23 行 + 7 个职责模块（11 条路由注册顺序不变）；`ReportView.vue` 96 行 + 4 个子组件、2 个 composable、5 个 scoped CSS。`package.json` `2.0.0 → 2.1.0`，后台左下角按 `v<major>.<minor 两位>` 显示 `v2.01`；`check:size` 基线移除两条。`npm run verify` 全绿；迁移 fresh / 幂等 / 既有库与拆分前一致；runs 接口状态码 / 响应结构与拆分前 HEAD 逐条一致；报告页 1280 / 390 / print 的 DOM、文案与关键计算样式完全一致。工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-19-拆分巨型文件.md`。
+- 2026-11-19：Dev SubAgent 完成 CR-017 / T-056 ~ T-059（v2.02）。三个后台编辑页纯拆分：`SurveyEditor.vue` 1138 → 110 行 + `survey/` 7 个子组件与 `useSurveyEditor.ts`；`ReportEditor.vue` 1086 → 105 行 + `report/` 9 个子组件与 `useReportEditor.ts`；`ConsultCollections.vue` 989 → 108 行 + `collections/` 3 个子组件与 `useCollections.ts`。`package.json` `2.1.0 → 2.2.0`，后台左下角显示 `v2.02`；`check:size` 移除三个入口基线与 `ReportEditor.vue#template`。`npm run verify` 全绿；HEAD worktree 与当前实现的 DOM / 表单值 / 关键计算样式逐项一致，1280 / 390 截图差异 < 0.02%；Playwright 21 项交互断言 + Word 导入定向断言通过。工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-19-拆分巨型文件第二批.md`。
+
+## 任务概览（CR-017）
+
+| 任务 | 状态 | 依赖 |
+| --- | --- | --- |
+| T-056 拆分 SurveyEditor | DONE | 无 |
+| T-057 拆分 ReportEditor | DONE | 无 |
+| T-058 拆分 ConsultCollections | DONE | 无 |
+| T-059 验证、版本与文档 | DONE | T-056、T-057、T-058 |
 
 ## 任务概览（CR-016）
 
@@ -175,8 +185,8 @@
 
 ## 排队中
 
-- **拆分巨型文件第二批（CR-017）**：G0 / G1 已确认（SurveyEditor / ReportEditor / ConsultCollections，v2.02）；开发中。
-- **拆分巨型文件（CR-016）**：G0 / G1 已确认（v2.01 第一批：migrations / runs / ReportView）；开发中。
+- **拆分巨型文件第二批（CR-017）**：G0 / G1 已确认（SurveyEditor / ReportEditor / ConsultCollections，v2.02）；G2 自检完成，待 G3 评审；工作区未提交。
+- **拆分巨型文件（CR-016）**：已交付（v2.01，commit `f66947b`，G3 通过；G4 豁免）。
 - **发布 v2.0（CR-015）**：G3 首评不通过（P1）已返工，待复审；版本脚本改为单向规则、版本文档与后台左下角版本号已同步，`npm run verify` 全绿。
 - **文章大纲（CR-013）**：已交付（`168a20d`，G3 通过；G4 豁免）。
 - **在野知识库导入（CR-012）**：试点已实现并 G3 通过（`kb_region_01`，6514 字）；内容包与导入脚本待提交。
@@ -197,6 +207,7 @@
 
 ## 最近报告
 
+- [dev-agent-2026-11-19-拆分巨型文件第二批.md](./reports/dev-agent-2026-11-19-拆分巨型文件第二批.md) — CR-017 / T-056 ~ T-059 开发报告（G2 自检，待 G3）
 - [dev-agent-2026-11-19-v2.0发布.md](./reports/dev-agent-2026-11-19-v2.0发布.md) — CR-015 / T-050 ~ T-051 开发报告（G3 首评 P1 返工，待复审）
 - [review-agent-2026-11-19-富文本编辑.md](./reports/review-agent-2026-11-19-富文本编辑.md) — G3 复审：通过（P2 关闭；仅 P3 记录）
 - [dev-agent-2026-11-19-富文本编辑.md](./reports/dev-agent-2026-11-19-富文本编辑.md) — CR-014 / T-047 ~ T-049 开发报告（G2 自检，待 G3）
@@ -232,6 +243,7 @@
 
 ## 最近需求
 
+- CR-017 拆分巨型文件第二批（v2.02，G2 自检完成，待 G3）：`archive/20261119/13-拆分巨型文件第二批-需求卡.md`、`archive/20261119/14-拆分巨型文件第二批-开发文档.md`
 - CR-015 发布 v2.0（v2.0，G3 首评不通过后返工待复审）：`archive/20261119/9-v2.0发布-需求卡.md`、`archive/20261119/10-v2.0发布-开发文档.md`
 - CR-011 金句栏类别交互（v1.99，已交付 `f62bbe6`）：`archive/20261119/1-金句栏类别交互-需求卡.md`、`archive/20261119/2-金句栏类别交互-开发文档.md`
 - CR-010 大学常识（v1.98，已交付 `7872524`）：`archive/20261118/17-大学常识-需求卡.md`、`archive/20261118/18-大学常识-开发文档.md`
