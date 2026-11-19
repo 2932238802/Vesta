@@ -7,11 +7,11 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 当前 CR | CR-009 咨询组导航顺序调整（v1.97，已交付；G4 豁免） |
-| 当前门禁 | **G3 通过 + G4 豁免 + 已交付**（CR-009，2026-11-19；commit `ae3eedc` 已推送） |
-| 进行中任务 | T-032 / T-033 已 DONE；工作区未提交，待 G3 评审 |
+| 当前 CR | CR-010 大学常识（v1.98，G3 通过，待提交） |
+| 当前门禁 | **G2 自检完成**（CR-010，2026-11-19；`npm run verify` 全绿，接口 33/33、Playwright 70/70）；工作区未提交，待 G3 评审 |
+| 进行中任务 | T-034 ~ T-038 全部 DONE；待 Review Agent 评审 |
 | 阻塞 | 无 |
-| 下一步 | 用户执行 `bash update.sh` 发布 v1.97；后续需求待定 |
+| 下一步 | 提交并推送；随后 G4 总审 |
 | 文档根目录 | `docs/` |
 
 ## 角色记录
@@ -41,6 +41,18 @@
 - 2026-11-18：Review SubAgent 完成 CR-008 G3 评审，结论 **通过**（无 P0/P1/P2；2 项 P3）；独立接口 41/41、Playwright 46/46。报告落盘为 `docs/reports/review-agent-2026-11-18-有效提问.md`。
 - 2026-11-18：用户确认提交；`9478405 [feat] 增加有效提问` 已推送；Meta 总审 **通过**（0 P0/P1，限时抽查）。报告落盘为 `docs/reports/meta-agent-2026-11-18-有效提问.md`。
 - 2026-11-19：Dev SubAgent 完成 CR-009 / T-032 ~ T-033（v1.97）。仅改 `AdminLayout.vue`：咨询组改为 写咨询稿 → 金句栏 → 故事集 → 有效的提问 → 咨询树，知识库组只保留 升学分数线查询 → 专业知识汇总，`activeGroup` 中金句栏 / 故事集改归咨询组；`npm run verify` EXIT=0；临时 `DATA_DIR` + Playwright 46/46 断言通过；工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-19-导航顺序调整.md`。
+- 2026-11-19：Review SubAgent 完成 CR-009 G3 评审，结论 **通过**（无 P0/P1/P2；1 项 P3）。报告落盘为 `docs/reports/review-agent-2026-11-19-导航顺序调整.md`。
+- 2026-11-19：Dev SubAgent 完成 CR-010 / T-034 ~ T-038（v1.98）。新增 `consult_topics` 一张表与 1 条索引、`shared/src/consult-topic.ts`、`server/src/routes/consult/topics.ts`（6 个接口，挂载在故事集之后）、`ConsultBasics.vue` 与 `basics/{TopicRail,TopicView,TopicEditorModal}.vue`、`basics/useBasics.ts`、`consultBasics.css`；咨询组导航新增 大学常识（有效的提问与咨询树之间）；`npm run verify` 全绿；临时 `DATA_DIR` 接口断言 33/33、Playwright 70/70；库内表 / 索引 36 / 49；工作区未提交，待 G3 评审。报告落盘为 `docs/reports/dev-agent-2026-11-19-大学常识.md`。
+
+## 任务概览（CR-010）
+
+| 任务 | 状态 | 依赖 |
+| --- | --- | --- |
+| T-034 建表与共享类型 | DONE | 无 |
+| T-035 后端接口 | DONE | T-034 |
+| T-036 前端骨架与 Wiki 阅读 | DONE | T-035 |
+| T-037 编辑与拖拽排序 | DONE | T-036 |
+| T-038 验证、文档与版本 | DONE | T-034 ~ T-037 |
 
 ## 任务概览（CR-009）
 
@@ -107,7 +119,7 @@
 
 ## 排队中
 
-- **大学常识（CR-010）**：G0 已确认（扁平话题、Markdown、拖拽排序）；开发文档 `archive/20261118/18-大学常识-开发文档.md` 已写，**待 G1**。
+- **大学常识观察项（CR-010 后续）**：话题列表一次性返回全部摘要（不含正文），超过约 200 篇时考虑分页 / 虚拟滚动；首期不实现。
 - **导航顺序调整（CR-009）**：已交付（v1.97，`ae3eedc`，G3 通过；G4 豁免）；金句栏、故事集回咨询组，咨询树移到最后，知识库组只保留升学分数线查询与专业知识汇总，路由 / 页面 / 接口 / 数据不变。
 - **有效性提问 P3（CR-008 后续）**：分类调序日志未记 count；长度按 UTF-16 code unit；列表超过约 200 条需分页；备注未加密（与既有模块一致）。
 - **知识库 P2（CR-006 后续）**：`knowledge.css` 的 `.article-head` 跨页影响收藏详情，已修复（`aa04644`，限定 `.article-view .article-head`）。
@@ -121,6 +133,7 @@
 
 ## 最近报告
 
+- [dev-agent-2026-11-19-大学常识.md](./reports/dev-agent-2026-11-19-大学常识.md) — CR-010 / T-034 ~ T-038 开发报告（G2 自检）
 - [review-agent-2026-11-19-导航顺序调整.md](./reports/review-agent-2026-11-19-导航顺序调整.md) — G3 评审：通过（无 P0/P1/P2；1 项 P3）
 - [dev-agent-2026-11-19-导航顺序调整.md](./reports/dev-agent-2026-11-19-导航顺序调整.md) — CR-009 / T-032 ~ T-033 开发报告（G2 自检）
 - [meta-agent-2026-11-18-有效提问.md](./reports/meta-agent-2026-11-18-有效提问.md) — G4 总审：通过（0 P0/P1；2 项 P3）
@@ -146,6 +159,7 @@
 
 ## 最近需求
 
+- CR-010 大学常识（v1.98，开发完成待评审）：`archive/20261118/17-大学常识-需求卡.md`、`archive/20261118/18-大学常识-开发文档.md`
 - CR-009 咨询组导航顺序调整（v1.97，已交付 `ae3eedc`）：`archive/20261118/15-导航顺序调整-需求卡.md`、`archive/20261118/16-导航顺序调整-开发文档.md`
 - CR-008 有效的提问（v1.96，已交付 `9478405`）：`archive/20261118/13-有效提问-需求卡.md`、`archive/20261118/14-有效提问-开发文档.md`
 - CR-007 故事集迁移（v1.95，已交付 `21c4ca2`）：`archive/20261118/11-故事集迁移-需求卡.md`、`archive/20261118/12-故事集迁移-开发文档.md`

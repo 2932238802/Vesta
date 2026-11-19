@@ -52,6 +52,12 @@ export type {
   ConsultStoryUpdateInput
 } from '@shared/consult-story'
 export type {
+  ConsultTopic,
+  ConsultTopicInput,
+  ConsultTopicSummary,
+  ConsultTopicUpdateInput
+} from '@shared/consult-topic'
+export type {
   KnowledgeArticle,
   KnowledgeArticleInput,
   KnowledgeArticleSummary,

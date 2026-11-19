@@ -22,6 +22,10 @@ import type {
   ConsultStoryInput,
   ConsultStoryUpdateInput,
   ConsultTemplate,
+  ConsultTopic,
+  ConsultTopicInput,
+  ConsultTopicSummary,
+  ConsultTopicUpdateInput,
   ConsultTree
 } from './types'
 import { ApiError, clearToken, getToken, request } from './request'
@@ -196,6 +200,43 @@ export const consultApi = {
       `/api/admin/consult/story-categories/${encodeURIComponent(id)}`,
       { method: 'DELETE', auth: true }
     )
+  },
+  consultTopics() {
+    return request<{ topics: ConsultTopicSummary[] }>('/api/admin/consult/topics', {
+      auth: true
+    })
+  },
+  consultTopic(id: string) {
+    return request<{ topic: ConsultTopic }>(
+      `/api/admin/consult/topics/${encodeURIComponent(id)}`,
+      { auth: true }
+    )
+  },
+  createConsultTopic(body: ConsultTopicInput) {
+    return request<{ topic: ConsultTopic }>('/api/admin/consult/topics', {
+      method: 'POST',
+      body,
+      auth: true
+    })
+  },
+  updateConsultTopic(id: string, body: ConsultTopicUpdateInput) {
+    return request<{ topic: ConsultTopic }>(
+      `/api/admin/consult/topics/${encodeURIComponent(id)}`,
+      { method: 'PATCH', body, auth: true }
+    )
+  },
+  deleteConsultTopic(id: string) {
+    return request<{ ok: true }>(`/api/admin/consult/topics/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      auth: true
+    })
+  },
+  reorderConsultTopics(ids: string[]) {
+    return request<{ topics: ConsultTopicSummary[] }>('/api/admin/consult/topics/order', {
+      method: 'PUT',
+      body: { ids },
+      auth: true
+    })
   },
   consultCollections() {
     return request<{ items: ConsultCollectionItem[] }>('/api/admin/consult/collections', {

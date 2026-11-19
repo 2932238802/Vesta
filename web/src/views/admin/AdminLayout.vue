@@ -77,6 +77,11 @@
             <RouterLink to="/admin/consult/quotes" active-class="on">金句栏</RouterLink>
             <RouterLink to="/admin/consult/stories" active-class="on">故事集</RouterLink>
             <RouterLink to="/admin/consult/questions" active-class="on">有效的提问</RouterLink>
+            <RouterLink
+              to="/admin/consult/basics"
+              active-class="on"
+              :class="{ on: route.path.startsWith('/admin/consult/basics') }"
+            >大学常识</RouterLink>
             <RouterLink to="/admin/consult/purposes" active-class="on">咨询树</RouterLink>
           </div>
         </section>

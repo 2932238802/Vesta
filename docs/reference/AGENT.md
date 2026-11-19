@@ -57,7 +57,7 @@ related: [IDX, OVR, ENV, ARC, FUN, API, DAT, OPS, TST]
 | 进程入口 | `server/src/index.ts` | 中间件、路由挂载、静态站点、启动任务 | 管理路由必须挂在 `requireAdmin()` 之后 |
 | `config` | `server/src/env.ts#config` | 全部环境变量与默认值 | 生产硬校验：管理员账号、`AUTH_SECRET` |
 | `requireAdmin` | `server/src/auth.ts#requireAdmin` | Token + `admin_sessions` 双重校验 | 新增管理接口不要绕过 |
-| `initSchema` | `server/src/db/schema.ts#initSchema` | 35 张表、48 条索引 | 改表必须同时写幂等迁移 |
+| `initSchema` | `server/src/db/schema.ts#initSchema` | 36 张表、49 条索引 | 改表必须同时写幂等迁移 |
 | `runMigrations` | `server/src/db/migrations.ts#runMigrations` | 启动时补列/回填/种子 | 不要写一次性迁移脚本 |
 | `publicRouter` | `server/src/routes/public.ts#publicRouter` | 健康、邀请、提交、报告、领取、事件 | `doc` 模式失败不得伪造报告 |
 | `adminRouter` | `server/src/routes/admin/index.ts#adminRouter` | 登录后全部管理接口 | 子路由挂载顺序影响匹配 |
@@ -85,7 +85,7 @@ related: [IDX, OVR, ENV, ARC, FUN, API, DAT, OPS, TST]
 | `router` | `web/src/router.ts#router` | 页面路由与守卫 | 懒加载；管理页 `meta.admin` |
 | `request` | `web/src/api/request.ts#request` | 统一请求与 Token | 401 处理在此 |
 | `adminApi` | `web/src/api/admin.ts#adminApi` | 管理接口客户端 | 与服务端契约同步 |
-| `consultApi` | `web/src/api/consult.ts#consultApi` | 咨询接口客户端（含有效的提问） | 运行状态轮询 |
+| `consultApi` | `web/src/api/consult.ts#consultApi` | 咨询接口客户端（含有效的提问、大学常识） | 运行状态轮询 |
 
 ## 3. 不变量（改代码前先确认没有破坏）
 
@@ -173,7 +173,7 @@ related: [IDX, OVR, ENV, ARC, FUN, API, DAT, OPS, TST]
 | 生成日期 | `2026-11-16` |
 | 代码 commit | `884ef39` |
 | 产品版本 | `1.85.0` |
-| 定点勘误 | `2026-11-18`（v1.86–v1.96；v1.96 待发布） |
+| 定点勘误 | `2026-11-18`（v1.86–v1.98；v1.98 待发布） |
 | 勘误范围 | 00 / 01 / 04 / 05 / 06 / 09 / AGENT 与 `manifest.json` 哈希 |
 | 输出目录 | `docs/reference/` |
 | 模式 | `full` + `patch` |

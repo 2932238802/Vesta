@@ -23,6 +23,7 @@ const ConsultPurposes = () => import('./views/admin/ConsultPurposes.vue')
 const ConsultQuotes = () => import('./views/admin/ConsultQuotes.vue')
 const ConsultQuestions = () => import('./views/admin/ConsultQuestions.vue')
 const ConsultStories = () => import('./views/admin/ConsultStories.vue')
+const ConsultBasics = () => import('./views/admin/ConsultBasics.vue')
 const ConsultCollections = () => import('./views/admin/ConsultCollections.vue')
 const ConsultCollectionDetail = () => import('./views/admin/ConsultCollectionDetail.vue')
 const KnowledgeBase = () => import('./views/admin/KnowledgeBase.vue')
@@ -67,6 +68,12 @@ export const router = createRouter({
         { path: 'consult/quotes', name: 'admin-consult-quotes', component: ConsultQuotes },
         { path: 'consult/questions', name: 'admin-consult-questions', component: ConsultQuestions },
         { path: 'consult/stories', name: 'admin-consult-stories', component: ConsultStories },
+        { path: 'consult/basics', name: 'admin-consult-basics', component: ConsultBasics },
+        {
+          path: 'consult/basics/:id',
+          name: 'admin-consult-basics-topic',
+          component: ConsultBasics
+        },
         { path: 'consult/collections', name: 'admin-consult-collections', component: ConsultCollections },
         {
           path: 'consult/collections/:id',
@@ -110,6 +117,8 @@ const PAGE_TITLES: Record<string, string> = {
   'admin-consult-quotes': '金句栏 · 管理后台',
   'admin-consult-questions': '有效的提问 · 管理后台',
   'admin-consult-stories': '故事集 · 管理后台',
+  'admin-consult-basics': '大学常识 · 管理后台',
+  'admin-consult-basics-topic': '大学常识 · 管理后台',
   'admin-consult-collections': '收藏栏 · 管理后台',
   'admin-consult-collection': '收藏详情 · 管理后台',
   'admin-knowledge': '专业知识汇总 · 管理后台',

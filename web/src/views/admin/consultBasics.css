@@ -1,0 +1,489 @@
+/* 大学常识：所有选择器都以 .basics-page 前缀限定，避免影响其他后台页面。 */
+.basics-page {
+  --amber-soft: #f6efe2;
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.basics-page .count {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.basics-page .basics-wiki {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+/* 话题栏 */
+.basics-page .topic-rail {
+  position: sticky;
+  top: 20px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.basics-page .rail-search {
+  padding: 2px 2px 10px;
+}
+
+.basics-page .search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f3efe6;
+  color: var(--ink-3);
+}
+
+.basics-page .search-box svg {
+  flex: none;
+  opacity: 0.6;
+}
+
+.basics-page .search-box input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.basics-page .rail-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 8px 6px;
+  color: var(--ink-3);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.basics-page .rail-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.basics-page .drag-hint {
+  margin: 0 8px 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.basics-page .topic-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.basics-page .topic-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  touch-action: pan-y;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.basics-page .topic-item:hover {
+  background: #f4efe5;
+}
+
+.basics-page .topic-item.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.basics-page .topic-item.dragging {
+  position: relative;
+  z-index: 2;
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 8px 20px rgba(27, 26, 23, 0.16);
+  cursor: grabbing;
+}
+
+.basics-page .topic-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.basics-page .dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+.basics-page .topic-item.on .dot,
+.basics-page .topic-item.dragging .dot {
+  background: var(--accent);
+}
+
+.basics-page .rail-empty {
+  padding: 12px 10px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.basics-page .rail-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 10px 8px 2px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+/* 阅读区 */
+.basics-page .basics-main {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.basics-page .topic-view {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 24px 30px 36px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.basics-page .back-btn {
+  display: none;
+  justify-self: start;
+}
+
+.basics-page .breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.basics-page .breadcrumb a {
+  color: var(--ink-2);
+}
+
+.basics-page .breadcrumb a:hover {
+  color: var(--accent);
+}
+
+.basics-page .crumb-sep {
+  color: var(--ink-3);
+}
+
+.basics-page .crumb-current {
+  color: var(--ink-2);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.basics-page .topic-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.basics-page .topic-head-main {
+  min-width: 0;
+}
+
+.basics-page .topic-title {
+  margin-top: 2px;
+  font-size: 26px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.basics-page .topic-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.basics-page .topic-tools {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.basics-page .tool-btn {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+
+.basics-page .tool-btn:hover {
+  background: #fbf7ef;
+}
+
+.basics-page .tool-btn.danger:hover {
+  border-color: #e3c9c4;
+  background: #fdf3f1;
+  color: var(--danger);
+}
+
+/* Markdown 正文：内容只来自 renderMarkdown（先转义再生成固定标签）。 */
+.basics-page .topic-body {
+  min-width: 0;
+  max-width: 760px;
+  color: var(--ink-2);
+  font-size: 14.5px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+.basics-page .topic-body p {
+  margin: 0 0 14px;
+}
+
+.basics-page .topic-body h1,
+.basics-page .topic-body h2,
+.basics-page .topic-body h3,
+.basics-page .topic-body h4,
+.basics-page .topic-body h5,
+.basics-page .topic-body h6 {
+  margin: 24px 0 10px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.basics-page .topic-body h1 {
+  font-size: 22px;
+}
+
+.basics-page .topic-body h2 {
+  font-size: 19px;
+}
+
+.basics-page .topic-body h3,
+.basics-page .topic-body h4,
+.basics-page .topic-body h5,
+.basics-page .topic-body h6 {
+  font-size: 16px;
+}
+
+.basics-page .topic-body ul,
+.basics-page .topic-body ol {
+  margin: 0 0 14px;
+  padding-left: 24px;
+}
+
+.basics-page .topic-body li {
+  margin: 5px 0;
+}
+
+.basics-page .topic-body strong {
+  color: var(--ink);
+}
+
+.basics-page .topic-body blockquote {
+  margin: 0 0 14px;
+  padding: 8px 14px;
+  border-left: 3px solid var(--line-strong);
+  color: var(--ink-3);
+}
+
+.basics-page .topic-body pre {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border-radius: 10px;
+  background: #f4f1e8;
+}
+
+.basics-page .topic-body code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+.basics-page .topic-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+}
+
+.basics-page .topic-body a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.basics-page .topic-body hr {
+  margin: 20px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.basics-page .empty-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 编辑弹窗：Modal 会 Teleport 到 body，所以这里再提供一层 .basics-page 作用域。 */
+.basics-page.basics-modal-body {
+  display: block;
+}
+
+.basics-page .topic-form {
+  display: grid;
+  gap: 14px;
+}
+
+.basics-page .mode-tabs {
+  display: flex;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.basics-page .mode-tab {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.basics-page .mode-tab:hover {
+  background: rgba(0, 0, 0, 0.035);
+}
+
+.basics-page .mode-tab.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.basics-page .body-input {
+  min-height: 300px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.basics-page .preview-pane {
+  min-height: 140px;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.basics-page .char-count {
+  color: var(--ink-3);
+  font-size: 11px;
+  text-align: right;
+}
+
+.basics-page .form-error {
+  color: var(--danger);
+  font-size: 13px;
+}
+
+@media (max-width: 1000px) {
+  .basics-page .basics-wiki {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .basics-page .topic-rail {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .basics-page .basics-main {
+    display: none;
+  }
+
+  .basics-page .topic-view {
+    padding: 20px 18px 30px;
+  }
+
+  .basics-page .back-btn {
+    display: inline-flex;
+  }
+
+  .basics-page .basics-wiki.reading .topic-rail {
+    display: none;
+  }
+
+  .basics-page .basics-wiki.reading .basics-main {
+    display: grid;
+  }
+}
+
+@media (max-width: 640px) {
+  .basics-page .topic-head {
+    gap: 12px;
+  }
+
+  .basics-page .topic-tools {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .basics-page .topic-title {
+    font-size: 22px;
+  }
+}
