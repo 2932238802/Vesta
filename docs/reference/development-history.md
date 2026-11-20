@@ -10,14 +10,14 @@
 
 - 依据：`docs/archive/20261120/1-问卷分支题死路-需求卡.md`（CR-018，G0 / G1 已确认）与 `docs/archive/20261120/2-问卷分支题死路-开发文档.md`（R-018 / AC-018-1~10 / T-060~T-064）。
 - **为什么要做**：线上学员卡在 Q19「信息差」——该题选项完全来自「毕业后的第一选择」（`q6`）的 `branches`，来源答案缺失、失效、被改成非单选或选项没有映射时，`resolveQuestion()` 返回 0 个选项，学员既答不了也提交不了。本轮把「数据稍有不一致就死路」改成「永远可答 + 后台不允许发布会断分支的问卷」。
-- **纯拆分（行为不变）**：`shared/src/doc.ts` 1386 → 1270 行，`conditionMatches` / `resolveQuestion` / `visibleQuestions` / `optionLabel` / `selectedOption` / `label` / `labels` 迁到新 `shared/src/question.ts`（154 行），`doc.ts` 只保留 re-export 与报告逻辑；`web/src/views/Quiz.vue` 872 → 722 行，草稿 / 计时抽到 `web/src/composables/useQuizDraft.ts`（122 行），键盘 / 视口抽到 `web/src/composables/useQuizViewport.ts`（139 行）。`scripts/file-size-baseline.json` 两条基线同步下调。
+- **纯拆分（行为不变）**：`shared/src/doc.ts` 1386 → 1270 行，`conditionMatches` / `resolveQuestion` / `visibleQuestions` / `optionLabel` / `selectedOption` / `label` / `labels` 迁到新 `shared/src/question.ts`（拆分态 128 行，加功能后最终 169 行），`doc.ts` 只保留 re-export 与报告逻辑；`web/src/views/Quiz.vue` 872 行，拆分态 699 行、加功能后最终 722 行，草稿 / 计时抽到 `web/src/composables/useQuizDraft.ts`（122 行），键盘 / 视口抽到 `web/src/composables/useQuizViewport.ts`（139 行）。`scripts/file-size-baseline.json` 两条基线同步下调。
 - **共享层兜底**：`resolveQuestion()` 在分支未命中时统一返回通用题面「你对目标方向的门槛、时间节点了解多少？」+「都清楚 / 知道一些 / 只听过 / 完全不了解」（id `q16_1`–`q16_4`），并带 `fallback: true` 标记；来源题不存在、被隐藏、不是单选、答案是数组 / 非字符串 / 不在选项内、或合法选项没有映射，全部走同一处兜底。`label()` / `labels()` 改为按 resolved options 取文字，报告 `q16_info` 对兜底答案也能取到标签。
 - **前台回跳补答**：新增 `web/src/composables/useBranchRecovery.ts`（77 行）。进入分支题时，若来源题存在、可见、必答、单选且答案为缺失或失效：清掉失效答案、自动回到来源题并提示「先完成这一题」；补答后自动回到原分支题。来源题缺失 / 隐藏 / 非单选 / 合法但无映射的选项不回跳，直接使用通用题面。回跳只发生一次，`canAdvance()` 的必答拦截保持不变。
 - **后台保护**：`validateSurvey()` 在分支来源题存在但 `type !== 'single'` 时返回错误并同时点名「信息差」与「毕业后的第一选择」；来源题缺失、选项没有映射不阻断发布。`useSurveyEditor.save()` 保存成功后把 `branchCoverageWarnings()` 的数量提示追加到 toast；`QuestionEditor` 编辑分支来源题时显示依赖提示，使用题目文字 + 内部 id（不写题号）。
 - **可识别兜底**：`POST /api/invite/:token/submit` 的 `submit.stored` 日志新增 `fallbackQuestions` 数组（例如 `["q16"]`），正常分支不写该字段（仅兜底时出现），后台可直接看出走了兜底。
 - **不改**：默认问卷 7 套分支文案、接口 / 表结构 / 迁移 / 依赖、报告评分口径；没有新增接口字段。
 - **验证**：`npm run verify` 全绿（EXIT=0）；临时 `DATA_DIR` + 隔离端口（server 8899 / vite 5176）+ Playwright 57 项断言：7 个分支逐条渲染、空 `q6` 回跳与提示、补答后回 Q19、三种失效答案清空并回跳、非单选来源兜底不回跳、必答空答拦截、默认 28 题全流程（Q20 闸门 / Q21→Q23 / Q22→Q24）、后台依赖提示、非单选发布 400、新增无映射选项保存提示、删除 / 隐藏 / 无映射三种问卷 Q19 通用四档且提交 200、390px 无横向滚动；共享层脚本 61 项断言覆盖兜底 / 校验 / `q16_info` 标签与日志标记。
-- **状态**：G3 首评不通过（递归环、事故数据污染、标签口径、拆分不可执行）→ 返工 R1/R3/R4 + P3 → G3 复审通过（2026-11-20，无 P0/P1/P2，5 项 P3）；工作区未提交，待按 split / feature 两次提交。返工新增 `questionState()` 非递归可见性、`branchCycleErrors()` 环检测、`check:question`（162 项）接入 verify；`q16_info` 按 AC-018-10 取实际渲染标签（用户确认）。
+- **状态**：G3 首评不通过（递归环、事故数据污染、标签口径、拆分不可执行）→ 返工 R1/R3/R4 + P3 → G3 复审通过 → **G4 总审通过（2026-11-20，0 P0/P1/P2；8 项 P3，其中 P3-I1~I5 可接受后续）**。提交 `43d011c`（拆分）+ `c80354d`（功能）；已按 `bash update.sh` 部署，`/api/health` 返回 `c80354d` / v2.3.0。返工新增 `questionState()` 非递归可见性、`branchCycleErrors()` 环检测、`check:question`（162 项）接入 verify；`q16_info` 按 AC-018-10 取实际渲染标签（用户确认）。
 - **部署/回滚**：随 `bash update.sh` 前端构建发布，后端仅新增日志字段；回滚 `git revert` 后再次执行 `update.sh`；无数据迁移、无功能开关。
 
 #### G3 返工（2026-11-20）

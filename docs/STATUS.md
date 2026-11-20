@@ -8,14 +8,17 @@
 | 项 | 内容 |
 | --- | --- |
 | 当前 CR | CR-018 分支题兜底与后台发布保护（线上 Q19 无选项卡死） |
-| 当前门禁 | **G3 复审通过**（2026-11-20；无 P0/P1/P2，5 项 P3；待提交） |
-| 进行中任务 | 提交准备（split → feature 两次 commit） |
-| 阻塞 | 待用户确认两条 commit 信息 |
-| 下一步 | 用户确认后提交两次，再进 G4 总审；G4 后回填版本表 hash |
+| 当前门禁 | **G4 通过，已交付 v2.03**（2026-11-20；0 P0/P1/P2，8 项 P3；已部署） |
+| 进行中任务 | 无（CR-018 完成） |
+| 阻塞 | 无 |
+| 下一步 | 后续项 P3-I1~I5 排下一轮；CI 构建（GitHub Actions）待用户确认是否立项 |
+| 最近报告 | `docs/reports/meta-agent-2026-11-20-问卷分支题死路.md` |
 | 文档根目录 | `docs/` |
 
 ## 角色记录
 
+- 2026-11-20：Meta Review Agent 完成 CR-018 G4 总审，结论 **通过**（0 P0/P1/P2；8 项 P3）。独立复跑 `verify` EXIT=0、`check:question` 162 项、API/共享层 122 项、浏览器 72 项、默认全流程 27 题与兜底全流程 26 题；两次提交边界与 split 行为等价成立；`data/` 无 CR018 残留。报告：`docs/reports/meta-agent-2026-11-20-问卷分支题死路.md`。
+- 2026-11-20：v2.03 已部署。`43d011c` + `c80354d` 已推送并 `bash update.sh`；`/api/health` 返回 `c80354d` / v2.3.0，首页 200。部署中曾因中断的 `vite build` 清空 `web/dist` 导致 19:49–19:51 短暂 503，重新构建后恢复；暴露 `update.sh` 失败回滚未覆盖“构建进程被中断”的场景，列为后续运维项（构建到临时目录再原子替换）。
 - 2026-11-20：Review Agent 完成 CR-018 G3 复审，结论 **通过**（无 P0/P1/P2；5 项 P3）。独立复跑 `verify` EXIT=0、`check:question` 162 项、隔离环境 Playwright 61 项 + API/共享层断言；两补丁顺序 apply 通过、split 中间态与 HEAD 行为逐字节一致；`data/` 只读复核无 CR018 残留。报告：`docs/reports/review-agent-2026-11-20-问卷分支题死路-复审.md`。
 - 2026-11-20：Doc Agent 按用户授权清理 Dev 误测数据：`VACUUM INTO` 备份到 `/tmp/vesta-data-backup-cr018-cleanup-20261120.db`，删除 33 events / 10 event_facts / 8 条 dev-login 会话；复核 CR018 残留 0、漏斗 group 行 0，问卷与真实答卷未动。
 - 2026-11-20：Dev Agent 完成 CR-018 G3 返工（R1 / R3 / R4 + P3）：`resolveQuestion` 来源题可用性改用非递归 helper，`validateSurvey` 拒绝自引用 / 环；新增 `shared/src/question.cases.ts`（162 项）并接入 `check:question` / `verify`；隔离 worktree 验证纯拆分中间态并产出 `split` / `feature` 两个补丁；`npm run verify` EXIT=0；隔离环境复跑 AC-018-1~10。工作区未提交。报告：`docs/reports/dev-agent-2026-11-20-问卷分支题死路-返工.md`。
