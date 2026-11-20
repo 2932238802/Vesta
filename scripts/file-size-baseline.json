@@ -2,11 +2,11 @@
   "server/src/ai/doc-search.ts": 397,
   "server/src/ai/generate.ts": 701,
   "server/src/routes/public.ts": 610,
-  "shared/src/doc.ts": 1386,
+  "shared/src/doc.ts": 1270,
   "shared/src/report.ts": 638,
   "web/src/components/QuestionField.vue": 792,
   "web/src/components/consult/ConsultPurposeDetail.vue": 660,
   "web/src/components/consult/ConsultRunEditor.vue": 635,
-  "web/src/views/Quiz.vue": 872,
+  "web/src/views/Quiz.vue": 722,
   "web/src/views/admin/SkillEditor.vue": 711
 }

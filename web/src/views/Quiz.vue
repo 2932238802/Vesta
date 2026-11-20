@@ -87,8 +87,10 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import type { Answers, InvitePayload, Question, Survey } from '@/api'
 import { ApiError, api, track } from '@/api'
 import { isEmptyValue } from '@shared/validate'
-import { resolveQuestion, visibleQuestions } from '@shared/doc'
+import { resolveQuestion, visibleQuestions } from '@shared/question'
 import QuestionField from '@/components/QuestionField.vue'
+import { useQuizDraft } from '@/composables/useQuizDraft'
+import { useQuizViewport } from '@/composables/useQuizViewport'
 
 const route = useRoute()
 const router = useRouter()
@@ -106,25 +108,16 @@ const submitting = ref(false)
 const restored = ref(false)
 const showMissingHint = ref(false)
 const confirmRestart = ref(false)
-const rootEl = ref<HTMLElement | null>(null)
 const stemEl = ref<HTMLElement | null>(null)
 const statusText = ref('')
-const keyboardMode = ref(false)
-const kbFocus = ref(false)
-const kbRaised = ref(false)
-const kbHideFoot = ref(false)
-const kbOffset = ref(0)
 
-const draftKey = `vesta:draft:${token}`
-let saveTimer: ReturnType<typeof setTimeout> | undefined
+const viewport = useQuizViewport()
+const { rootEl, keyboardMode, kbFocus, kbRaised, kbHideFoot, kbOffset, onFocusIn, onFocusOut } =
+  viewport
+
 let autoTimer: ReturnType<typeof setTimeout> | undefined
-let focusOutTimer: ReturnType<typeof setTimeout> | undefined
-let kbDebounce: ReturnType<typeof setTimeout> | undefined
-let lastViewportHeight = 0
 let suppressAnnounce = false
 let autoAdvancedStep = -1
-let activeId: string | null = null
-let activeSince = 0
 let submitted = false
 let exitTracked = false
 let restoring = false
@@ -147,6 +140,9 @@ const currentQuestion = computed<Question | null>(() => {
   }
 })
 const isLast = computed(() => step.value >= visible.value.length - 1)
+
+const draft = useQuizDraft({ token, survey, visible, answers, step, timing, restored })
+const { touch, flushTiming, saveDraft, restoreDraft, removeDraft, reset: resetDraft } = draft
 
 const groupTitle = computed(() => {
   if (!survey.value || !current.value) return ''
@@ -176,156 +172,14 @@ async function focusQuestion() {
   control?.focus({ preventScroll: true })
 }
 
-function coarsePointer() {
-  return window.matchMedia('(pointer: coarse)').matches
-}
-
-function resetKeyboard() {
-  kbFocus.value = false
-  kbRaised.value = false
-  kbHideFoot.value = false
-  kbOffset.value = 0
-}
-
-function onFocusIn(event: FocusEvent) {
-  const target = event.target as HTMLElement | null
-  if (!target || !target.matches('input, textarea, select')) return
-  if (focusOutTimer) clearTimeout(focusOutTimer)
-  if (!coarsePointer()) return
-  kbFocus.value = true
-  window.setTimeout(() => {
-    if (!target.isConnected) return
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, 120)
-}
-
-function onFocusOut(event: FocusEvent) {
-  const target = event.target as HTMLElement | null
-  if (!target || !target.matches('input, textarea, select')) return
-  if (!coarsePointer()) return
-  if (focusOutTimer) clearTimeout(focusOutTimer)
-  focusOutTimer = setTimeout(resetKeyboard, 150)
-}
-
-function applyViewport() {
-  const vv = window.visualViewport
-  if (!vv || !coarsePointer()) return
-  const height = vv.height
-  if (Math.abs(height - lastViewportHeight) < 8) return
-  lastViewportHeight = height
-  const kb = Math.max(0, window.innerHeight - height - (vv.offsetTop || 0))
-  if (kb > 120) {
-    kbOffset.value = kb
-    kbRaised.value = true
-    kbHideFoot.value = kb > window.innerHeight * 0.45
-    void nextTick(() =>
-      requestAnimationFrame(() => {
-        const active = document.activeElement as HTMLElement | null
-        active?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      })
-    )
-  } else {
-    kbRaised.value = false
-    kbHideFoot.value = false
-    kbOffset.value = 0
-  }
-}
-
-function scheduleViewportCheck() {
-  if (kbDebounce) clearTimeout(kbDebounce)
-  kbDebounce = setTimeout(applyViewport, 100)
-}
-
-function onKeydown(event: KeyboardEvent) {
-  if (
-    event.key === 'Tab' ||
-    event.key === 'Enter' ||
-    event.key === ' ' ||
-    event.key.startsWith('Arrow')
-  ) {
-    keyboardMode.value = true
-  }
-}
-
-function onPointerdown() {
-  keyboardMode.value = false
-}
-
-function touch(id: string) {
-  const now = Date.now()
-  if (activeSince) timing.value[id] = (timing.value[id] ?? 0) + (now - activeSince)
-  activeId = id
-  activeSince = now
-  scheduleSave()
-}
-
-function flushTiming() {
-  if (activeSince) {
-    const now = Date.now()
-    timing.value[activeId ?? ''] = (timing.value[activeId ?? ''] ?? 0) + (now - activeSince)
-    activeSince = 0
-    activeId = null
-  }
-}
-
-function scheduleSave() {
-  if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(saveDraft, 400)
-}
-
-function saveDraft() {
-  if (!survey.value) return
-  try {
-    localStorage.setItem(
-      draftKey,
-      JSON.stringify({ surveyId: survey.value.id, answers: answers.value, step: step.value, timing: timing.value })
-    )
-  } catch {
-    // 存储不可用时不影响填写
-  }
-}
-
-function restoreDraft() {
-  try {
-    const raw = localStorage.getItem(draftKey)
-    if (!raw) return
-    const draft = JSON.parse(raw) as {
-      surveyId?: string
-      answers?: Answers
-      step?: number
-      timing?: Record<string, number>
-    }
-    if (draft.surveyId !== survey.value?.id) return
-    if (draft.answers) answers.value = draft.answers
-    if (draft.timing) timing.value = draft.timing
-    if (typeof draft.step === 'number') {
-      step.value = Math.min(Math.max(draft.step, 0), Math.max(0, visible.value.length - 1))
-    }
-    restored.value = visible.value.some((question) => !isEmptyValue(answers.value[question.id]))
-  } catch {
-    // 草稿损坏时丢弃
-  }
-}
-
 function restart() {
-  if (saveTimer) clearTimeout(saveTimer)
   clearAuto()
-  activeId = null
-  activeSince = 0
   autoAdvancedStep = -1
-  answers.value = {}
-  timing.value = {}
-  step.value = 0
+  resetDraft()
   invalid.value = []
   error.value = ''
   showMissingHint.value = false
-  restored.value = false
   confirmRestart.value = false
-  try {
-    localStorage.removeItem(draftKey)
-  } catch {
-    // 存储不可用时忽略
-  }
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -419,7 +273,7 @@ async function submit() {
   try {
     const result = await api.submit(token, answers.value, timing.value)
     submitted = true
-    localStorage.removeItem(draftKey)
+    removeDraft()
     track(token, 'submit')
     await router.replace(`/r/${result.slug}`)
   } catch (err) {
@@ -489,32 +343,8 @@ watch(step, async () => {
   }
 })
 
-function onVisibility() {
-  if (document.visibilityState === 'hidden') onLeave()
-}
-
-function bindGlobal() {
-  window.addEventListener('beforeunload', onLeave)
-  window.addEventListener('pagehide', onLeave)
-  document.addEventListener('visibilitychange', onVisibility)
-  window.addEventListener('keydown', onKeydown)
-  window.addEventListener('pointerdown', onPointerdown)
-  window.visualViewport?.addEventListener('resize', scheduleViewportCheck)
-  window.visualViewport?.addEventListener('scroll', scheduleViewportCheck)
-}
-
-function unbindGlobal() {
-  window.removeEventListener('beforeunload', onLeave)
-  window.removeEventListener('pagehide', onLeave)
-  document.removeEventListener('visibilitychange', onVisibility)
-  window.removeEventListener('keydown', onKeydown)
-  window.removeEventListener('pointerdown', onPointerdown)
-  window.visualViewport?.removeEventListener('resize', scheduleViewportCheck)
-  window.visualViewport?.removeEventListener('scroll', scheduleViewportCheck)
-}
-
 onMounted(async () => {
-  bindGlobal()
+  viewport.bindGlobal(onLeave)
   try {
     const payload = await api.getInvite(token)
     invite.value = payload
@@ -553,8 +383,6 @@ watch(answers, () => {
   if (stillMissing.length === 0) showMissingHint.value = false
 }, { deep: true })
 
-watch([answers, step, timing], scheduleSave, { deep: true })
-
 function trackExit() {
   if (submitted || exitTracked || !survey.value) return
   const answered = visible.value.filter((question) => !isEmptyValue(answers.value[question.id])).length
@@ -572,11 +400,10 @@ function onLeave() {
 }
 
 onBeforeUnmount(() => {
-  if (saveTimer) clearTimeout(saveTimer)
+  draft.cancelSave()
   clearAuto()
-  if (focusOutTimer) clearTimeout(focusOutTimer)
-  if (kbDebounce) clearTimeout(kbDebounce)
-  unbindGlobal()
+  viewport.dispose()
+  viewport.unbindGlobal()
   onLeave()
 })
 </script>
