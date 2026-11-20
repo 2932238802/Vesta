@@ -12,7 +12,7 @@ import { computeScores } from '../../../shared/src/scoring'
 import { buildReport } from '../../../shared/src/report'
 import { buildAiReport } from '../../../shared/src/ai'
 import { buildDocReportWithAi } from '../../../shared/src/doc'
-import { validateAnswers } from '../../../shared/src/validate'
+import { fallbackQuestions, validateAnswers } from '../../../shared/src/validate'
 import { db, getActiveSurvey, getSurvey, getTemplate, now, recordEvent, surveyReportMode } from '../db'
 import {
   ensureReportGeneration,
@@ -254,11 +254,11 @@ publicRouter.post(
 
     recordEvent(invite.id, 'submit')
     log.info('submit.stored', {
-      reqId: res.locals.reqId,
-      inviteId: invite.id,
+      reqId: res.locals.reqId, inviteId: invite.id,
       submissionId: id,
       answerCount: Object.keys(answers).length,
-      reportMode: survey.reportMode ?? 'default'
+      reportMode: survey.reportMode ?? 'default',
+      ...(fallbackQuestions(survey, answers).length ? { fallbackQuestions: fallbackQuestions(survey, answers) } : {})
     })
     enqueueReport(id)
     res.json({ slug })

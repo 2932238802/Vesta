@@ -1,21 +1,27 @@
 # 项目状态面板
 
-> 维护者：Doc Agent ｜ 最近更新：2026-11-19 ｜ 状态：进行中
+> 维护者：Doc Agent ｜ 最近更新：2026-11-20 ｜ 状态：进行中
 > 本文件只记录当前状态，不承载需求细节；细节看对应文档。
 
 ## 当前
 
 | 项 | 内容 |
 | --- | --- |
-| 当前 CR | CR-017 拆分巨型文件（第二批；v2.02，已交付） |
-| 当前门禁 | **G3 通过 + G4 豁免 + 已交付**（CR-017，2026-11-19；用户明确确认跳过 G4；commit `c686862`） |
-| 进行中任务 | 无；第二批已交付 |
-| 阻塞 | 无 |
-| 下一步 | 用户执行 `bash update.sh` 发布 v2.02；第三批拆分待定 |
+| 当前 CR | CR-018 分支题兜底与后台发布保护（线上 Q19 无选项卡死） |
+| 当前门禁 | **G3 复审通过**（2026-11-20；无 P0/P1/P2，5 项 P3；待提交） |
+| 进行中任务 | 提交准备（split → feature 两次 commit） |
+| 阻塞 | 待用户确认两条 commit 信息 |
+| 下一步 | 用户确认后提交两次，再进 G4 总审；G4 后回填版本表 hash |
 | 文档根目录 | `docs/` |
 
 ## 角色记录
 
+- 2026-11-20：Review Agent 完成 CR-018 G3 复审，结论 **通过**（无 P0/P1/P2；5 项 P3）。独立复跑 `verify` EXIT=0、`check:question` 162 项、隔离环境 Playwright 61 项 + API/共享层断言；两补丁顺序 apply 通过、split 中间态与 HEAD 行为逐字节一致；`data/` 只读复核无 CR018 残留。报告：`docs/reports/review-agent-2026-11-20-问卷分支题死路-复审.md`。
+- 2026-11-20：Doc Agent 按用户授权清理 Dev 误测数据：`VACUUM INTO` 备份到 `/tmp/vesta-data-backup-cr018-cleanup-20261120.db`，删除 33 events / 10 event_facts / 8 条 dev-login 会话；复核 CR018 残留 0、漏斗 group 行 0，问卷与真实答卷未动。
+- 2026-11-20：Dev Agent 完成 CR-018 G3 返工（R1 / R3 / R4 + P3）：`resolveQuestion` 来源题可用性改用非递归 helper，`validateSurvey` 拒绝自引用 / 环；新增 `shared/src/question.cases.ts`（162 项）并接入 `check:question` / `verify`；隔离 worktree 验证纯拆分中间态并产出 `split` / `feature` 两个补丁；`npm run verify` EXIT=0；隔离环境复跑 AC-018-1~10。工作区未提交。报告：`docs/reports/dev-agent-2026-11-20-问卷分支题死路-返工.md`。
+
+- 2026-11-20：Dev Agent 完成 CR-018 / T-060 ~ T-064（v2.03）。`shared/src/doc.ts` / `Quiz.vue` 先纯拆分（1386→1270、872→722），再实现分支兜底、回跳补答与后台保护；`npm run verify` 全绿；隔离端口（server 8899 / vite 5176）+ 临时 `DATA_DIR` 下 Playwright 57 项、共享层 61 项断言通过。工作区未提交，待 G3。报告：`docs/reports/dev-agent-2026-11-20-问卷分支题死路.md`。
+- 2026-11-20：Doc Agent 受理线上故障（iPhone 问卷 Q19「信息差」无选项卡死），产出 CR-018 需求卡 `docs/archive/20261120/1-问卷分支题死路-需求卡.md`；确认机制为 Q19 选项完全依赖 Q7 分支，分支未命中时 0 选项，**非 iOS 渲染问题**；待用户确认 G0 方向与生产数据。
 - 2026-11-18：Doc Agent 曾越权直接实现金句栏。用户指出后，实现代码已全部撤出仓库并备份到 `/tmp/quote-shelf-doc-agent-candidate/`（`tracked.patch` + `untracked.tar.gz`）；仓库恢复到 G1 状态，G2 记录作废。
 - 本轮起：Doc Agent 只维护文档与状态；开发由独立 Dev SubAgent 执行，Doc 不触碰业务代码。
 - 2026-11-18：Dev SubAgent 从零实现 T-006 ~ T-012（v1.91），`npm run verify` 全绿，临时库种子断言、接口断言与 Playwright 走查通过；已出开发报告。

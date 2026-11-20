@@ -30,6 +30,7 @@
             :question="selectedQuestion"
             :groups="survey.groups"
             :dimensions="survey.dimensions"
+            :questions="survey.questions"
             :actions="editor"
           />
           <GroupEditor

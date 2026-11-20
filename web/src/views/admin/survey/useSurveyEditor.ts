@@ -1,6 +1,6 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import type { Answers, Question, Survey } from '@shared/types'
-import { validateSurvey } from '@shared/validate'
+import { branchCoverageWarnings, validateSurvey } from '@shared/validate'
 import { api } from '@/api'
 import { useSaveHotkey } from '@/useHotkeys'
 import { useUnsavedChanges } from '@/useUnsavedChanges'
@@ -74,7 +74,12 @@ export function useSurveyEditor() {
       survey.value = structuredClone(result.survey)
       initialJson.value = JSON.stringify(survey.value)
       versions.value += 1
-      flash(`已发布 v${result.survey.version}`)
+      const warnings = branchCoverageWarnings(result.survey)
+      flash(
+        warnings.length
+          ? `已发布 v${result.survey.version}；${warnings.join('；')}`
+          : `已发布 v${result.survey.version}`
+      )
     } catch (err) {
       error.value = err instanceof Error ? err.message : '保存失败'
     } finally {

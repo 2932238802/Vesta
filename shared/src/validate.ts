@@ -23,6 +23,84 @@ export function isEmptyValue(value: AnswerValue | undefined): boolean {
   return false
 }
 
+/**
+ * 提交日志用：哪些分支题因为来源缺失 / 非单选 / 答案无映射走了通用兜底。
+ * 被 showIf 隐藏的分支题不会真正展示给学员，不计入兜底标记。
+ */
+export function fallbackQuestions(survey: Survey, answers: Answers): string[] {
+  return survey.questions
+    .filter((question) => {
+      if (!question.branches) return false
+      const resolved = resolveQuestion(survey, answers, question)
+      return resolved.visible && resolved.fallback
+    })
+    .map((question) => question.id)
+}
+
+/**
+ * 分支映射缺口的非阻断提示：来源题被删、来源题有选项没有专属题面。
+ * 这类问卷仍可发布（前台会回退到通用题面），只在保存后提醒运营。
+ * 保存时没有答卷，按空答案解析可见性，跳过被 showIf 静态隐藏的题。
+ */
+export function branchCoverageWarnings(survey: Survey): string[] {
+  const warnings: string[] = []
+  for (const q of survey.questions) {
+    const branches = q.branches
+    if (!branches) continue
+    if (!resolveQuestion(survey, {}, q).visible) continue
+    const source = survey.questions.find((item) => item.id === branches.question)
+    if (!source) {
+      warnings.push(`题目「${q.title}」的分支来源题已不存在，答题时会显示通用题面`)
+      continue
+    }
+    if (!resolveQuestion(survey, {}, source).visible) continue
+    const unmapped = (source.options ?? []).filter((option) => !branches.map[option.id])
+    if (unmapped.length) {
+      warnings.push(`题目「${q.title}」有 ${unmapped.length} 个选项没有专属题面，会显示通用题面`)
+    }
+  }
+  return warnings
+}
+
+/**
+ * 分支来源成环会让「来源题可用性」与回跳判定互相依赖。
+ * 沿 branches.question 单向走，遇到重复（含自引用）即报错并点名题目文字。
+ */
+function branchCycleErrors(survey: Survey): string[] {
+  const errors: string[] = []
+  const byId = new Map(survey.questions.map((question) => [question.id, question]))
+  const reported = new Set<string>()
+  for (const q of survey.questions) {
+    const sourceId = q.branches?.question
+    if (!sourceId) continue
+    if (sourceId === q.id) {
+      errors.push(`题目「${q.title}」的分支来源不能指向自己，请改成关联到另一道单选题`)
+      continue
+    }
+    const path: string[] = [q.id]
+    let cursor = byId.get(sourceId)
+    while (cursor) {
+      const index = path.indexOf(cursor.id)
+      if (index >= 0) {
+        const cycle = path.slice(index)
+        const key = [...cycle].sort().join('>')
+        if (!reported.has(key)) {
+          reported.add(key)
+          const names = cycle.map((id) => byId.get(id)?.title ?? id)
+          errors.push(
+            `题目「${names[0]}」的分支来源形成循环（${names.join(' → ')} → ${names[0]}），请改成单向依赖`
+          )
+        }
+        break
+      }
+      path.push(cursor.id)
+      const next = cursor.branches?.question
+      cursor = next ? byId.get(next) : undefined
+    }
+  }
+  return errors
+}
+
 export function validateSurvey(survey: Survey): string[] {
   const errors: string[] = []
   if (!survey.title?.trim()) errors.push('问卷标题不能为空')
@@ -74,6 +152,12 @@ export function validateSurvey(survey: Survey): string[] {
         }
       }
     }
+    if (q.branches) {
+      const source = survey.questions.find((item) => item.id === q.branches?.question)
+      if (source && source.type !== 'single') {
+        errors.push(`题目「${q.title}」的分支来源题「${source.title}」需要改成单选后再发布`)
+      }
+    }
     if (q.type === 'text' && q.fields && q.fields.length > 3) {
       errors.push(`题目「${q.title}」的输入框最多三个`)
     }
@@ -93,6 +177,8 @@ export function validateSurvey(survey: Survey): string[] {
       }
     }
   }
+
+  errors.push(...branchCycleErrors(survey))
 
   for (const dim of survey.dimensions) {
     if (!dim.key || !dim.name?.trim()) errors.push('维度缺少 key 或名称')

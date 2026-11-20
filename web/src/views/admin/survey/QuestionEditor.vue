@@ -17,6 +17,11 @@
     </div>
   </header>
 
+  <p v-if="branchDependents.length" class="branch-dep">
+    这道题的选项会切换这些题的题面：{{ dependentText }}。请保持单选并保留选项映射；
+    改成非单选将无法发布，缺少映射的选项会改显示通用题面。
+  </p>
+
   <div class="form-grid">
     <label class="field">
       <span>题号</span>
@@ -105,18 +110,29 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Question, Survey } from '@shared/types'
 import type { SurveyEditorActions } from './useSurveyEditor'
 import QuestionOptionsEditor from './QuestionOptionsEditor.vue'
 import QuestionMatrixEditor from './QuestionMatrixEditor.vue'
 import QuestionTextEditor from './QuestionTextEditor.vue'
 
-defineProps<{
+const props = defineProps<{
   question: Question
   groups: Survey['groups']
   dimensions: Survey['dimensions']
+  questions: Question[]
   actions: SurveyEditorActions
 }>()
+
+const branchDependents = computed(() =>
+  props.questions.filter((item) => item.branches?.question === props.question.id)
+)
+const dependentText = computed(() =>
+  branchDependents.value
+    .map((item) => `${item.title || '未命名'}（${item.id}）`)
+    .join('、')
+)
 </script>
 
 <style scoped src="./questionEditor.css"></style>

@@ -40,6 +40,7 @@
       <main class="sheet">
         <div :key="current.id" class="group fade-in">
           <h1 v-if="groupTitle" class="group-title">{{ groupTitle }}</h1>
+          <p v-if="branchHintVisible" class="branch-hint" role="status">{{ branchHint }}</p>
           <h2 id="question-stem" ref="stemEl" class="stem" tabindex="-1">{{ resolved.title }}</h2>
           <p v-if="resolved.hint" class="sub">{{ resolved.hint }}</p>
 
@@ -89,6 +90,7 @@ import { ApiError, api, track } from '@/api'
 import { isEmptyValue } from '@shared/validate'
 import { resolveQuestion, visibleQuestions } from '@shared/question'
 import QuestionField from '@/components/QuestionField.vue'
+import { useBranchRecovery } from '@/composables/useBranchRecovery'
 import { useQuizDraft } from '@/composables/useQuizDraft'
 import { useQuizViewport } from '@/composables/useQuizViewport'
 
@@ -117,7 +119,7 @@ const { rootEl, keyboardMode, kbFocus, kbRaised, kbHideFoot, kbOffset, onFocusIn
 
 let autoTimer: ReturnType<typeof setTimeout> | undefined
 let suppressAnnounce = false
-let autoAdvancedStep = -1
+let autoAdvancedStep = -1, suppressAuto = false
 let submitted = false
 let exitTracked = false
 let restoring = false
@@ -143,6 +145,15 @@ const isLast = computed(() => step.value >= visible.value.length - 1)
 
 const draft = useQuizDraft({ token, survey, visible, answers, step, timing, restored })
 const { touch, flushTiming, saveDraft, restoreDraft, removeDraft, reset: resetDraft } = draft
+const branchRecovery = useBranchRecovery({ survey, answers, step, visible, onReturn: () => { suppressAuto = true } })
+const { hint: branchHint, hintQuestionId, check: checkBranchRecovery } = branchRecovery
+const branchHintVisible = computed(
+  () =>
+    Boolean(branchHint.value) &&
+    Boolean(current.value) &&
+    current.value?.id === hintQuestionId.value &&
+    isEmptyValue(answers.value[current.value.id])
+)
 
 const groupTitle = computed(() => {
   if (!survey.value || !current.value) return ''
@@ -313,7 +324,7 @@ async function submit() {
 watch(
   answers,
   () => {
-    if (restoring) return
+    if (restoring || suppressAuto) { suppressAuto = false; return }
     if (keyboardMode.value) return
     if (!current.value || current.value.type !== 'single') return
     if (resolved.value?.disabled) return
@@ -331,6 +342,7 @@ watch(
 
 watch(step, async () => {
   if (restoring) return
+  checkBranchRecovery()
   await nextTick()
   if (suppressAnnounce) {
     suppressAnnounce = false
@@ -359,6 +371,7 @@ onMounted(async () => {
     restoring = false
     // 草稿恢复出来的已完成分组也要上报，避免用户上次答完、这次直接提交时漏记。
     markGroupsCompleted()
+    checkBranchRecovery()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '链接无法打开'
   } finally {
@@ -511,6 +524,16 @@ h1:focus {
   line-height: 1.6;
   color: var(--ink-2);
   max-width: 32em;
+}
+
+.branch-hint {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--ink);
 }
 
 .questions {

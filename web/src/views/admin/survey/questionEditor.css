@@ -21,6 +21,17 @@
   color: var(--danger);
 }
 
+.branch-dep {
+  margin: -6px 0 20px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
