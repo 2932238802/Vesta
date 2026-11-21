@@ -6,6 +6,26 @@
 
 ## 本轮（2026-11-20）
 
+### 前端改为 GitHub Actions 构建（2026-11-20，产品版本 v2.04）
+
+- 依据：`docs/archive/20261120/3-GitHubActions构建-需求卡.md`（CR-019，G0 方案 A）与 `docs/archive/20261120/4-GitHubActions构建-开发文档.md`（R-019 / AC-019-1~9 / T-065~T-068）。
+- **为什么要做**：2026-11-20 在服务器本地 `npm run build` 时进程被中断，Vite 已清空 `web/dist`，导致全站 500/503 直到重新构建完成。把构建放到 GitHub Runner，生产只做“下载 → 校验 → 原子替换 → 重启”，既消除“dist 被清空但没有产出”的窗口，也不再和服务器上的其他服务争 CPU/内存。
+- **CI workflow**：新增 `.github/workflows/build.yml`。push `main` 或 `workflow_dispatch` 触发，`concurrency` 同 ref 取消旧任务；`actions/checkout@v4` + `setup-node@v4`（Node 24、npm cache）+ `npm ci` + `npm run verify`；生成 `web/dist/dist-info.json`（`commit` = `github.sha`、`version`、`builtAt`），打包 `web-dist-<完整 sha>.tar.gz`（tar 根为 `dist/`）与同名 `.sha256`；确保 Release `dist` 存在（`gh release view dist` / `gh release create dist --latest=false`）后上传，并按 `web-dist-<sha>` 分组、成对保留最近 5 组（tar + sha 共 10 个资产，避免拆散）。权限仅 `contents: write`，使用 `github.token`，不使用 PAT；不提交 `web/dist`。
+- **update.sh 默认只拉取**：新增 `--dist=release|local`（默认 `release`）与 `VESTA_DIST_BASE_URL` 覆盖下载前缀。release 按 `git rev-parse HEAD` 下载 tar + `.sha256`（`curl -fsSL --retry 3 --connect-timeout 10`），`sha256sum -c` 校验，解压到 `mktemp` 临时目录，再校验 `dist/index.html`、`dist/assets/*.js` 与 `dist-info.json.commit == HEAD`；全部通过后才原子替换（先移旧 `web/dist` 到备份目录，再移入新 dist，失败还原）。
+- **local 应急路径**：`npm --workspace web run build -- --outDir <临时目录>/dist`（已本地验证 Vite 接受绝对 `--outDir`），写入 `dist-info.json`（`commit=HEAD`、`source=local`），校验后同样原子替换；构建失败不触碰现有 `web/dist`。
+- **失败语义**：404 / 下载失败 / SHA256 不匹配 / 解压失败 / dist-info commit 不匹配 / 构建失败，全部在 L3 以非 0 退出，保留上一版 `web/dist` 且不重启；错误提示明确给出“等 Actions 完成重试”或 `bash update.sh --dist=local`。`--skip-build` 语义保持（不下载不构建，仅当 dist 不旧于源码时沿用）。L4/L5 口径不变；`data/deploy-info.json` 增加 `distSource` 运维字段（不改变 `/api/health` 接口）。
+- **不改**：问卷 / 报告 / 咨询等业务代码、依赖、`scripts/check-*.mjs` 判定、systemd 部署方式；部署仍由人工执行 `bash update.sh`。
+- **验证**：`bash -n update.sh` 通过；`npm run verify` 全绿；PyYAML 解析 workflow 通过；隔离临时仓库 + 本地 HTTP 夹具复跑 release 成功 / 404 / SHA 不匹配 / commit 不匹配 / local 成功 / local 构建失败 / `--skip-build` 通过 / `--skip-build` 源码更新拒绝，失败用例均验证旧 `web/dist` 内容与 mtime 不变。真实 GitHub Actions 需 push 后才会运行，本轮未在真实 Runner 验证。
+- **状态**：G2 自检完成 → G3 有条件通过 → G3 返工完成，待复审；工作区未提交。
+- **部署/回滚**：合并后 push 触发一次 Actions，确认 Release `dist` 出现本次 commit 的资产，再在服务器执行 `bash update.sh`；回滚在可 push 的仓库执行 `git revert --no-commit <旧 commit>..HEAD && git commit && git push origin main`，再在服务器 `bash update.sh`（不要在服务器只做本地 `git reset --hard`，L1 会快进回 origin/main）；若目标 commit 资产已被清理改用 `--dist=local`。无数据迁移、无功能开关、无接口变化。
+
+#### G3 返工（2026-11-20）
+
+- **P2-1 回滚口径**：`update.sh` 恢复提示与部署文档 §9 原写 `git reset --hard <旧> && bash update.sh`，但 L1 会 `pull --ff-only` 回 origin/main，实际不生效。统一改为远端 `git revert` 并 push 后 `bash update.sh`，并明确警告本地 reset 无效。
+- **P2-2 恢复安全**：`restore_prev_dist` 恢复后断言 `web/dist/index.html` 可读，成功才删备份；失败保留备份并在错误里打印路径。`swap_dist` 前置 `stat -c %d` 同设备校验；失败按“已恢复 / 恢复失败 / 无上一版”返回码区分；`DIST_PREV_KEEP` 阻止 EXIT trap 误删备份；INT/TERM 先恢复再清理。
+- **P3**：下载错误按 404（资产不存在）与网络/5xx（可重试）区分并给可操作文案；curl 加 `--max-time 120`；解压前拒绝 tar 中的符号链接/硬链接成员；workflow 资产按 `web-dist-<sha>` 成对清理保留最近 5 组；需求卡状态回填为 G3 返工中。
+- **验证**：`bash -n update.sh`、`npm run verify` 全绿；隔离夹具复跑 release 成功 / 404 / 5xx / SHA 失败 / commit 不匹配 / 不安全与链接 tar / local 成功与失败 / skip 两态，并新增替换失败且恢复失败用例（备份保留、错误含路径、新旧 dist 不同时丢失）。
+
 ### 问卷分支题回跳补答与通用兜底（2026-11-20，产品版本 v2.03）
 
 - 依据：`docs/archive/20261120/1-问卷分支题死路-需求卡.md`（CR-018，G0 / G1 已确认）与 `docs/archive/20261120/2-问卷分支题死路-开发文档.md`（R-018 / AC-018-1~10 / T-060~T-064）。

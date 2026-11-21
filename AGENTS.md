@@ -43,6 +43,7 @@
 | 后端 `server/` | `npm run typecheck` |
 | 前端 `web/` | `npm run typecheck && npm run build` |
 | 文档 / 问卷口径 | `npm run check:docs` |
+| 部署脚本 / CI（`update.sh`、`.github/workflows/`） | `bash -n update.sh` + `npm run verify`；CI 产物相关改动需按 `docs/reference/07-部署与运维.md` §3.1 做一次本地夹具验证 |
 | 版本号 / `package.json` | `npm run check:version` |
 | 以上全部 | `npm run verify`（= check:docs + check:size + check:version + check:deps + check:dates + check:score + check:audit + check:roster + check:search + typecheck + build） |
 

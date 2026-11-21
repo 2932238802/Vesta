@@ -1,0 +1,105 @@
+name: Build web dist
+
+# 前端在 GitHub Runner 上构建，产物上传到固定 Release（tag `dist`）。
+# 服务器只下载 web-dist-<sha>.tar.gz 并原子替换 web/dist，见 update.sh 与
+# docs/reference/07-部署与运维.md §3.1。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 只用于创建 Release 与上传/删除资产；不使用 PAT。
+permissions:
+  contents: write
+
+# 同一 ref 只保留最新一次构建，push 新提交会取消仍在跑的旧任务。
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify
+        run: npm run verify
+
+      - name: Package dist
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          COMMIT_SHA="$COMMIT_SHA" VERSION="$VERSION" BUILT_AT="$BUILT_AT" node -e '
+          const fs = require("fs")
+          const payload = {
+            commit: process.env.COMMIT_SHA,
+            version: process.env.VERSION,
+            builtAt: process.env.BUILT_AT
+          }
+          fs.writeFileSync("web/dist/dist-info.json", JSON.stringify(payload, null, 2) + "\n")
+          '
+          ASSET="web-dist-${COMMIT_SHA}.tar.gz"
+          tar -czf "$ASSET" -C web dist
+          sha256sum "$ASSET" > "$ASSET.sha256"
+          echo "打包完成：$ASSET"
+          echo "ASSET=$ASSET" >> "$GITHUB_ENV"
+
+      - name: Ensure dist release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view dist >/dev/null 2>&1; then
+            gh release create dist \
+              --title "前端构建产物" \
+              --notes "Vesta 前端构建产物。资产按 commit 命名：web-dist-<sha>.tar.gz 与 web-dist-<sha>.tar.gz.sha256；按 commit 成对保留最近 5 组（共 10 个资产）。由 .github/workflows/build.yml 自动维护。" \
+              --latest=false
+          fi
+
+      - name: Upload asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload dist "$ASSET" "$ASSET.sha256" --clobber
+
+      - name: Prune old assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RELEASE_ID="$(gh api "repos/${{ github.repository }}/releases/tags/dist" --jq '.id')"
+          # 按 commit 成对清理：web-dist-<sha>.tar.gz 与 web-dist-<sha>.tar.gz.sha256
+          # 归为同一组，按组内最新 created_at 排序，只保留最近 5 组（共 10 个资产），
+          # 避免按单个资产截断时把同一次构建的 tar 与 sha 拆散。
+          gh api "repos/${{ github.repository }}/releases/$RELEASE_ID/assets" --paginate --slurp \
+            --jq '
+              add
+              | map(. + {group: (.name | sub("\\.tar\\.gz(\\.sha256)?$"; ""))})
+              | group_by(.group)
+              | map({newest: (map(.created_at) | max), assets: .})
+              | sort_by(.newest) | reverse
+              | .[5:]
+              | .[].assets[]
+              | [.id, .name, .created_at] | @tsv
+            ' |
+          while IFS=$'\t' read -r id name created; do
+            [ -n "$id" ] || continue
+            echo "删除旧资产：$name（created_at $created）"
+            gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$id"
+          done
