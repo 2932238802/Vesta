@@ -8,15 +8,17 @@
 | 项 | 内容 |
 | --- | --- |
 | 当前 CR | CR-019 前端 CI 构建与服务端只拉取（方案 A 已确认） |
-| 当前门禁 | **G3 复审有条件通过（Prune 修复）**（2026-11-21；31 套夹具通过；4 项 P3 非阻塞） |
-| 进行中任务 | 待用户确认 commit → push 触发第二次 Actions |
-| 阻塞 | 需重新 push 后跑绿 Actions |
-| 下一步 | 提交 push → 绿 run → 资产校验 → 生产部署 → G4 |
-| 最近报告 | `docs/reports/dev-agent-2026-11-21-GitHubActions-prune修复.md` |
+| 当前门禁 | **G4 通过，已交付 v2.04**（2026-11-21；Actions `44864079611` 全绿；生产 release 部署 `c3f9996` / v2.4.0） |
+| 进行中任务 | 无（CR-019 完成） |
+| 阻塞 | 无 |
+| 下一步 | 6 项 P3 排下一轮；后续发版先等 Actions 产出对应 commit 产物再 `update.sh` |
+| 最近报告 | `docs/reports/meta-agent-2026-11-21-GitHubActions构建.md` |
 | 文档根目录 | `docs/` |
 
 ## 角色记录
 
+- 2026-11-21：Meta Review Agent 完成 CR-019 G4 总审，结论 **通过**（无 P0/P1/P2；6 项 P3）。独立复跑 `verify` EXIT=0、`bash -n`、PyYAML；真实 Actions run `44864079611` 全绿；通过公开 API 匿名下载 Release 资产并校验 SHA256/tar/dist-info；两次提交边界干净。报告：`docs/reports/meta-agent-2026-11-21-GitHubActions构建.md`。
+- 2026-11-21：v2.04 已部署。`56c6f14` + `c3f9996` 已 push；服务器 `bash update.sh` 走 release 模式（`release:web-dist-c3f9996...`），L1–L5 全过，未执行 `vite build`；health `c3f9996` / 2.4.0；首页 200、390px 无横向滚动。本机 WSL 直连 GitHub Release CDN 超时，生产服务器可正常下载（环境差异，非代码问题）。
 - 2026-11-20：Dev Agent 完成 CR-019 G3 返工（P2-1 回滚口径、P2-2 恢复备份生命周期、6 项 P3）。回滚统一为“远端 `git revert` 并 push 后 `bash update.sh`”，明确警告本地 `git reset --hard` 会被 L1 快进覆盖；`restore_prev_dist` 恢复后断言 `index.html` 可读、成功才删备份，失败保留并打印路径；`swap_dist` 增加 `stat -c %d` 同设备校验与失败返回码，EXIT trap 不再误删备份，INT/TERM 先恢复再清理；下载区分 404/网络/5xx，curl 加 `--max-time 120`，拒绝 tar 符号链接/硬链接，workflow 按 commit 成对保留最近 5 组资产。`bash -n update.sh` 与 `npm run verify` 全绿；隔离夹具复跑全部用例并新增恢复失败用例。工作区未提交。报告：`docs/reports/dev-agent-2026-11-20-GitHubActions构建-返工.md`。
 - 2026-11-20：Dev Agent 完成 CR-019 / T-065 ~ T-068（v2.04）。新增 `.github/workflows/build.yml`（push main 构建 + `npm run verify` + Release `dist` 资产，保留最近 10 个）；`update.sh` 改为默认 `--dist=release` 下载并校验 SHA256 / `dist-info.commit` 后原子替换，保留 `--dist=local` 应急构建与 `--skip-build`，所有失败路径保留旧 `web/dist` 且不重启；`npm run verify` 全绿，隔离临时仓库 + 本地 HTTP 夹具 9 条用例全过（release 成功/404/SHA 不匹配/commit 不匹配/local 成功/local 构建失败/skip 通过/skip 拒绝/完整 L1–L5 成功）。真实 Actions 未在 Runner 验证（需 push 后触发）。工作区未提交。报告：`docs/reports/dev-agent-2026-11-20-GitHubActions构建.md`。
 - 2026-11-20：Meta Review Agent 完成 CR-018 G4 总审，结论 **通过**（0 P0/P1/P2；8 项 P3）。独立复跑 `verify` EXIT=0、`check:question` 162 项、API/共享层 122 项、浏览器 72 项、默认全流程 27 题与兜底全流程 26 题；两次提交边界与 split 行为等价成立；`data/` 无 CR018 残留。报告：`docs/reports/meta-agent-2026-11-20-问卷分支题死路.md`。

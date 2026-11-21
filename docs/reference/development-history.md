@@ -16,7 +16,7 @@
 - **失败语义**：404 / 下载失败 / SHA256 不匹配 / 解压失败 / dist-info commit 不匹配 / 构建失败，全部在 L3 以非 0 退出，保留上一版 `web/dist` 且不重启；错误提示明确给出“等 Actions 完成重试”或 `bash update.sh --dist=local`。`--skip-build` 语义保持（不下载不构建，仅当 dist 不旧于源码时沿用）。L4/L5 口径不变；`data/deploy-info.json` 增加 `distSource` 运维字段（不改变 `/api/health` 接口）。
 - **不改**：问卷 / 报告 / 咨询等业务代码、依赖、`scripts/check-*.mjs` 判定、systemd 部署方式；部署仍由人工执行 `bash update.sh`。
 - **验证**：`bash -n update.sh` 通过；`npm run verify` 全绿；PyYAML 解析 workflow 通过；隔离临时仓库 + 本地 HTTP 夹具复跑 release 成功 / 404 / SHA 不匹配 / commit 不匹配 / local 成功 / local 构建失败 / `--skip-build` 通过 / `--skip-build` 源码更新拒绝，失败用例均验证旧 `web/dist` 内容与 mtime 不变。真实 GitHub Actions 需 push 后才会运行，本轮未在真实 Runner 验证。
-- **状态**：G2 自检完成 → G3 有条件通过 → G3 返工完成，待复审；工作区未提交。
+- **状态**：G4 总审通过（2026-11-21，无 P0/P1/P2；6 项 P3 后续）。提交 `56c6f14`（功能）+ `c3f9996`（Prune 修复）；真实 Actions run `44864079611` 全绿；已在服务器以 `release` 模式部署，`/api/health` 返回 `c3f9996` / v2.4.0，服务器未执行 `vite build`。
 - **部署/回滚**：合并后 push 触发一次 Actions，确认 Release `dist` 出现本次 commit 的资产，再在服务器执行 `bash update.sh`；回滚在可 push 的仓库执行 `git revert --no-commit <旧 commit>..HEAD && git commit && git push origin main`，再在服务器 `bash update.sh`（不要在服务器只做本地 `git reset --hard`，L1 会快进回 origin/main）；若目标 commit 资产已被清理改用 `--dist=local`。无数据迁移、无功能开关、无接口变化。
 
 #### G3 返工（2026-11-20）

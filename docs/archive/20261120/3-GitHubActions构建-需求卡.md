@@ -1,6 +1,6 @@
 # 前端改为 GitHub Actions 构建
 
-> 维护者：Doc Agent ｜ 最近更新：2026-11-21 ｜ 状态：G3 复审有条件通过（P2 闭环；真实 Actions/匿名下载待 push 补验；v2.04 未提交）
+> 维护者：Doc Agent ｜ 最近更新：2026-11-21 ｜ 状态：已交付（v2.04，G4 通过，`56c6f14` + `c3f9996`，已部署）
 > 关联：`docs/reference/07-部署与运维.md`、`update.sh`、`docs/reference/README.md`
 
 ## CR-019 前端 CI 构建与服务端只拉取

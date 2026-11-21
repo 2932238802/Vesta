@@ -1,4 +1,4 @@
-> 维护者：Doc Agent ｜ 最近更新：2026-11-20 ｜ 状态：开发中 v2.04（G2 自检完成，待 G3）
+> 维护者：Doc Agent ｜ 最近更新：2026-11-21 ｜ 状态：已交付 v2.04（G4 通过，已部署）
 
 # Vesta 项目说明
 
@@ -64,7 +64,7 @@ Vesta 是一套面向大学在读学生的问卷、报告与咨询辅助系统�
 | v2.01 | 2026-11-19 | `f66947b` | 拆分巨型文件（第一批：`migrations.ts` / `runs.ts` / `ReportView.vue` 纯重构，入口变薄；接口、数据、页面样式不变） |
 | v2.02 | 2026-11-19 | `c686862` | 拆分巨型文件（第二批：`SurveyEditor.vue` / `ReportEditor.vue` / `ConsultCollections.vue` 纯重构，页面骨架 + 子组件 + composable，入口 110 / 105 / 108 行；接口、数据、文案、视觉不变） |
 | v2.03 | 2026-11-20 | `43d011c`（拆分）+ `c80354d`（功能） | 问卷分支题回跳补答与通用兜底（Q19 分支未命中不再 0 选项；来源题可见、必答、单选时自动回跳补答；`resolveQuestion` 单点兜底，前端 / 提交 / 报告共用；后台来源题非单选拒绝发布、缺映射选项保存提示） |
-| v2.04 | 2026-11-20 | — | 前端改为 GitHub Actions 构建（push main 产出 `web-dist-<sha>.tar.gz` + `.sha256` 到固定 Release `dist`，按 commit 成对保留最近 5 组；`update.sh` 默认下载并校验 SHA256 与 `dist-info.commit == HEAD` 后原子替换 `web/dist`，失败保留上一版且不重启；恢复失败保留备份；`--dist=local` 应急本地构建，`--skip-build` 兼容） |
+| v2.04 | 2026-11-21 | `56c6f14` + `c3f9996` | 前端改为 GitHub Actions 构建（push main 产出 `web-dist-<sha>.tar.gz` + `.sha256` 到固定 Release `dist`，按 commit 成对保留最近 5 组；`update.sh` 默认下载并校验 SHA256 与 `dist-info.commit == HEAD` 后原子替换 `web/dist`，失败保留上一版且不重启；恢复失败保留备份；`--dist=local` 应急本地构建，`--skip-build` 兼容） |
 
 （只回填能确认 commit 的版本；`—` 表示基线之前没有单独提交。v1.77 / v1.78 因同一次提交 `2395033` 落库，commit 列相同；v1.82 含中间页索引补丁 `99a2d67`。）
 
