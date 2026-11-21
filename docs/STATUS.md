@@ -8,11 +8,11 @@
 | 项 | 内容 |
 | --- | --- |
 | 当前 CR | CR-019 前端 CI 构建与服务端只拉取（方案 A 已确认） |
-| 当前门禁 | **G3 复审有条件通过**（2026-11-21；2 P2 闭环；2 项新 P3 文案不阻塞） |
-| 进行中任务 | 待用户确认 commit → 提交并 push |
-| 阻塞 | 真实 Actions/匿名下载/生产 systemd 需 push 后补验 |
-| 下一步 | push 后监控 Actions → 验证 Release 资产 → 生产 release 部署 → G4 |
-| 最近报告 | `docs/reports/dev-agent-2026-11-20-GitHubActions构建-返工.md` |
+| 当前门禁 | **G3 复审有条件通过（Prune 修复）**（2026-11-21；31 套夹具通过；4 项 P3 非阻塞） |
+| 进行中任务 | 待用户确认 commit → push 触发第二次 Actions |
+| 阻塞 | 需重新 push 后跑绿 Actions |
+| 下一步 | 提交 push → 绿 run → 资产校验 → 生产部署 → G4 |
+| 最近报告 | `docs/reports/dev-agent-2026-11-21-GitHubActions-prune修复.md` |
 | 文档根目录 | `docs/` |
 
 ## 角色记录

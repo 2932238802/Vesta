@@ -83,23 +83,46 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          RELEASE_ID="$(gh api "repos/${{ github.repository }}/releases/tags/dist" --jq '.id')"
+          RELEASE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/dist" --jq '.id')"
           # 按 commit 成对清理：web-dist-<sha>.tar.gz 与 web-dist-<sha>.tar.gz.sha256
-          # 归为同一组，按组内最新 created_at 排序，只保留最近 5 组（共 10 个资产），
+          # 归为同一组，按组内最新 created_at 倒序，只保留最近 5 组（共 10 个资产），
           # 避免按单个资产截断时把同一次构建的 tar 与 sha 拆散。
-          gh api "repos/${{ github.repository }}/releases/$RELEASE_ID/assets" --paginate --slurp \
-            --jq '
-              add
-              | map(. + {group: (.name | sub("\\.tar\\.gz(\\.sha256)?$"; ""))})
-              | group_by(.group)
-              | map({newest: (map(.created_at) | max), assets: .})
-              | sort_by(.newest) | reverse
-              | .[5:]
-              | .[].assets[]
-              | [.id, .name, .created_at] | @tsv
-            ' |
-          while IFS=$'\t' read -r id name created; do
+          # --slurp 的输出形态随 gh 版本/页数变化（[[asset,...]] 或 [asset,...]），
+          # 交给 Node 展平后再分组，避免 jq 对单页输出形态做 add 假设。
+          gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets" --paginate --slurp > /tmp/release-assets.json
+          node <<'NODE' > /tmp/prune-targets.tsv
+          const fs = require("fs")
+          const raw = fs.readFileSync("/tmp/release-assets.json", "utf8").trim()
+          if (!raw) process.exit(0)
+          const parsed = JSON.parse(raw)
+          const pages = Array.isArray(parsed) ? parsed : []
+          // 兼容按页嵌套的 [[asset,...],...] 与未嵌套的 [asset,...] 两种形态。
+          const assets = pages.length > 0 && pages.every((page) => Array.isArray(page))
+            ? pages.flat()
+            : pages
+          const nameRe = /^(.*)\.tar\.gz(\.sha256)?$/
+          const groups = new Map()
+          for (const asset of assets) {
+            if (!asset || typeof asset.name !== "string") continue
+            const match = nameRe.exec(asset.name)
+            if (!match) continue
+            const key = match[1]
+            if (!groups.has(key)) groups.set(key, [])
+            groups.get(key).push(asset)
+          }
+          const newest = (list) => Math.max(...list.map((asset) => Date.parse(asset.created_at) || 0))
+          const ordered = [...groups.entries()]
+            .map(([key, list]) => ({ key, list, newest: newest(list) }))
+            .sort((a, b) => b.newest - a.newest || a.key.localeCompare(b.key))
+          for (const group of ordered.slice(5)) {
+            const sorted = [...group.list].sort((a, b) => String(a.name).localeCompare(String(b.name)))
+            for (const asset of sorted) {
+              process.stdout.write([asset.id, asset.name, asset.created_at || ""].join("\t") + "\n")
+            }
+          }
+          NODE
+          while IFS=$'\t' read -r id name created_at; do
             [ -n "$id" ] || continue
-            echo "删除旧资产：$name（created_at $created）"
-            gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$id"
-          done
+            echo "删除旧资产：$name（created_at $created_at）"
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$id"
+          done < /tmp/prune-targets.tsv

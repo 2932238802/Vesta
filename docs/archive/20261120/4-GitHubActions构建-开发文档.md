@@ -115,3 +115,9 @@
 - **P3**：下载错误区分 404（资产不存在）与网络/5xx（可重试）；curl 增加 `--max-time 120`；解压前用 `tar -tvzf` 拒绝符号链接/硬链接成员；workflow 按 `web-dist-<sha>` 分组，成对保留最近 5 组。
 - **验证**：`bash -n update.sh`、`npm run verify`；隔离夹具复跑 release 成功 / 404 / 5xx / SHA 失败 / commit 不匹配 / 不安全与链接 tar / local 成功与失败 / skip 两态，并新增“替换失败且恢复失败”用例，确认备份保留、错误含备份路径、不会同时丢失新旧 dist。
 
+## 实施记录（2026-11-21，真实 Actions 首跑修复）
+
+- 真实 run `44859478220` 第 9 步 `Prune old assets` 失败（前 8 步含构建与 Release 上传成功）。原实现把 `gh api --paginate --slurp` 直接接 `--jq 'add | …'`，对 `--slurp` 的单页/多页数组形态做了 `add` 假设；**推断**首次只有 1 组资产时 jq 报错退出——公开 check-run 注解仅显示 `exit code 1`，原始日志不可得，根因未证实。修复同时兼容两种 `--slurp` 形态。
+- 修复：Prune 不再使用 `--jq` + `--slurp` 组合。`gh api … --paginate --slurp > /tmp/release-assets.json` 后由 runner 自带 Node 24 读取，兼容 `[[asset,...]]` 与 `[asset,...]` 两种形态；展平后按 `^(.*)\.tar\.gz(\.sha256)?$` 分组，组内 tar+sha 成对，按组内最新 `created_at` 倒序只保留最近 5 组，输出 `id\tname\tcreated_at` 供 bash `while read` 逐个 DELETE。无资产或组数 ≤5 时正常退出 0。
+- 验证：用 Python 从 workflow 提取真实 `run` 脚本，`gh` shim + 本地夹具覆盖单页/多页、1/5/6/7 组、乱序、扁平形态、空输出、无关资产与残缺成对；`bash -n`、PyYAML 解析、`npm run verify` 全绿。真实 Actions 需 push 后复验。
+
