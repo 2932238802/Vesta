@@ -51,6 +51,7 @@ escalate_when:
 - 有效期：随 CR 结束
 - 撤销：否
 - 幂等键：CR-002:T-004~T-010:commit:A1c
+- Commit：fdf0acf
 
 <!-- 每次 A1c/A2 追加一条，格式见协议第 4 节；优先用 finish-report.sh 自动写入 -->
 <!-- A1w 不写这里，记 WORKLOG；G3 接受也记 WORKLOG -->

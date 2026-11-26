@@ -120,7 +120,7 @@
 
 | 日期 | CR/T | 改了什么 | 影响模块 | 报告 |
 |---|---|---|---|---|
-| 2026-11-26 | CR-002 | 分数线按 confidence 自动收录；移除复核 / 人工导入；计划唯一键补 major_name；国家线 A/B 区校验 | 分数线 / 后台 / 数据库 | `LosAngelousDocs/reports/dev-2026-11-26-CR-002-分数线自动收录.md`（待 G3） |
+| 2026-11-26 | CR-002 | 分数线按 confidence 自动收录；移除复核 / 人工导入；计划唯一键补 major_name；国家线 A/B 区校验 | 分数线 / 后台 / 数据库 | `LosAngelousDocs/reports/review-2026-11-26-CR-002-分数线自动收录-复审.md`（G3 通过，`fdf0acf`，待 G4） |
 | 2026-11-26 | CR-001 | 移除 `zxg/` 126 份真实咨询稿入库；`.gitignore` 拦截；版本同步 v2.05 | 隐私 / 文档 / 版本 | `LosAngelousDocs/reports/doc-2026-11-26-CR-001-移除咨询稿入库.md` |
 | 2026-11-26 | 初始化 | 接入 LosSKILL 工作流：`LosAngelousDocs/`、`PROJECT_BRAIN.md`、`WORKLOG.md`、`AUTHORIZATIONS.md` | 流程 / 文档 | `LosAngelousDocs/reports/doc-2026-11-26-工作流初始化.md` |
 | 2026-11-21 | v2.04 | 前端改 GitHub Actions 构建 + Release 产物原子替换 | 部署 / CI | `docs/reports/meta-agent-2026-11-21-GitHubActions构建.md` |
