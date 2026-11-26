@@ -117,6 +117,8 @@ npx tsx scripts/import-collections-docx.ts zxg
 npx tsx scripts/import-collections-docx.ts zxg --write
 ```
 
+`zxg/` 只是本地素材目录，v2.05 起已加入 `.gitignore`；仓库不再包含任何咨询 DOCX，导入前请把文件放到本地 `zxg/`（不会被提交）。
+
 列表默认显示“金句”分类，每张卡片只显示标题和一行概要；双击卡片进入 wiki 风格的详情页（`/admin/consult/collections/:id`），正文按 Markdown 渲染，右侧是类型、出处、标签和收藏时间。
 
 收藏内容保留原文，不改写。除人工阅读外，`GET /api/admin/consult/collections/bundle` 会按类型输出一份纯文本合集，供之后的咨询稿生成器读取；当前生成流程还没有接入这批内容。

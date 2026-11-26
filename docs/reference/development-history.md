@@ -4,6 +4,21 @@
 
 > 2026-11-18 起：原 `docs/README.md`、`agent-rules.md`、`consult-system.md`、`规划自测问卷-设计文档.md`、`development-history.md` 均迁入 `docs/reference/`；`docs/README.md` 只保留入口索引。本文历史条目里的旧路径按当时记录保留，新改动请写 `docs/reference/` 下的新路径。
 
+## 本轮（2026-11-26）
+
+### 移除真实咨询稿入库与版本快照同步（2026-11-26，产品版本 v2.05）
+
+- 依据：用户 2026-11-26 直接指令：删除 `zxg/` 下 126 份咨询稿并取消 Git 追踪；同步相关版本。
+- **为什么要做**：`zxg/` 的 126 份 docx 是真实学员咨询记录（约 6.7 MB），被 Git 跟踪，与 `AGENTS.md`「不提交 `zxg/`」的约定冲突，存在隐私与合规风险。
+- **备份（先做）**：删除前把整个 `zxg/` 复制到仓库外 `D:\PROJECT\_vesta-backups\zxg-20261126-1815`（126 个文件，6.7 MB），并生成逐文件 SHA256 清单 `zxg-20261126-1815.sha256`。备份不在仓库内，不会被提交。
+- **取消追踪**：`git rm -r zxg` 删除工作区文件并从索引移除；复核 `git ls-files zxg` 为 0、`find zxg -type f` 为 0。`.gitignore` 增加 `/zxg/`，以后放回本地 DOCX 也不会误提交。
+- **版本同步**：根 `package.json` / `package-lock.json` `2.4.0 → 2.5.0`；`docs/reference/README.md` 的「已完成」追加 v2.05、当前版本改为 `2.5.0`、版本记录表新增 v2.05 行；`docs/reference/00-文档索引.md` 与 `01-项目概述.md` 的版本快照从 1.99.0 同步到 2.5.0，并订正「`zxg/` 被跟踪」的已知问题为已处理。
+- **不改**：业务代码、接口、数据模型、依赖；数据库里已导入的咨询树与 `consult_runs` 一律不动；导入脚本仍可用，只是源文件需要用户自行放回本地 `zxg/`。
+- **验证**：`npm run verify` EXIT=0（含 `check:docs` / `check:version` / typecheck / build）；`git ls-files zxg` = 0；备份文件数 126、SHA256 清单已生成。
+- **风险 / 遗留**：Git **历史**里仍保留这 126 个文件的旧提交；取消跟踪只影响后续提交。若要从历史彻底清除，需要重写历史并 force push（A3，需用户单独确认），本次未执行。
+- **回滚**：把备份目录内容拷回 `zxg/`，从 `.gitignore` 删除 `/zxg/`，再 `git add zxg`；若已提交本次删除，可 `git revert` 对应 commit。
+- **状态**：执行完成，待 G3 评审 / 用户验收；尚未提交。
+
 ## 本轮（2026-11-20）
 
 ### 前端改为 GitHub Actions 构建（2026-11-20，产品版本 v2.04）

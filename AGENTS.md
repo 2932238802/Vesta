@@ -3,6 +3,8 @@
 > 所有在本仓库工作的 Agent（Codex / Claude Code / DSH / Cursor / 其他）**先读本文件，再读 `docs/reference/agent-rules.md`**。
 > 规则优先级：用户当次明确要求 > 本文件 > `docs/reference/agent-rules.md` > `docs/` 其他文档 > 代码现状。
 > 核心约定：**文档优先**——要改题目、选项、跳题、报告规则、接口、数据模型或部署流程，先改 `docs/`，再改代码；代码与文档冲突时，按文档修正代码。
+>
+> **工作流（2026-11-26 接入 LosSKILL）**：开工第 0 步先读 `PROJECT_BRAIN.md`；工作流文档根为 `LosAngelousDocs/`（CR / R / AC / T、STATUS、评审报告、决策），产品口径仍在 `docs/`。门禁与脚本按 `dev-workflow` 技能执行。
 
 ## 0. 开工前（缺一不可）
 

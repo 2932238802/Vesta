@@ -40,3 +40,6 @@ _scratch/
 在野咨询知识库.zip
 在野咨询知识库.zip:Zone.Identifier
 *.zip:Zone.Identifier
+
+# 真实学员咨询稿（含个人信息），不入库
+/zxg/

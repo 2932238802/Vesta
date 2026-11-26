@@ -147,7 +147,7 @@ related: [IDX, OVR, ENV, ARC, FUN, API, DAT, OPS, TST]
 
 | # | 事项 | 现状 / 影响 | 验证命令（只读） |
 | --- | --- | --- | --- |
-| 1 | `zxg/` 下 126 个 DOCX 被 Git 跟踪，内容疑似真实学员咨询记录 | 隐私/合规风险；与“不要提交 zxg”的约定冲突 | `git ls-files zxg \| wc -l`；`git log --oneline -- zxg \| head` |
+| 1 | `zxg/` 下 126 个 DOCX 曾随 Git 分发，内容疑似真实学员咨询记录 | 已处理（v2.05：取消跟踪并从工作区删除、`.gitignore` 拦截）；Git 历史仍含旧副本，彻底清除需重写历史 | `git ls-files zxg \| wc -l`（应为 0）；`git log --oneline -- zxg \| head` |
 | 2 | `.env.example` 未列 `SCORELINE_*` | 部署者不知道抓取开关与预算 | `grep -n "SCORELINE" .env.example`（应无输出） |
 | 3 | `AI_TIMEOUT_MS` 示例 `120000` vs 代码默认 `240000` | 行为与文档不一致 | `grep -n "AI_TIMEOUT_MS" .env.example server/src/env.ts` |
 | 4 | 抓取 `running` 残留会永久阻塞自动调度 | 需人工改库；是否应启动自愈未定 | `grep -n "status IN ('queued', 'running')\|status = 'running'" server/src/score-lines/*.ts` |
@@ -172,8 +172,8 @@ related: [IDX, OVR, ENV, ARC, FUN, API, DAT, OPS, TST]
 | --- | --- |
 | 生成日期 | `2026-11-16` |
 | 代码 commit | `884ef39` |
-| 产品版本 | `1.85.0` |
-| 定点勘误 | `2026-11-19`（v1.86–v1.99；v1.99 待发布） |
+| 产品版本 | `1.85.0`（快照生成时）；当前 `2.5.0` |
+| 定点勘误 | `2026-11-26`（v1.86–v2.05） |
 | 勘误范围 | 00 / 01 / 04 / 05 / 06 / 09 / AGENT 与 `manifest.json` 哈希 |
 | 输出目录 | `docs/reference/` |
 | 模式 | `full` + `patch` |

@@ -1,0 +1,134 @@
+# Vesta — 项目大脑
+
+> 所有 Agent 开工第 0 步读本文件；只读与任务相关的模块卡，不要通读全仓库。
+> 状态：L2（2026-11-26 初始化；`npm run verify` EXIT=0）
+> 维护：稳定事实由 Doc 更新；增量由 Steward 在 G2.5 合并；代码级细节不写进来。
+
+## 1. 一分钟地图
+
+- 一句话：邀请制的「大学现状自评」系统——学员填 28 题问卷、AI 生成个性化报告；咨询师在后台看名单、写咨询稿、查分数线与知识库。
+- 入口：`server/src/index.ts`（单 Node 进程同时服务 `/api`、`/api/admin` 和 `web/dist`）。
+- 运行方式：`npm install` → `npm run dev`（后端 `8788` + Vite `5173`）；生产 `bash update.sh`。
+- 产品文档根目录：`docs/`（既有口径，问卷 / 报告 / 咨询 / 部署的唯一事实来源）。
+- 工作流文档根目录：`D:/PROJECT/Vesta/LosAngelousDocs`
+- 文档树契约：`LosAngelousDocs/DOCS_CONTRACT.md`
+- LosSKILL 路径（`$LOSSKILL_HOME`）：`D:/PROJECT/LosSKILL`（所有脚本用 `$LOSSKILL_HOME/scripts/...`）
+- 技术栈：Node 24 + Express + SQLite（`node:sqlite`，WAL）+ TypeScript/tsx；Vue 3 + Vue Router + Vite。
+
+## 2. 架构与边界
+
+| 模块 | 路径 | 职责 | 不负责 |
+|---|---|---|---|
+| 进程装配 | `server/src/index.ts` | 中间件、路由挂载、静态站点、启动任务 | 业务规则 |
+| 公开 API | `server/src/routes/public.ts` | health、邀请、提交、报告轮询/重试/领取、events | 后台鉴权 |
+| 管理 API | `server/src/routes/admin/*` | 登录、概览、邀请、名单、答卷、设置、分数线、知识库 | 报告正文生成 |
+| 咨询 API | `server/src/routes/consult/*` | 咨询工作台、目的树、咨询树、收藏、金句、故事、提问、话题、生成运行与导出 | 问卷评分 |
+| AI 报告 | `server/src/ai/*` | 队列、模型调用、博查检索、数字/重复/一致性审计、清洗 | 产品文案口径 |
+| 分数线 | `server/src/score-lines/*` | 来源种子、抓取调度、解析器、归一化、覆盖度、查询 | 人工判定分数 |
+| 领域共享 | `shared/src/*` | 问卷、跳题、评分、报告结构、日期/周期、分数线维度（纯函数） | 读写数据库 / 环境变量 |
+| 前端 | `web/src/*` | 公开页、后台页、API 客户端、组件与 composable | 复制后端评分规则 |
+| 运维脚本 | `scripts/`、`deploy/`、`update.sh` | 守卫、导入、部署五层校验 | 业务逻辑 |
+
+数据流：
+
+```text
+邀请链接 /i/:token → POST /api/invite/:token/submit
+  → shared 校验与计分 → 写 submissions → enqueueReport（进程内队列，并发 2）
+  → generateDocContent（AI + 博查）→ 审计/清洗 → 落库
+  → /r/:slug 轮询 → 重试 / 领取联系方式（加密）
+
+管理后台 /admin → requireAdmin()（令牌 + 数据库会话）→ 各子路由 → SQLite
+分数线调度器（串行，一次一省）→ 抓取 → 解析器 → pending → 人工复核 → approved
+```
+
+## 3. 不变量（改之前先确认）
+
+- [ ] **文档优先**：题目 / 选项 / 跳题 / 报告规则 / 接口 / 数据模型 / 部署流程变更，先改 `docs/`，再改代码；代码与文档冲突按文档修代码。
+- [ ] **AI 失败不伪装**：不得用模板 / 规则版冒充 AI 成功；失败要给可操作提示并允许重试，保留已完成部分。
+- [ ] **数字由程序算**：分数、比例、时间、排序、岗位门槛由 `shared/src` 计算；AI 只写标题、判断和正文。
+- [ ] **咨询数据不可重置**：不重置 / 清空 `consult_tree`、`consult_runs` 与用户导入的咨询树；导入前预览 + 备份（SQLite WAL 用 `VACUUM INTO`）。
+- [ ] **鉴权不可绕过**：生产必须 `ADMIN_USER` / `ADMIN_PASSWORD` / `AUTH_SECRET`；不改 `requireAdmin()`；免密登录只绑显式 `NODE_ENV=development`。
+- [ ] **不提交敏感物**：`.env`、`data/`、`web/dist/`、`zxg/` 不入库；不在代码 / 文档 / 日志写真实密码、key、联系方式、完整答卷、完整 AI 正文。
+- [ ] **结构化日志**：业务链路用 `server/src/log.ts`，带 `reqId` / `submissionId` / `runId`；禁止 `console.log` 绕过。
+- [ ] **文件规模**：单 `.ts` / `.vue` 600 行软线、800 行硬线；新文件 ≤400 行；基线只能下调。
+- [ ] **版本三处同步**：根 `package.json`（唯一事实源）↔ `docs/reference/README.md`「已完成 + 版本记录」↔ `docs/reference/development-history.md` 本轮小节；`npm run check:version` 把关。
+- [ ] **单实例假设**：报告队列、咨询生成任务、抓取队列、限流计数都在进程内存；重启清空，数据库是唯一持久真相。
+- [ ] **部署只走 update.sh**：服务器上不直接改代码；L1–L5 必须全过，前端产物默认来自 GitHub Release `dist`。
+
+## 4. 契约
+
+- 接口分组：`/api/health`、`/api/invite/*`、`/api/report/*`、`/api/events`（公开）；`/api/admin/*`（登录后统一鉴权）；`/api/admin/consult/*`（咨询）。
+- 数据模型：单文件 SQLite，`server/src/db/schema.ts` 为建表事实源；启动迁移必须可重复执行、兼容存量库。明细见 `docs/reference/06-数据模型.md`。
+- 报告模式：`submissions.report_mode` 在提交时固化（`score` 旧版 / `doc` 全文 AI）；列表与导出不再解析问卷 JSON。
+- AI 队列：`server/src/ai/report-queue.ts`，`REPORT_CONCURRENCY = 2`，最多 4 次尝试，启动扫描 `pending/running` 续跑。
+- 检索口径：博查结果按规范化检索词缓存 7 天；单份报告最多 4 次外呼；时效窗口「今天往前 12 个完整月」。
+- 配置：`.env.example` 为准；本地 AI 走 `deepseek-v4-flash`（网关无 `deepseek-chat`）；端口本地 8788/5173、生产 8787、本机线上实例 8082。
+- 前端产物：`.github/workflows/build.yml` push main 产出 `web-dist-<sha>.tar.gz` + `.sha256` 到 Release `dist`；`update.sh` 校验 SHA256 与 `dist-info.commit` 后原子替换。
+
+## 5. 验证命令
+
+| 改动 | 命令 | 最后验证 |
+|---|---|---|
+| 默认 / 交付前 | `npm run verify`（docs+size+version+deps+dates+question+score+audit+roster+search+typecheck+build） | 2026-11-26（EXIT=0） |
+| 后端 | `npm run typecheck` | 2026-11-26 |
+| 前端 | `npm run typecheck && npm run build` | 2026-11-26 |
+| 问卷 / 跳题 | `npm run check:question` | 2026-11-26 |
+| 日期 / 期次 | `npm run check:dates` | 2026-11-26 |
+| 分数线 | `npm run check:score` | 2026-11-26 |
+| AI 报告审计 | `npm run check:audit` | 2026-11-26 |
+| 部署脚本 | `bash -n update.sh` + `npm run verify`；CI 产物按 `docs/reference/07-部署与运维.md` §3.1 本地夹具验证 | 2026-11-26 |
+| 页面手工走查 | `npm run dev` + playwright MCP，`http://127.0.0.1:5173` | 每次前端交付 |
+
+## 6. 热点与雷区
+
+| 区域 | 风险 | 触发信号 | 处理 |
+|---|---|---|---|
+| 问卷跳题 | 分支来源题缺失 / 非单选 / 无映射导致 0 选项死路 | 改动 `shared/src/question.ts`、`Quiz.vue` | 保留 `resolveQuestion()` 通用兜底 + 后台 `validateSurvey()` 保护 |
+| AI 报告审计 | 数字 / 重复 / 跨模块矛盾；清洗过度会删正文 | 改动 `server/src/ai/doc-audit.ts`、prompt | 先反馈重写一次，仍不通过记 `ai_meta.audit.issues` 后放行 |
+| 咨询树导入 | 覆盖用户已导入路线 | 运行 `scripts/import-consult-docx.mjs --write` | 必须先 `--list` 预览；只替换同名树；先备份 |
+| 分数线抓取 | 站点结构差异、误把导航页当数据、维度误标 | 改动 `score-lines/parsers/*` | 用 `check:score` fixture；解析失败标 `failed` + 失败码，不猜 |
+| 大文件 | >600 行加功能风险；>800 行禁止加功能 | `npm run check:size` | 先纯拆分，再加功能；基线只下调 |
+| 部署 | 构建中断清空 `web/dist`；本地 reset 被 L1 覆盖 | 改 `update.sh` / workflow | 构建到临时目录再原子替换；回滚用远端 `git revert` 后 `update.sh` |
+| 隐私 | `zxg/` 下 126 份真实咨询稿曾随 Git 分发（6.7 MB） | 2026-11-26 v2.05 已取消追踪并删除工作区文件 | 备份在 `_vesta-backups/zxg-20261126-1815`；Git 历史仍含旧副本，彻底清除需重写历史 + force push（需用户单独授权）；`.gitignore` 已拦截 `/zxg/` |
+| 文档双轨 | 产品口径在 `docs/`，工作流记录在 `LosAngelousDocs/` | 需求收尾 | Doc 同时回填 `docs/reference/development-history.md` 与本树 `05-decisions.md` |
+
+## 7. 测试地图
+
+| 模块 | 测试位置 | 必跑命令 |
+|---|---|---|
+| 问卷 / 跳题 / 兜底 | `shared/src/question.cases.ts` | `npm run check:question` |
+| 日期 / 期次 | `shared/src/date.cases.ts`、`shared/src/cycle.cases.ts` | `npm run check:dates` |
+| 分数线输入 / 解析 | `shared/src/score-line.cases.ts`、`server/src/score-lines/parsers/cases.ts` | `npm run check:score` |
+| AI 报告审计 / 清洗 | `server/src/ai/doc-audit.cases.ts` | `npm run check:audit` |
+| 博查检索判定 | `server/src/ai/doc-search.cases.ts` | `npm run check:search` |
+| 名单分组 | `server/src/routes/admin/roster-group-id.cases.ts` | `npm run check:roster` |
+| 文档 / 规模 / 版本 / 依赖 | `scripts/check-*.mjs` | `npm run check:docs` / `check:size` / `check:version` / `check:deps` |
+| 页面与接口 | 无自动化测试框架 | playwright MCP 手工走查 + 临时 `DATA_DIR` |
+
+## 8. 决策索引
+
+| ID | 决策 | 影响 | 文档 |
+|---|---|---|---|
+| D-001 | 工作流文档根用 `LosAngelousDocs/`，与产品口径 `docs/` 分离 | 所有 CR / 报告 / 状态落点 | `LosAngelousDocs/05-decisions.md` |
+| D-002 | v2.03 分支题未命中用通用题面兜底 + 来源题回跳补答 | 问卷 / 报告 / 后台保护 | `docs/reference/development-history.md` 2026-11-20 |
+| D-003 | v2.04 前端改 GitHub Actions 构建，服务器只下载校验原子替换 | 部署 / `update.sh` / CI | `docs/reference/development-history.md` 2026-11-20 |
+
+## 9. 最近变更（最多 10 条，Steward 维护）
+
+| 日期 | CR/T | 改了什么 | 影响模块 | 报告 |
+|---|---|---|---|---|
+| 2026-11-26 | CR-001 | 移除 `zxg/` 126 份真实咨询稿入库；`.gitignore` 拦截；版本同步 v2.05 | 隐私 / 文档 / 版本 | `LosAngelousDocs/reports/doc-2026-11-26-CR-001-移除咨询稿入库.md` |
+| 2026-11-26 | 初始化 | 接入 LosSKILL 工作流：`LosAngelousDocs/`、`PROJECT_BRAIN.md`、`WORKLOG.md`、`AUTHORIZATIONS.md` | 流程 / 文档 | `LosAngelousDocs/reports/doc-2026-11-26-工作流初始化.md` |
+| 2026-11-21 | v2.04 | 前端改 GitHub Actions 构建 + Release 产物原子替换 | 部署 / CI | `docs/reports/meta-agent-2026-11-21-GitHubActions构建.md` |
+| 2026-11-20 | v2.03 | 问卷分支题回跳补答与通用兜底 | 问卷 / 报告 / 后台 | `docs/reports/meta-agent-2026-11-20-问卷分支题死路.md` |
+
+## 10. 模块卡（大项目按需）
+
+- 暂无 `brain/modules/*.md`；任务涉及某模块时先看第 2 节与 `docs/reference/` 对应篇目。
+
+## 维护规则
+
+- 只写**稳定事实**与**导航**；不复制代码，不写会立刻过期的实现细节。
+- 每条结论尽量带 `文件:行号` 或命令证据。
+- 超过 90 天未复验的验证命令标「可能过期」。
+- 架构/契约/不变量发生变化时，Steward 必须在本文件留下变更记录。
