@@ -38,7 +38,7 @@
   → /r/:slug 轮询 → 重试 / 领取联系方式（加密）
 
 管理后台 /admin → requireAdmin()（令牌 + 数据库会话）→ 各子路由 → SQLite
-分数线调度器（串行，一次一省）→ 抓取 → 解析器 → pending → 人工复核 → approved
+分数线调度器（串行，一次一省）→ 抓取 → 解析器 → 按 confidence 自动 approved / rejected（≥0.70 可查，<0.70 隐藏）→ 覆盖刷新
 ```
 
 ## 3. 不变量（改之前先确认）
@@ -53,6 +53,7 @@
 - [ ] **文件规模**：单 `.ts` / `.vue` 600 行软线、800 行硬线；新文件 ≤400 行；基线只能下调。
 - [ ] **版本三处同步**：根 `package.json`（唯一事实源）↔ `docs/reference/README.md`「已完成 + 版本记录」↔ `docs/reference/development-history.md` 本轮小节；`npm run check:version` 把关。
 - [ ] **单实例假设**：报告队列、咨询生成任务、抓取队列、限流计数都在进程内存；重启清空，数据库是唯一持久真相。
+- [ ] **分数线自动收录**：抓取按 `confidence >= 0.70` 自动 approved、`<0.70` rejected；同一 checksum 重抓不改变状态；低置信度新内容不覆盖已有 approved；后台不再有人工复核 / 人工导入入口。
 - [ ] **部署只走 update.sh**：服务器上不直接改代码；L1–L5 必须全过，前端产物默认来自 GitHub Release `dist`。
 
 ## 4. 契约
@@ -74,7 +75,7 @@
 | 前端 | `npm run typecheck && npm run build` | 2026-11-26 |
 | 问卷 / 跳题 | `npm run check:question` | 2026-11-26 |
 | 日期 / 期次 | `npm run check:dates` | 2026-11-26 |
-| 分数线 | `npm run check:score` | 2026-11-26 |
+| 分数线 | `npm run check:score` + `npm run check:scoreline` | 2026-11-26（CR-002 新增） |
 | AI 报告审计 | `npm run check:audit` | 2026-11-26 |
 | 部署脚本 | `bash -n update.sh` + `npm run verify`；CI 产物按 `docs/reference/07-部署与运维.md` §3.1 本地夹具验证 | 2026-11-26 |
 | 页面手工走查 | `npm run dev` + playwright MCP，`http://127.0.0.1:5173` | 每次前端交付 |
@@ -86,7 +87,7 @@
 | 问卷跳题 | 分支来源题缺失 / 非单选 / 无映射导致 0 选项死路 | 改动 `shared/src/question.ts`、`Quiz.vue` | 保留 `resolveQuestion()` 通用兜底 + 后台 `validateSurvey()` 保护 |
 | AI 报告审计 | 数字 / 重复 / 跨模块矛盾；清洗过度会删正文 | 改动 `server/src/ai/doc-audit.ts`、prompt | 先反馈重写一次，仍不通过记 `ai_meta.audit.issues` 后放行 |
 | 咨询树导入 | 覆盖用户已导入路线 | 运行 `scripts/import-consult-docx.mjs --write` | 必须先 `--list` 预览；只替换同名树；先备份 |
-| 分数线抓取 | 站点结构差异、误把导航页当数据、维度误标 | 改动 `score-lines/parsers/*` | 用 `check:score` fixture；解析失败标 `failed` + 失败码，不猜 |
+| 分数线抓取 | 站点结构差异、误把导航页当数据、维度误标；低置信度覆盖旧 approved | 改动 `score-lines/parsers/*`、`crawl.ts`、自动收录判定 | 用 `check:score` / `check:scoreline`；解析失败标 `failed` + 失败码；低置信度新内容不覆盖旧 approved |
 | 大文件 | >600 行加功能风险；>800 行禁止加功能 | `npm run check:size` | 先纯拆分，再加功能；基线只下调 |
 | 部署 | 构建中断清空 `web/dist`；本地 reset 被 L1 覆盖 | 改 `update.sh` / workflow | 构建到临时目录再原子替换；回滚用远端 `git revert` 后 `update.sh` |
 | 隐私 | `zxg/` 下 126 份真实咨询稿曾随 Git 分发（6.7 MB） | 2026-11-26 v2.05 已取消追踪并删除工作区文件 | 备份在 `_vesta-backups/zxg-20261126-1815`；Git 历史仍含旧副本，彻底清除需重写历史 + force push（需用户单独授权）；`.gitignore` 已拦截 `/zxg/` |
@@ -112,11 +113,14 @@
 | D-001 | 工作流文档根用 `LosAngelousDocs/`，与产品口径 `docs/` 分离 | 所有 CR / 报告 / 状态落点 | `LosAngelousDocs/05-decisions.md` |
 | D-002 | v2.03 分支题未命中用通用题面兜底 + 来源题回跳补答 | 问卷 / 报告 / 后台保护 | `docs/reference/development-history.md` 2026-11-20 |
 | D-003 | v2.04 前端改 GitHub Actions 构建，服务器只下载校验原子替换 | 部署 / `update.sh` / CI | `docs/reference/development-history.md` 2026-11-20 |
+| D-004 | v2.05 `zxg/` 真实咨询稿取消 Git 追踪并仓库外备份 | 隐私 / 仓库 | `LosAngelousDocs/05-decisions.md` |
+| D-005 | v2.06 分数线按 confidence 自动收录，移除人工复核 / 人工导入 | 分数线 / 后台 / 数据口径 | `LosAngelousDocs/05-decisions.md` |
 
 ## 9. 最近变更（最多 10 条，Steward 维护）
 
 | 日期 | CR/T | 改了什么 | 影响模块 | 报告 |
 |---|---|---|---|---|
+| 2026-11-26 | CR-002 | 分数线按 confidence 自动收录；移除复核 / 人工导入；计划唯一键补 major_name；国家线 A/B 区校验 | 分数线 / 后台 / 数据库 | `LosAngelousDocs/reports/dev-2026-11-26-CR-002-分数线自动收录.md`（待 G3） |
 | 2026-11-26 | CR-001 | 移除 `zxg/` 126 份真实咨询稿入库；`.gitignore` 拦截；版本同步 v2.05 | 隐私 / 文档 / 版本 | `LosAngelousDocs/reports/doc-2026-11-26-CR-001-移除咨询稿入库.md` |
 | 2026-11-26 | 初始化 | 接入 LosSKILL 工作流：`LosAngelousDocs/`、`PROJECT_BRAIN.md`、`WORKLOG.md`、`AUTHORIZATIONS.md` | 流程 / 文档 | `LosAngelousDocs/reports/doc-2026-11-26-工作流初始化.md` |
 | 2026-11-21 | v2.04 | 前端改 GitHub Actions 构建 + Release 产物原子替换 | 部署 / CI | `docs/reports/meta-agent-2026-11-21-GitHubActions构建.md` |

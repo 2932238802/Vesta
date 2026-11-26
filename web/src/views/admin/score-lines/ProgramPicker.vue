@@ -8,7 +8,7 @@
       aria-label="搜索专业"
       autofocus
     >
-    <p class="hint">只显示已复核通过的招生专业；没有专业数据时可留空只查校线。</p>
+    <p class="hint">只显示已通过自动校验的招生专业；没有专业数据时可留空只查校线。</p>
 
     <p v-if="loading" class="state-line">正在搜索专业…</p>
     <p v-else-if="error" class="state-line error">{{ error }}</p>

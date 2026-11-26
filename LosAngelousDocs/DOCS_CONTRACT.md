@@ -4,6 +4,8 @@
 > 本文件所在目录是**文档根目录**，默认命名为 `LosAngelousDocs/`，不使用 `docs/`（避免与项目自带 docs 重名）。
 > 规则：文档根目录下只允许本文件登记的文件/目录。新增路径必须由 Doc 提案、用户批准，并在本文件登记后创建；Agent 不得自建。
 > 本文件由 LosSKILL 的 `scripts/check-docs.sh` 校验；核心条目缺失会直接报 ERROR。
+>
+> **与 Vesta 旧约定的区别（2026-11-26 用户确认）**：本工作流文档树**不按日建 `archive/261126`**；CR / R / AC / T 在根目录 `00`–`05`，角色报告在 `reports/`，已完结报告归档到 `reports/archive/`。仓库既有的 `docs/archive/YYYYMMDD/` 是 Vesta 产品历史文档，不属于本树。
 
 ## 1. 单一事实来源（One fact, one home）
 

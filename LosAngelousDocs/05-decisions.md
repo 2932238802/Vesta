@@ -43,3 +43,27 @@
 - 结论：选 A。备份 126 文件 + SHA256 后执行 `git rm -r zxg`，`.gitignore` 增加 `/zxg/`。
 - 影响：仓库不再携带学员资料；导入脚本仍可用（源文件由用户放回本地 `zxg/`）；数据库中的咨询树 / 运行记录不受影响。
 - 可逆性：容易恢复文件（备份目录），但 Git 历史仍含旧副本；彻底清除需单独授权。
+
+### D-005 分数线按置信度自动收录，移除人工复核与人工导入
+
+- 日期：2026-11-26
+- 背景：抓取默认 `pending` + 人工复核是主要瓶颈；且每次抓取都以 `pending` 覆盖写，会把已 `approved` 数据打回待复核。用户要求高置信度直接入库、不再人工。
+- 选项：
+  - A. `confidence >= 0.70` 自动 approved、`<0.70` 自动 rejected；移除复核与人工导入；存量 pending 一次性迁移（用户选择）。
+  - B. 仅高置信度自动通过，低置信度保留人工复核（与「不人工」冲突）。
+  - C. 保留人工导入兜底（与「去掉所有人工」冲突）。
+- 结论：选 A。同一 checksum 重抓保留既有状态；低置信度新内容不覆盖已有 approved；存量 pending 批次按阈值迁移，pending 招生计划按 trusted 转 approved。
+- 影响：`scoreline_batches.review_status` 由人工驱动改为自动驱动；复核 / 导入 UI 与 HTTP 接口下线；招生计划唯一键补 `major_name`；考研国家线要求 A/B 区。
+- 可逆性：代码可回滚，但已自动 approved / rejected 的数据不会随回滚恢复；需重新抓取或改库。
+
+### D-006 工作流文档不按日建 archive，保持 LosSKILL 现行规范
+
+- 日期：2026-11-26
+- 背景：用户询问开发文档是否应放在 `LosAngelousDocs/archive/261126/`。核对已安装技能与 LosSKILL 仓库版本（两者 diff 为空）后确认：现行规范是根目录 `00`–`05` + `reports/`，只有 `reports/archive/` 用于归档已完结报告；没有按日 `archive/` 约定。
+- 选项：
+  - A. 保持现行规范（用户选择）。
+  - B. 改为 `LosAngelousDocs/archive/YYYYMMDD/` 按日归档，需要同步改 `DOCS_CONTRACT` / `check-docs` / `init-docs` 并迁移文档。
+  - C. 额外在 `docs/archive/20261126/` 生成 Vesta 旧式副本（双源风险）。
+- 结论：选 A。Vesta 旧 `docs/archive/YYYYMMDD/` 仍只承载产品历史文档，不属于工作流文档树；同时确认 `docs/` 整体保持不动（2026-11-26 用户确认），`reports/archive/` 只归档已完结 CR 的角色报告。
+- 影响：后续 CR 继续写 `LosAngelousDocs/00`–`05`；报告写 `reports/`；已完结报告归档 `reports/archive/`。若要把 `docs/` 迁入单文档根，需单独立 CR 并改 `check-docs` / `AGENTS` / `CLAUDE` / 所有引用，不能直接删除。
+- 可逆性：若以后要改按日归档，需先改文档契约与 `check-docs` 判定，再迁移。

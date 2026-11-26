@@ -99,35 +99,6 @@ export interface AdminCoverageResponse {
   pageSize: number
 }
 
-export interface AdminReviewItem {
-  kind: 'batch' | 'program'
-  id: string
-  province: string
-  schoolName: string
-  year: number
-  title?: string
-  confidence?: number
-  createdAt: string
-  majorName?: string
-  planCount?: number | null
-  tuition?: string
-}
-
-export interface AdminReviewResponse {
-  total: number
-  page: number
-  pageSize: number
-  items: AdminReviewItem[]
-}
-
-export interface AdminReviewActionInput {
-  kind: 'batch' | 'program'
-  id?: string
-  ids?: string[]
-  action: 'approve' | 'reject'
-  note?: string
-}
-
 export interface AdminCrawlResult {
   runId: string
   status: string
@@ -154,21 +125,6 @@ export interface AdminCrawlRunDetail {
     shape: string
     fetched_at: string
   }[]
-}
-
-export interface AdminImportResult {
-  ok: boolean
-  dryRun: boolean
-  batches: number
-  programs: number
-  metrics?: number
-  ids?: string[]
-}
-
-export interface AdminImportInput {
-  dryRun?: boolean
-  batches?: unknown[]
-  programs?: unknown[]
 }
 
 export interface AdminScoreLineSourceInput {

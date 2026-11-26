@@ -37,5 +37,20 @@ escalate_when:
 ## 授权记录
 
 <!-- auth:rows -->
+
+## AUTH-20261126-001
+
+- 时间：2026-11-26 20:38:25 +0800
+- CR/T：CR-002 / T-004,T-005,T-006,T-007,T-008,T-009,T-010
+- 动作：commit
+- 级别：A1c
+- 策略条款：G1-envelope
+- 证据：本复审报告 + npm run verify EXIT=0 + check:scoreline 三组用例通过（含真实 runNext 全 skip 与迁移失败注入）+ 独立复现脚本
+- 批准：review-agent
+- 范围：D:/PROJECT/Vesta（CR-002 工作区；不含 docs/ 删除）
+- 有效期：随 CR 结束
+- 撤销：否
+- 幂等键：CR-002:T-004~T-010:commit:A1c
+
 <!-- 每次 A1c/A2 追加一条，格式见协议第 4 节；优先用 finish-report.sh 自动写入 -->
 <!-- A1w 不写这里，记 WORKLOG；G3 接受也记 WORKLOG -->

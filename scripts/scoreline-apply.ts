@@ -103,16 +103,16 @@ export class ProgramResolver {
     note: string
     sourceUrl: string
   }): string {
-    const key = [input.schoolId, input.year, input.exam, input.province, input.majorCode].join('~')
+    const key = [input.schoolId, input.year, input.exam, input.province, input.majorCode, input.majorName].join('~')
     const cached = this.cache.get(key)
     if (cached) return cached
     const existing = db
       .prepare(
         `SELECT id FROM school_programs
          WHERE school_id = ? AND year = ? AND exam = ? AND province = ? AND major_code = ?
-           AND degree_type = '' AND study_mode = ''`
+           AND degree_type = '' AND study_mode = '' AND major_name = ?`
       )
-      .get(input.schoolId, input.year, input.exam, input.province, input.majorCode) as { id: string } | undefined
+      .get(input.schoolId, input.year, input.exam, input.province, input.majorCode, input.majorName) as { id: string } | undefined
     if (existing) {
       this.cache.set(key, existing.id)
       this.stats.reusedPrograms += 1

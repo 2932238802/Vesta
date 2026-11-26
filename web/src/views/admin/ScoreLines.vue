@@ -3,16 +3,12 @@
     <AdminPageHeader
       eyebrow="内部查询"
       title="升学分数线查询"
-      subtitle="内部查询参考；主线永远显示，校线 / 专业线在选院校后叠加。抓取数据默认待复核。"
+      subtitle="内部查询参考；主线永远显示，校线 / 专业线在选院校后叠加。抓取数据按置信度自动收录，无需人工复核。"
     >
       <template #actions>
         <span v-if="crawlHint" class="quiet tiny">{{ crawlHint }}</span>
         <button class="btn ghost" type="button" @click="queueOpen = true">抓取队列</button>
-        <button class="btn ghost" type="button" @click="reviewOpen = true">
-          复核{{ reviewCount ? ` ${reviewCount}` : '' }}
-        </button>
         <button class="btn ghost" type="button" @click="coverageOpen = true">覆盖看板</button>
-        <button class="btn ghost" type="button" @click="importOpen = true">人工导入</button>
         <button
           class="btn"
           type="button"
@@ -50,7 +46,7 @@
 
       <template v-else>
         <p v-if="result.coverage.pendingCount" class="pending-badge">
-          这个范围有 {{ result.coverage.pendingCount }} 条待复核数据，复核通过后才会显示数字。
+          这个范围有 {{ result.coverage.pendingCount }} 条历史数据尚未通过自动校验，暂不显示数字。
         </p>
 
         <div class="line-stack">
@@ -172,14 +168,6 @@
       :province="filters.province"
       @close="coverageOpen = false"
     />
-    <ReviewView
-      :open="reviewOpen"
-      :province="filters.province"
-      :year="filters.year"
-      @close="reviewOpen = false"
-      @changed="onReviewed"
-    />
-    <ImportDialog :open="importOpen" @close="importOpen = false" @imported="onImported" />
 
     <Modal :open="queueOpen" title="抓取队列" eyebrow="一次只抓一个省" @close="queueOpen = false">
       <p v-if="!queue.running && !queue.queue.length" class="state-line">当前没有抓取任务。</p>
@@ -194,8 +182,6 @@
         </p>
       </template>
     </Modal>
-
-    <p v-if="toast" class="toast">{{ toast }}</p>
   </div>
 </template>
 
@@ -216,11 +202,9 @@ import Modal from '@/components/Modal.vue'
 import { formatDate } from '@/format'
 import ChartCard from './score-lines/ChartCard.vue'
 import CoverageView from './score-lines/CoverageView.vue'
-import ImportDialog from './score-lines/ImportDialog.vue'
 import LineCard from './score-lines/LineCard.vue'
 import PlanTable from './score-lines/PlanTable.vue'
 import ProgramPicker from './score-lines/ProgramPicker.vue'
-import ReviewView from './score-lines/ReviewView.vue'
 import SchoolPicker from './score-lines/SchoolPicker.vue'
 import ScoreLineFilters from './score-lines/ScoreLineFilters.vue'
 import ScoreLineTable from './score-lines/ScoreLineTable.vue'
@@ -234,18 +218,13 @@ const facetsLoading = ref(false)
 const schools = ref<SchoolSearchItem[]>([])
 const querying = ref(false)
 const error = ref('')
-const reviewCount = ref(0)
 const schoolOpen = ref(false)
 const programOpen = ref(false)
 const coverageOpen = ref(false)
-const reviewOpen = ref(false)
-const importOpen = ref(false)
 const queueOpen = ref(false)
 const crawling = ref(false)
 const crawlHint = ref('')
-const toast = ref('')
 const queue = ref<AdminCrawlQueueResponse>({ running: null, queue: [] })
-let toastTimer: ReturnType<typeof setTimeout> | undefined
 let facetsSeq = 0
 
 const schoolList = computed(() =>
@@ -256,8 +235,8 @@ const schoolSubtitle = computed(() =>
 )
 const emptyMainText = computed(() =>
   result.value?.coverage.status === 'pending'
-    ? '主线数据正在复核，暂不显示数字。'
-    : '主线未收录；可点右上角「立即抓取本省」或人工导入。'
+    ? '主线数据正在自动校验，暂不显示数字。'
+    : '主线未收录；可点右上角「立即抓取本省」补充。'
 )
 const emptySchoolText = '该校当年校线未收录；不拿主线或专业线冒充校线。'
 const emptyProgramText = '该专业当年专业线未收录；校线仍然保留。'
@@ -268,14 +247,6 @@ function requireLabel(key: string): string {
 
 function coverageLabel(status: CoverageStatus | ''): string {
   return status ? COVERAGE_LABELS[status] ?? status : ''
-}
-
-function flash(message: string) {
-  toast.value = message
-  if (toastTimer) clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => {
-    toast.value = ''
-  }, 2400)
 }
 
 async function loadFacets(retry = true) {
@@ -406,7 +377,7 @@ async function pollRun(runId: string) {
         detail.run.status === 'failed'
           ? `抓取失败：${detail.run.message || '未知原因'}`
           : detail.run.status === 'index'
-            ? '抓取完成：只发现索引页，没有可写库数据；请补栏目 URL 或人工导入。'
+            ? '抓取完成：只发现索引页，没有可写库数据；请补栏目 URL 或调整解析器。'
             : `抓取完成：保存 ${detail.run.saved} 条，失败 ${detail.run.failed} 条`
       if (detail.run.status !== 'failed' && result.value) await search()
       return
@@ -434,28 +405,6 @@ async function cancelQueued(id: string) {
   }
 }
 
-async function loadReviewCount() {
-  try {
-    const count = await api.scoreLineReviewCount({ province: filters.value.province })
-    reviewCount.value = count.total
-  } catch {
-    reviewCount.value = 0
-  }
-}
-
-function onReviewed() {
-  flash('已复核')
-  void loadReviewCount()
-  void loadFacets()
-  if (result.value) void search()
-}
-
-function onImported() {
-  flash('已导入')
-  void loadFacets()
-  void search()
-}
-
 watch(
   () => `${filters.value.exam}|${filters.value.year}|${filters.value.province}`,
   () => {
@@ -468,7 +417,6 @@ watch(
 
 onMounted(() => {
   void loadQueue()
-  void loadReviewCount()
   void loadFacets()
 })
 </script>

@@ -116,7 +116,7 @@ export function upsertProgram(input: ProgramInput): SchoolProgram {
     .prepare(
       `SELECT * FROM school_programs
        WHERE school_id = ? AND year = ? AND exam = ? AND province = ? AND major_code = ?
-         AND degree_type = ? AND study_mode = ?`
+         AND degree_type = ? AND study_mode = ? AND major_name = ?`
     )
     .get(
       input.schoolId,
@@ -125,7 +125,8 @@ export function upsertProgram(input: ProgramInput): SchoolProgram {
       province,
       input.majorCode ?? '',
       input.degreeType ?? '',
-      input.studyMode ?? ''
+      input.studyMode ?? '',
+      input.majorName
     ) as ProgramRow | undefined
   const at = now()
   if (existing) {

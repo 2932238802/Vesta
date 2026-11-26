@@ -2,10 +2,11 @@
  * 分数线模块 v3 的共享类型、科目归一化与导入校验。
  *
  * 四层口径：主线（national / provincial）→ 院校线（school）→ 专业线（program）
- * → 招生计划（school_programs）。所有数字必须带来源，抓取默认 pending，复核通过才可查询。
+ * → 招生计划（school_programs）。所有数字必须带来源；v2.06 起抓取按 confidence 自动收录
+ * （≥0.70 approved / <0.70 rejected），查询只读 approved。
  */
 
-import { normalizeProvince, provinceRegion } from './score-line-region'
+import { normalizeProvince, normalizeRegion, provinceRegion } from './score-line-region'
 
 export type ExamType = 'upgrade' | 'postgrad'
 export type ScoreLineScope = 'national' | 'provincial' | 'school' | 'program'
@@ -23,6 +24,12 @@ export const SCORELINE_HISTORY_YEARS = 10
 export const SCORELINE_MAX_IMPORT_BATCHES = 200
 export const SCORELINE_MAX_METRICS_PER_BATCH = 100
 
+/**
+ * v2.06 自动收录阈值：抓取批次 confidence ≥ 0.70 自动 approved，低于则 rejected。
+ * 阈值只在这里定义一次，抓取写入与启动迁移共用。
+ */
+export const SCORELINE_AUTO_APPROVE_CONFIDENCE = 0.7
+
 export const EXAM_LABELS: Record<ExamType, string> = {
   upgrade: '专升本',
   postgrad: '考研'
@@ -38,7 +45,8 @@ export const SCOPE_LABELS: Record<ScoreLineScope, string> = {
 export const COVERAGE_LABELS: Record<CoverageStatus, string> = {
   covered: '已收录',
   partial: '部分收录',
-  pending: '待复核',
+  // v2.06 后不再产生新的 pending；该状态只用于历史数据，避免运营误以为还有复核队列。
+  pending: '历史待定',
   no_data: '暂无数据',
   not_offered: '不招生',
   failed: '抓取失败'
@@ -351,6 +359,55 @@ export function isReviewStatus(value: unknown): value is ReviewStatus {
   return value === 'pending' || value === 'approved' || value === 'rejected'
 }
 
+/** 已有批次的最少信息：自动收录判定只关心原审核状态与内容 checksum。 */
+export interface PreviousReview {
+  reviewStatus: ReviewStatus
+  checksum: string
+}
+
+/** 自动收录跳过原因：内容未变（保留原状态）/ 低置信度不覆盖旧 approved。 */
+export type AutoReviewSkipReason = 'same_checksum' | 'keep_previous_approved'
+
+export type AutoReviewDecision =
+  | { action: 'write'; reviewStatus: Exclude<ReviewStatus, 'pending'> }
+  | { action: 'skip'; reason: AutoReviewSkipReason }
+
+/**
+ * v2.06 抓取写入判定（纯函数，不读写数据库）。
+ *
+ * 规则（与 R-002 / AC-002-1~4 一致）：
+ * - 无历史：≥ 阈值 → approved，否则 rejected。
+ * - checksum 相同：approved / rejected 保持原状态（不重写指标）；pending 按阈值迁移。
+ * - checksum 变化：≥ 阈值 → approved；< 阈值且原为 approved → 跳过（保留旧 approved，防数据消失）；
+ *   否则 → rejected。
+ *
+ * `checksum` 是本次抓取算出的内容指纹，与 `previous.checksum` 比较判断内容是否变化。
+ */
+export function decideAutoReview(input: {
+  confidence: number
+  checksum: string
+  previous: PreviousReview | null
+}): AutoReviewDecision {
+  const confidence =
+    typeof input.confidence === 'number' && Number.isFinite(input.confidence)
+      ? input.confidence
+      : 0
+  const high = confidence >= SCORELINE_AUTO_APPROVE_CONFIDENCE
+  const previous = input.previous
+  if (!previous) return { action: 'write', reviewStatus: high ? 'approved' : 'rejected' }
+  if (previous.checksum === input.checksum) {
+    // 内容没变：已定状态不因重抓改变；只剩历史 pending 需要按阈值补齐。
+    if (previous.reviewStatus !== 'pending') return { action: 'skip', reason: 'same_checksum' }
+    return { action: 'write', reviewStatus: high ? 'approved' : 'rejected' }
+  }
+  if (high) return { action: 'write', reviewStatus: 'approved' }
+  if (previous.reviewStatus === 'approved') {
+    // 低置信度新内容会覆盖掉已通过的数字；保留旧值，交给解析器升级后重抓。
+    return { action: 'skip', reason: 'keep_previous_approved' }
+  }
+  return { action: 'write', reviewStatus: 'rejected' }
+}
+
 export interface MetricInput {
   subjectCode?: string
   subjectName?: string
@@ -482,6 +539,13 @@ function validateBatch(batch: BatchInput | null | undefined, prefix: string): st
   if (batch.scope === 'national' && (str(batch.schoolId, 100) || str(batch.programId, 100))) {
     errors.push(`${prefix}国家线不能绑定院校或专业`)
   }
+  // 考研国家线按 A 区 / B 区分别划线；region 为空或认不出会导致写入后按省份查不到。
+  if (batch.scope === 'national' && batch.exam === 'postgrad') {
+    const region = str(batch.region, 20).replace(/\s+/g, '').toUpperCase()
+    if (region !== 'A区' && region !== 'B区') {
+      errors.push(`${prefix}考研国家线需标明 A 区或 B 区（region 只能是「A区」或「B区」）`)
+    }
+  }
 
   const metrics = Array.isArray(batch.metrics) ? batch.metrics : []
   if (metrics.length === 0) errors.push(`${prefix}至少一条指标`)
@@ -527,12 +591,18 @@ function validateBatch(batch: BatchInput | null | undefined, prefix: string): st
 /** 校验通过后调用：整理成可写库的批次（科目 code、最低分类型、省份）。 */
 export function normalizeImportBatch(batch: BatchInput): NormalizedBatch {
   const metrics = Array.isArray(batch.metrics) ? batch.metrics : []
+  const rawRegion = str(batch.region, 20)
+  // 考研 region 落库前统一成 A区 / B区：校验大小写不敏感，但查询按标准值精确匹配。
+  const region =
+    batch.exam === 'postgrad'
+      ? normalizeRegion(rawRegion) || rawRegion || provinceRegion(str(batch.province, 20))
+      : rawRegion
   return {
     scope: batch.scope as ScoreLineScope,
     exam: batch.exam as ExamType,
     year: Number(batch.year),
     province: normalizeProvince(str(batch.province, 20)),
-    region: batch.exam === 'postgrad' ? str(batch.region, 20) || provinceRegion(str(batch.province, 20)) : str(batch.region, 20),
+    region,
     schoolId: str(batch.schoolId, 100),
     programId: str(batch.programId, 100),
     category: str(batch.category, 40),

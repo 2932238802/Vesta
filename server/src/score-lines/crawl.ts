@@ -1,5 +1,5 @@
 import type { CrawlRun, CrawlStatus, ScoreLineSource } from '../../../shared/src/score-line'
-import { batchChecksum } from '../../../shared/src/score-line'
+import { batchChecksum, decideAutoReview } from '../../../shared/src/score-line'
 import { config } from '../env'
 import { log } from '../log'
 import { db } from '../db/connection'
@@ -164,6 +164,10 @@ interface SourceStats {
   /** 失败码（按出现顺序），run / source 的 last_error 以首个失败码开头。 */
   codes: string[]
   details: string[]
+  /** v2.06 自动收录计数：只用于日志 / run details，不改变 CrawlRun 响应字段。 */
+  autoApproved: number
+  autoRejected: number
+  autoSkipped: number
 }
 
 function emptyStats(): SourceStats {
@@ -176,7 +180,10 @@ function emptyStats(): SourceStats {
     indexPages: 0,
     years: [],
     codes: [],
-    details: []
+    details: [],
+    autoApproved: 0,
+    autoRejected: 0,
+    autoSkipped: 0
   }
 }
 
@@ -214,7 +221,9 @@ function diagnostics(stats: SourceStats): string {
 }
 
 function statusOf(stats: SourceStats): CrawlStatus {
-  if (stats.saved > 0) return stats.failed > 0 ? 'partial' : 'success'
+  // 全部批次都因「内容未变 / 低置信度不覆盖」跳过的重抓是有效结果：
+  // 数据未被改动，不能把来源与覆盖看板打成 failed。
+  if (stats.saved > 0 || stats.autoSkipped > 0) return stats.failed > 0 ? 'partial' : 'success'
   if (stats.indexPages > 0 && stats.failed === 0) return 'index'
   return 'failed'
 }
@@ -262,18 +271,47 @@ async function processParsedBatches(
       stats.details.push(`未写库：${valueIssues.join('；')}`)
       continue
     }
+    const checksum = batchChecksum(normalized.batch)
     const previousId = findBatchId(normalized.batch)
-    const previous = previousId ? getBatch(previousId)?.metrics ?? [] : []
+    const previousBatch = previousId ? getBatch(previousId) : null
+    const previous = previousBatch?.metrics ?? []
     const anomalies = anomalyIssues(normalized.batch, previous)
     if (anomalies.length) normalized.batch.note = mergeNotes(normalized.batch.note, anomalies)
+    const decision = decideAutoReview({
+      confidence: normalized.batch.confidence,
+      checksum,
+      previous: previousBatch
+        ? { reviewStatus: previousBatch.reviewStatus, checksum: previousBatch.checksum }
+        : null
+    })
+    if (decision.action === 'skip') {
+      // 内容未变或低置信度不覆盖旧 approved：保留库里原值与状态，不重写指标。
+      stats.autoSkipped += 1
+      log.info('scoreline.auto_review_skipped', {
+        scope: normalized.batch.scope,
+        exam: normalized.batch.exam,
+        year: normalized.batch.year,
+        province: normalized.batch.province,
+        schoolId: normalized.batch.schoolId,
+        confidence: normalized.batch.confidence,
+        previousStatus: previousBatch?.reviewStatus,
+        reason: decision.reason
+      })
+      continue
+    }
     saveBatch(normalized.batch, {
-      reviewStatus: 'pending',
-      checksum: batchChecksum(normalized.batch),
+      reviewStatus: decision.reviewStatus,
+      checksum,
       fetchedAt: now()
     })
-    // 单校批次即时刷新；省级 / 全国在 run 结束后统一刷新，避免每个批次重算全省。
-    if (normalized.batch.schoolId) {
-      refreshCoverage(normalized.batch.schoolId, normalized.batch.exam, normalized.batch.year)
+    if (decision.reviewStatus === 'approved') {
+      stats.autoApproved += 1
+      // 单校批次即时刷新；省级 / 全国在 run 结束后统一刷新，避免每个批次重算全省。
+      if (normalized.batch.schoolId) {
+        refreshCoverage(normalized.batch.schoolId, normalized.batch.exam, normalized.batch.year)
+      }
+    } else {
+      stats.autoRejected += 1
     }
     if (!stats.years.includes(normalized.batch.year)) stats.years.push(normalized.batch.year)
     stats.saved += 1
@@ -450,7 +488,15 @@ async function processSource(
   if (queue.length && budget.pages >= MAX_PAGES_PER_RUN) {
     stats.details.push('budget: 本 run 已达到 30 页上限，剩余来源下次继续')
   }
-  if (stats.saved === 0 && source.exam === 'upgrade' && !source.verified) {
+  // 内容未变（autoSkipped）或只看到索引页时，入口是通的；不能误报「未核验」。
+  const indexOnly = stats.indexPages > 0 && stats.failed === 0
+  if (
+    stats.saved === 0 &&
+    stats.autoSkipped === 0 &&
+    !indexOnly &&
+    source.exam === 'upgrade' &&
+    !source.verified
+  ) {
     stats.details.unshift('needs_seed: 该省专升本栏目入口未人工核验，请补栏目 URL')
     stats.codes.unshift('needs_seed')
   }
@@ -525,6 +571,9 @@ export async function runNext(): Promise<void> {
       total.failed += stats.failed
       total.discovered += stats.discovered
       total.indexPages += stats.indexPages
+      total.autoApproved += stats.autoApproved
+      total.autoRejected += stats.autoRejected
+      total.autoSkipped += stats.autoSkipped
       total.years.push(...stats.years.filter((year) => !total.years.includes(year)))
       total.codes.push(...stats.codes)
       total.details.push(...stats.details)
@@ -535,12 +584,26 @@ export async function runNext(): Promise<void> {
         sourceId: source.id,
         status,
         saved: stats.saved,
-        failed: stats.failed
+        savedApproved: stats.autoApproved,
+        savedRejected: stats.autoRejected,
+        failed: stats.failed,
+        autoApproved: stats.autoApproved,
+        autoRejected: stats.autoRejected,
+        autoSkipped: stats.autoSkipped
       })
     }
   } finally {
     const status = statusOf(total)
     const failureText = diagnostics(total)
+    // 全 skip 表示内容未变；不能提示「没有抓到可写库数据」，避免运营误判抓取失败。
+    const unchanged = total.saved === 0 && total.autoSkipped > 0
+    const message =
+      failureText ||
+      (total.saved > 0
+        ? ''
+        : unchanged
+          ? '内容未变，保留已收录数据'
+          : total.details.slice(0, 5).join('；') || '没有抓到可写库数据')
     db.prepare(
       `UPDATE crawl_runs SET status = ?, finished_at = ?, discovered = ?, fetched = ?, parsed = ?,
          saved = ?, failed = ?, message = ?, details = ? WHERE id = ?`
@@ -552,8 +615,7 @@ export async function runNext(): Promise<void> {
       total.parsed,
       total.saved,
       total.failed,
-      failureText ||
-        (total.saved > 0 ? '' : total.details.slice(0, 5).join('；') || '没有抓到可写库数据'),
+      message,
       JSON.stringify(total.details.slice(0, 50)),
       next.id
     )
@@ -573,8 +635,13 @@ export async function runNext(): Promise<void> {
       fetched: total.fetched,
       parsed: total.parsed,
       saved: total.saved,
+      savedApproved: total.autoApproved,
+      savedRejected: total.autoRejected,
       failed: total.failed,
       indexPages: total.indexPages,
+      autoApproved: total.autoApproved,
+      autoRejected: total.autoRejected,
+      autoSkipped: total.autoSkipped,
       ms: Date.now() - started
     })
     running = false

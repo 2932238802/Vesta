@@ -402,7 +402,7 @@ export function initSchema(): void {
     updated_at    TEXT NOT NULL
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_school_programs_key
-    ON school_programs(school_id, year, exam, province, major_code, degree_type, study_mode);
+    ON school_programs(school_id, year, exam, province, major_code, degree_type, study_mode, major_name);
   CREATE INDEX IF NOT EXISTS idx_school_programs_school
     ON school_programs(school_id, year DESC, exam);
 

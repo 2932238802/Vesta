@@ -6,6 +6,16 @@
 
 ## 本轮（2026-11-26）
 
+### 分数线自动收录：高置信度直接入库，移除人工复核与人工导入（2026-11-26，产品版本 v2.06，已实施）
+
+- 依据：`LosAngelousDocs/00-requirements-intake.md` CR-002、`01-requirements.md` R-002 / AC-002-1~10、`04-tasks.md` T-004~T-010；用户 2026-11-26 确认「复核 + 人工导入都去掉 / ≥0.70 / 低置信度拒绝隐藏 / 存量一次性自动通过」。
+- **为什么要做**：抓取默认 `pending` + 人工复核是主要瓶颈；且每次抓取都以 `pending` 覆盖写，会把已 `approved` 数据打回待复核。改为按置信度自动收录后，高置信度数据抓完即可查询。
+- **口径**：`confidence >= 0.70` → `approved`；`< 0.70` → `rejected`（隐藏、保留记录与来源）；同一唯一键 checksum 不变时保留原状态；低置信度新内容不覆盖已有 `approved`；存量 pending 批次按阈值一次性迁移，pending 招生计划按 trusted 转 approved。
+- **移除**：后台「复核」「人工导入」按钮 / 弹窗 / 计数与 `POST /score-lines/import`、`GET/POST /score-lines/review`、`GET /score-lines/review/count`；`scripts/scoreline-data.ts` 保留为运维装载脚本。
+- **同时修复**：`school_programs` 唯一键补 `major_name`；考研国家线校验要求 A区 / B区。
+- **实施记录**：`shared/src/score-line.ts` 增加 `SCORELINE_AUTO_APPROVE_CONFIDENCE` 与 `decideAutoReview()`；`server/src/score-lines/crawl.ts` 按判定写 `approved / rejected`，skip 时保留旧值并记 `scoreline.auto_review_skipped`；新增启动迁移 `scoreline-auto-review`（存量 pending 批次按阈值、招生计划 trusted，刷新受影响覆盖）与 `school-programs-key`（唯一键补 `major_name`）；删除复核 / 人工导入组件与 `score-lines-import.ts`，4 个旧接口返回 404；`validateBatch` 增加考研国家线 A/B 区校验。
+- **验证**：`npm run check:score`（含 A/B 区正反例）、`npm run check:scoreline`（隔离 `DATA_DIR`，覆盖 AC-002-1~4、7、8）、临时库启动服务实测 4 个旧接口 404、`npm run verify` 全绿。
+
 ### 移除真实咨询稿入库与版本快照同步（2026-11-26，产品版本 v2.05）
 
 - 依据：用户 2026-11-26 直接指令：删除 `zxg/` 下 126 份咨询稿并取消 Git 追踪；同步相关版本。

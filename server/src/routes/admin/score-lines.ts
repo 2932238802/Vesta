@@ -10,13 +10,11 @@ import { queryScoreLines } from '../../score-lines/query'
 import { getSchool, listSchools } from '../../score-lines/store'
 import { clampString } from '../../util'
 import { scoreLineCrawlRouter } from './score-lines-crawl'
-import { scoreLineImportRouter } from './score-lines-import'
 
 export const scoreLinesRouter = Router()
 
-// 抓取 / 导入 / 复核的具体路径先挂，避免被院校/查询路由吞掉。
+// 抓取的具体路径先挂，避免被院校/查询路由吞掉。
 scoreLinesRouter.use(scoreLineCrawlRouter)
-scoreLinesRouter.use(scoreLineImportRouter)
 
 function examOf(value: unknown): ExamType | null {
   const raw = clampString(value, 20)

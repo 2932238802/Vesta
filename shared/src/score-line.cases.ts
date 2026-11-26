@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import {
+  SCORELINE_AUTO_APPROVE_CONFIDENCE,
   SCORELINE_HISTORY_YEARS,
   SCORELINE_MAX_IMPORT_BATCHES,
   batchChecksum,
+  decideAutoReview,
   normalizeImportBatch,
   resolveSubject,
   validateImportPayload
@@ -137,7 +139,7 @@ function expectError(name: string, payload: unknown, expected: string) {
 
 expectOk('合法导入', { batches: [validBatch] })
 expectOk('国家线不绑院校', {
-  batches: [{ ...validBatch, scope: 'national', schoolId: '', programId: '', province: '' }]
+  batches: [{ ...validBatch, scope: 'national', schoolId: '', programId: '', province: '', region: 'A区' }]
 })
 expectError('空批次', { batches: [] }, '至少导入一条分数线')
 expectError('批次过多', { batches: Array(SCORELINE_MAX_IMPORT_BATCHES + 1).fill(validBatch) }, '一次最多导入')
@@ -165,7 +167,21 @@ expectError('重复指标', {
 }, '同一科目和最低分类型重复')
 expectError('链接协议', { batches: [{ ...validBatch, sourceUrl: 'ftp://example.com' }] }, '来源链接需以')
 expectError('标题超长', { batches: [{ ...validBatch, title: 'x'.repeat(201) }] }, '标题最多 200')
-console.log('✓ 导入校验正反例')
+
+// v2.06：考研国家线必须标明 A 区 / B 区，否则写入后按省份查不到。
+const nationalBatch = { ...validBatch, scope: 'national', schoolId: '', programId: '', province: '' }
+expectOk('考研国家线 A 区', { batches: [{ ...nationalBatch, region: 'A区' }] })
+expectOk('考研国家线 B 区（大小写归一）', { batches: [{ ...nationalBatch, region: 'b区' }] })
+expectError('考研国家线缺 region', { batches: [{ ...nationalBatch, region: '' }] }, '需标明 A 区或 B 区')
+expectError('考研国家线非法 region', { batches: [{ ...nationalBatch, region: 'C区' }] }, '需标明 A 区或 B 区')
+// 校验允许小写 b区，但落库必须归一成 B区，否则查询按 B区 精确匹配会查不到。
+assert.equal(
+  normalizeImportBatch({ ...nationalBatch, region: 'b区' }).region,
+  'B区',
+  '小写 b区 落库应归一为 B区'
+)
+assert.equal(normalizeImportBatch({ ...nationalBatch, region: 'A' }).region, 'A区')
+console.log('✓ 导入校验正反例（含考研国家线 A/B 区）')
 
 const normalized = normalizeImportBatch(validBatch)
 assert.equal(normalized.province, '浙江')
@@ -186,5 +202,59 @@ assert.notEqual(
   '年份变化应改变 checksum'
 )
 console.log('✓ 归一化与 checksum 稳定性')
+
+// v2.06 自动收录判定：阈值边界、同 checksum、变更 checksum、旧 approved 保护。
+assert.equal(SCORELINE_AUTO_APPROVE_CONFIDENCE, 0.7)
+const prev = (reviewStatus: 'pending' | 'approved' | 'rejected', checksum: string) => ({
+  reviewStatus,
+  checksum
+})
+// 无历史：阈值边界 0.699 / 0.7
+assert.deepEqual(decideAutoReview({ confidence: 0.7, checksum: 'c1', previous: null }), {
+  action: 'write',
+  reviewStatus: 'approved'
+})
+assert.deepEqual(decideAutoReview({ confidence: 0.699, checksum: 'c1', previous: null }), {
+  action: 'write',
+  reviewStatus: 'rejected'
+})
+// checksum 相同：approved / rejected 保留原状态，不重写指标
+assert.deepEqual(decideAutoReview({ confidence: 0.4, checksum: 'c1', previous: prev('approved', 'c1') }), {
+  action: 'skip',
+  reason: 'same_checksum'
+})
+assert.deepEqual(decideAutoReview({ confidence: 0.9, checksum: 'c1', previous: prev('rejected', 'c1') }), {
+  action: 'skip',
+  reason: 'same_checksum'
+})
+// checksum 相同且原 pending：按阈值迁移
+assert.deepEqual(decideAutoReview({ confidence: 0.7, checksum: 'c1', previous: prev('pending', 'c1') }), {
+  action: 'write',
+  reviewStatus: 'approved'
+})
+assert.deepEqual(decideAutoReview({ confidence: 0.69, checksum: 'c1', previous: prev('pending', 'c1') }), {
+  action: 'write',
+  reviewStatus: 'rejected'
+})
+// checksum 变化：高置信度覆盖为 approved
+assert.deepEqual(decideAutoReview({ confidence: 0.7, checksum: 'c2', previous: prev('approved', 'c1') }), {
+  action: 'write',
+  reviewStatus: 'approved'
+})
+// checksum 变化 + 低置信度 + 旧 approved：不覆盖，保留旧值
+assert.deepEqual(decideAutoReview({ confidence: 0.699, checksum: 'c2', previous: prev('approved', 'c1') }), {
+  action: 'skip',
+  reason: 'keep_previous_approved'
+})
+// checksum 变化 + 低置信度 + 旧 rejected / pending：写入 rejected
+assert.deepEqual(decideAutoReview({ confidence: 0.699, checksum: 'c2', previous: prev('rejected', 'c1') }), {
+  action: 'write',
+  reviewStatus: 'rejected'
+})
+assert.deepEqual(decideAutoReview({ confidence: 0.699, checksum: 'c2', previous: prev('pending', 'c1') }), {
+  action: 'write',
+  reviewStatus: 'rejected'
+})
+console.log('✓ 自动收录判定（阈值边界 / 同 checksum / 变更 checksum / 旧 approved 保护）')
 
 console.log('\n分数线 v3 共享用例全部通过')

@@ -1,5 +1,6 @@
 import type { ExamType, NormalizedBatch, School } from '../../../shared/src/score-line'
 import {
+  SCORELINE_AUTO_APPROVE_CONFIDENCE,
   normalizeImportBatch,
   resolveSubject,
   validateImportPayload
@@ -50,6 +51,12 @@ const DIMENSION_LABELS: Record<DimensionKind, string> = {
   track: '科类 / 学科门类'
 }
 
+/**
+ * 维度认不出时压到阈值以下（0.69），让自动收录判为 rejected；
+ * 不能再落在 0.70 边界上，否则歧义维度会绕过保护被自动 approved。
+ */
+const DIMENSION_ISSUE_CONFIDENCE = SCORELINE_AUTO_APPROVE_CONFIDENCE - 0.01
+
 /** canonical 化维度值；认不出保留原文并记 issue（不猜）。 */
 function canonicalDimension(
   kind: DimensionKind,
@@ -77,7 +84,7 @@ export function mergeNotes(...parts: (string | string[] | undefined | null)[]): 
   return [...new Set(values)].join('；').slice(0, 500)
 }
 
-/** 人工导入 / 旧数据补写时也走同一套维度字典；认不出保留原文、记 issue 并降置信度。 */
+/** 人工导入 / 旧数据补写时也走同一套维度字典；认不出保留原文、记 issue 并降到自动收录阈值以下。 */
 export function normalizeBatchDimensions(batch: NormalizedBatch): {
   batch: NormalizedBatch
   issues: string[]
@@ -90,7 +97,9 @@ export function normalizeBatchDimensions(batch: NormalizedBatch): {
       ...batch,
       category,
       track,
-      confidence: issues.length ? Math.min(batch.confidence, 0.7) : batch.confidence,
+      confidence: issues.length
+        ? Math.min(batch.confidence, DIMENSION_ISSUE_CONFIDENCE)
+        : batch.confidence,
       note: mergeNotes(batch.note, issues)
     },
     issues
@@ -111,7 +120,7 @@ export interface NormalizedParsedBatch {
 
 /**
  * 抓取/解析结果 → 可写库批次。学校名匹配不中、科目认不出、分值越界都只记 issue，
- * 不写 0、不猜满分；有 issue 的批次仍可保存为 pending，交给复核页处理。
+ * 不写 0、不猜满分；维度认不出的批次降到自动收录阈值以下，最终判为 rejected 留档。
  */
 export function normalizeParsedBatch(
   raw: ParsedBatch,
@@ -175,7 +184,7 @@ export function normalizeParsedBatch(
     dimensionIssues
   )
   const confidence = dimensionIssues.length
-    ? Math.min(raw.confidence ?? 0.7, 0.7)
+    ? Math.min(raw.confidence ?? 0.7, DIMENSION_ISSUE_CONFIDENCE)
     : raw.confidence ?? 0.7
   const input = {
     scope: raw.scope,

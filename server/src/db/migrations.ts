@@ -17,6 +17,8 @@ import { migrateSurvey } from './migrations/survey'
 import { migrateTemplate } from './migrations/template'
 import { seedConsultQuotes } from './migrations/consult-quotes'
 import { migrateScoreLineV1 } from './migrations/scoreline'
+import { migrateScoreLineAutoReview } from './migrations/scoreline-auto-review'
+import { migrateSchoolProgramsKey } from './migrations/school-programs-key'
 
 export function runMigrations(): void {
   ensureInviteColumns()
@@ -38,5 +40,8 @@ export function runMigrations(): void {
   migrateScoreLineV1()
   ensureScoreLineColumns()
   seedScorelineSources()
+  // v2.06：存量 pending 按置信度自动落定 + 招生计划唯一键补 major_name；均幂等。
+  migrateScoreLineAutoReview()
+  migrateSchoolProgramsKey()
   seedConsultQuotes()
 }

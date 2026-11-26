@@ -13,10 +13,6 @@ import type {
   AdminCrawlQueueResponse,
   AdminCrawlResult,
   AdminCrawlRunDetail,
-  AdminImportInput,
-  AdminImportResult,
-  AdminReviewActionInput,
-  AdminReviewResponse,
   AdminScoreLineSourceInput,
   ReportPayload,
   ReportTemplate,
@@ -152,13 +148,6 @@ export const adminApi = {
       { auth: true }
     )
   },
-  scoreLineImport(body: AdminImportInput) {
-    return request<AdminImportResult>('/api/admin/score-lines/import', {
-      method: 'POST',
-      body,
-      auth: true
-    })
-  },
   scoreLineCrawl(body: { province: string; years?: number[] }) {
     return request<AdminCrawlResult>('/api/admin/score-lines/crawl', {
       method: 'POST',
@@ -180,41 +169,6 @@ export const adminApi = {
       `/api/admin/score-lines/crawl/queue/${encodeURIComponent(id)}`,
       { method: 'DELETE', auth: true }
     )
-  },
-  scoreLineReview(params: {
-    kind?: 'batch' | 'program'
-    province?: string
-    schoolId?: string
-    year?: number
-    page?: number
-  } = {}) {
-    return request<AdminReviewResponse>(
-      `/api/admin/score-lines/review${query({
-        kind: params.kind,
-        province: params.province,
-        schoolId: params.schoolId,
-        year: params.year ? String(params.year) : undefined,
-        page: params.page ? String(params.page) : undefined
-      })}`,
-      { auth: true }
-    )
-  },
-  scoreLineReviewCount(params: { province?: string; schoolId?: string; year?: number } = {}) {
-    return request<{ batches: number; programs: number; total: number }>(
-      `/api/admin/score-lines/review/count${query({
-        province: params.province,
-        schoolId: params.schoolId,
-        year: params.year ? String(params.year) : undefined
-      })}`,
-      { auth: true }
-    )
-  },
-  scoreLineReviewAction(body: AdminReviewActionInput) {
-    return request<{ ok: true; updated: number }>('/api/admin/score-lines/review', {
-      method: 'POST',
-      body,
-      auth: true
-    })
   },
   scoreLineSources(params: { exam?: string; province?: string; tier?: string } = {}) {
     return request<{ sources: ScoreLineSource[] }>(
