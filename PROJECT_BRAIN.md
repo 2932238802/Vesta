@@ -125,8 +125,8 @@
 
 | 日期 | CR/T | 改了什么 | 影响模块 | 报告 |
 |---|---|---|---|---|
-| 2026-11-27 | CR-005 | 分数线前端只留查询（删副标题 + 三按钮 / 覆盖看板）；后端手动 crawl/sources/coverage 接口下线（404）；新增吉林两校服务器导入脚本（dry-run / `--write` / 备份 / 幂等），版本 v2.09 | 分数线 / 前端 / 运维脚本 | `LosAngelousDocs/reports/dev-2026-11-27-CR-005-前端去人工抓取.md`（G2 完成，待 Review） |
-| 2026-11-27 | CR-004 | 吉林校级线试点：`school-admit@1`、两校校级源、program 批次最低分、专科提示 | 分数线 / 抓取 / 前端 | `LosAngelousDocs/reports/meta-2026-11-27-CR-004-吉林校级线试点.md`（G4 待审，`0ee4fe7`） |
+| 2026-11-27 | CR-005 | 分数线前端只留查询（删副标题 + 三按钮 / 覆盖看板）；后端手动 crawl/sources/coverage 接口下线（404）；新增吉林两校服务器导入脚本（dry-run / `--write` / 备份 / 幂等），版本 v2.09 | 分数线 / 前端 / 运维脚本 | `LosAngelousDocs/reports/meta-2026-11-27-CR-005-前端去人工抓取.md`（G4 通过，`6ae6f9a`） |
+| 2026-11-27 | CR-004 | 吉林校级线试点：`school-admit@1`、两校校级源、program 批次最低分、专科提示 | 分数线 / 抓取 / 前端 | `LosAngelousDocs/reports/meta-2026-11-27-CR-004-吉林校级线试点.md`（G4 通过，`0ee4fe7`） |
 | 2026-11-26 | CR-002 | 分数线按 confidence 自动收录；移除复核 / 人工导入；计划唯一键补 major_name；国家线 A/B 区校验 | 分数线 / 后台 / 数据库 | `LosAngelousDocs/reports/meta-2026-11-26-CR-002-分数线自动收录.md`（G4 有条件通过，`fdf0acf`） |
 | 2026-11-26 | CR-001 | 移除 `zxg/` 126 份真实咨询稿入库；`.gitignore` 拦截；版本同步 v2.05 | 隐私 / 文档 / 版本 | `LosAngelousDocs/reports/doc-2026-11-26-CR-001-移除咨询稿入库.md` |
 | 2026-11-26 | 初始化 | 接入 LosSKILL 工作流：`LosAngelousDocs/`、`PROJECT_BRAIN.md`、`WORKLOG.md`、`AUTHORIZATIONS.md` | 流程 / 文档 | `LosAngelousDocs/reports/doc-2026-11-26-工作流初始化.md` |
