@@ -16,7 +16,7 @@
 - 进行中任务：T-015 ~ T-017（CR-003）完成
 - 阻塞：无
 - 文档根：`LosAngelousDocs/`（工作流 + 产品口径）；原 `docs/` 已移出工作区（备份 `_vesta-backups/docs-20261126-2010`）
-- 基线：2026-11-27 `npm run verify` EXIT=0；CR-004 已提交 `0ee4fe7`
+- 基线：2026-11-27 `npm run verify` EXIT=0；CR-004 `0ee4fe7`、CR-003 `2ace46b` 已提交
 - 排队：无
 - 下一步：Review 评审 CR-003（docs 删除 + check-docs/check-version 迁移）；发布走 `bash update.sh`
 - 最近报告：`LosAngelousDocs/reports/dev-2026-11-27-CR-003-删除docs.md`；`LosAngelousDocs/reports/meta-2026-11-27-CR-004-吉林校级线试点.md`（G4 通过）
