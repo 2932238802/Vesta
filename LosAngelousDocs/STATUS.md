@@ -18,5 +18,5 @@
 - 文档根：`LosAngelousDocs/`（工作流 + 产品口径）；原 `docs/` 已移出工作区（备份 `_vesta-backups/docs-20261126-2010`）
 - 基线：2026-11-27 `npm run verify` EXIT=0（含 `check:import-jilin`）；CR-005 `6ae6f9a`、CR-004 `0ee4fe7`、CR-003 `2ace46b` 已提交
 - 排队：无
-- 下一步：推送 CR-005 + CR-003 G4 报告，等 CI success；Meta 做 CR-005 G4 总审；发布走 `bash update.sh`
+- 下一步：发布走 `bash update.sh`；上线后先 `npx tsx scripts/import-jilin-school-lines.ts` dry-run，再 `--write`
 - 最近报告：`LosAngelousDocs/reports/meta-2026-11-27-CR-005-前端去人工抓取.md`（G4 通过）
