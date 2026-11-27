@@ -97,7 +97,29 @@
 - 选项：A. 直接删除并改引用（用户已选）；B. 先迁移再删除（未选）；C. 保留 docs/ 不动（未选）。
 - 推荐：A。
 - 关联需求/任务：R-003；T-015 ~ T-017。
-- 状态：G1 已确认（用户 2026-11-26 明确要求删除 docs/）；G2 Dev 自检完成，待 Review（2026-11-27）
+- 状态：G4 通过（2026-11-27）；待提交 G4 收尾/A2 记账
+
+### CR-005 前端去人工抓取 + 吉林两校服务器导入脚本
+
+- 类型：交互简化 / 运维脚本
+- 问题与价值：分数线页面顶部有说明性副标题；前端还有「抓取队列 / 覆盖看板 / 立即抓取本省」三个手动入口。用户要求前端只做查询，抓取与导入全部在服务器后台/脚本完成；吉林省两校数据用服务器脚本导入。
+- 目标用户与场景：咨询师打开分数线页面只查询；运维在服务器执行脚本导入吉林数据，不再通过前端点按钮抓取。
+- 成功指标：页面无顶部副标题、无三个按钮；手动抓取/来源/覆盖接口返回 404；`scripts/import-jilin-school-lines.ts` 默认 dry-run、`--write` 落库并可重复执行；`npm run verify` EXIT=0。
+- 范围：
+  - 删除 `ScoreLines.vue` 顶部副标题（只删这一处说明；筛选栏/空状态提示保留）。
+  - 删除「抓取队列」「覆盖看板」「立即抓取本省」三个按钮及相关弹窗、状态、轮询、队列/取消函数、`CoverageView.vue` 组件引用。
+  - 删除后端手动入口：`POST /score-lines/crawl`、`GET /crawl/queue`、`GET /crawl/runs/:id`、`DELETE /crawl/queue/:id`、`GET/POST /score-lines/sources`、`GET /score-lines/coverage`；删除 `score-lines-crawl.ts` 挂载/文件。保留内部调度器 `startScorelineScheduler` / `enqueueCrawl` / `runNext` 与 `scoreline_sources` 种子。
+  - 清理前端 API 方法与类型（crawl queue/run/cancel/sources/coverage）与无用组件。
+  - 新增 `scripts/import-jilin-school-lines.ts`：默认 dry-run，`--write` 才落库；拉取长春工程学院 / 长春师范大学官方页，解析专业行，upsert `school_programs` + `scope='program'` 批次，刷新覆盖；写入前 `VACUUM INTO` 备份；失败明确报错，不写伪数据。
+  - 版本 v2.09；文档/STATUS/CHANGELOG 同步。
+- 非目标：移除后台自动抓取调度器；移除查询返回的 coverage 摘要字段；改解析器规则；恢复人工导入；删除 `docs/`（已完成 CR-003）；其他省校级源。
+- NFR：无新依赖；脚本幂等；备份；日志不记正文/敏感信息；前端无死代码。
+- 约束与依赖：`schools` 必须已有两校；没有时脚本失败并提示先导入院校名单；官方页可能 WAF/改版，失败要可操作。
+- 风险与未知：删覆盖看板后运营看不到覆盖分布（用户接受）；删手动 crawl 接口后只能靠调度器/脚本；脚本依赖外网与页面结构。
+- 选项：A. 三按钮全删 + 后端接口全删 + 两校脚本（用户已选）；B. 保留覆盖看板；C. 只删立即抓取；D. 只做脚本（均未选）。
+- 推荐：A。
+- 关联需求/任务：R-005；T-018 ~ T-021。
+- 状态：G3 有条件通过（2026-11-27）；P2/P3 返工完成待复审
 
 ## 假设与待确认
 

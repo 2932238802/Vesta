@@ -1,7 +1,7 @@
 # Vesta — 项目大脑
 
 > 所有 Agent 开工第 0 步读本文件；只读与任务相关的模块卡，不要通读全仓库。
-> 状态：L2（2026-11-26 初始化；`npm run verify` EXIT=0）
+> 状态：L2（2026-11-26 初始化；2026-11-27 v2.09 `npm run verify` EXIT=0）
 > 维护：稳定事实由 Doc 更新；增量由 Steward 在 G2.5 合并；代码级细节不写进来。
 
 ## 1. 一分钟地图
@@ -53,12 +53,12 @@
 - [ ] **文件规模**：单 `.ts` / `.vue` 600 行软线、800 行硬线；新文件 ≤400 行；基线只能下调。
 - [ ] **版本两处同步**：根 `package.json`（唯一事实源）↔ `LosAngelousDocs/STATUS.md`「当前产品版本」；`LosAngelousDocs/CHANGELOG.md` 记用户可见变化；`npm run check:version` 把关。
 - [ ] **单实例假设**：报告队列、咨询生成任务、抓取队列、限流计数都在进程内存；重启清空，数据库是唯一持久真相。
-- [ ] **分数线自动收录**：抓取按 `confidence >= 0.70` 自动 approved、`<0.70` rejected；同一 checksum 重抓不改变状态；低置信度新内容不覆盖已有 approved；后台不再有人工复核 / 人工导入入口。
+- [ ] **分数线自动收录**：抓取按 `confidence >= 0.70` 自动 approved、`<0.70` rejected；同一 checksum 重抓不改变状态；低置信度新内容不覆盖已有 approved；后台不再有人工复核 / 人工导入入口，自 v2.09 起也不再有人工抓取入口（只有内部调度器与服务器脚本）。
 - [ ] **部署只走 update.sh**：服务器上不直接改代码；L1–L5 必须全过，前端产物默认来自 GitHub Release `dist`。
 
 ## 4. 契约
 
-- 接口分组：`/api/health`、`/api/invite/*`、`/api/report/*`、`/api/events`（公开）；`/api/admin/*`（登录后统一鉴权）；`/api/admin/consult/*`（咨询）。
+- 接口分组：`/api/health`、`/api/invite/*`、`/api/report/*`、`/api/events`（公开）；`/api/admin/*`（登录后统一鉴权）；`/api/admin/consult/*`（咨询）。分数线后台只保留院校 / 专业 / 查询 / facets；手动 crawl、sources、coverage 接口自 v2.09 下线（404），抓取由内部调度器与 `scripts/import-jilin-school-lines.ts` 承担。
 - 数据模型：单文件 SQLite，`server/src/db/schema.ts` 为建表事实源；启动迁移必须可重复执行、兼容存量库。明细见 `LosAngelousDocs/03-design.md` 与 `server/src/db/schema.ts`（原 `docs/` 说明已移出，备份可查）。
 - 报告模式：`submissions.report_mode` 在提交时固化（`score` 旧版 / `doc` 全文 AI）；列表与导出不再解析问卷 JSON。
 - AI 队列：`server/src/ai/report-queue.ts`，`REPORT_CONCURRENCY = 2`，最多 4 次尝试，启动扫描 `pending/running` 续跑。
@@ -76,6 +76,8 @@
 | 问卷 / 跳题 | `npm run check:question` | 2026-11-26 |
 | 日期 / 期次 | `npm run check:dates` | 2026-11-26 |
 | 分数线 | `npm run check:score` + `npm run check:scoreline` | 2026-11-26（CR-002 新增） |
+| 吉林两校导入 | `npm run check:import-jilin`（隔离 `DATA_DIR` + 本地 fixture） | 2026-11-27（CR-005 新增） |
+| 吉林两校脚本（服务器） | `npx tsx scripts/import-jilin-school-lines.ts` dry-run；`--write` 落库（要求 DB 已初始化且两校存在；写前备份，全量未变不备份，幂等） | 2026-11-27 |
 | AI 报告审计 | `npm run check:audit` | 2026-11-26 |
 | 部署脚本 | `bash -n update.sh` + `npm run verify`；CI 产物做本地夹具验证（原部署文档已移出，见备份） | 2026-11-26 |
 | 页面手工走查 | `npm run dev` + playwright MCP，`http://127.0.0.1:5173` | 每次前端交付 |
@@ -100,6 +102,7 @@
 | 问卷 / 跳题 / 兜底 | `shared/src/question.cases.ts` | `npm run check:question` |
 | 日期 / 期次 | `shared/src/date.cases.ts`、`shared/src/cycle.cases.ts` | `npm run check:dates` |
 | 分数线输入 / 解析 | `shared/src/score-line.cases.ts`、`server/src/score-lines/parsers/cases.ts`、`server/src/score-lines/school-admit.cases.ts` | `npm run check:score` / `check:scoreline` |
+| 吉林两校导入脚本 | `server/src/score-lines/school-import.cases.ts` | `npm run check:import-jilin` |
 | AI 报告审计 / 清洗 | `server/src/ai/doc-audit.cases.ts` | `npm run check:audit` |
 | 博查检索判定 | `server/src/ai/doc-search.cases.ts` | `npm run check:search` |
 | 名单分组 | `server/src/routes/admin/roster-group-id.cases.ts` | `npm run check:roster` |
@@ -122,6 +125,7 @@
 
 | 日期 | CR/T | 改了什么 | 影响模块 | 报告 |
 |---|---|---|---|---|
+| 2026-11-27 | CR-005 | 分数线前端只留查询（删副标题 + 三按钮 / 覆盖看板）；后端手动 crawl/sources/coverage 接口下线（404）；新增吉林两校服务器导入脚本（dry-run / `--write` / 备份 / 幂等），版本 v2.09 | 分数线 / 前端 / 运维脚本 | `LosAngelousDocs/reports/dev-2026-11-27-CR-005-前端去人工抓取.md`（G2 完成，待 Review） |
 | 2026-11-27 | CR-004 | 吉林校级线试点：`school-admit@1`、两校校级源、program 批次最低分、专科提示 | 分数线 / 抓取 / 前端 | `LosAngelousDocs/reports/meta-2026-11-27-CR-004-吉林校级线试点.md`（G4 待审，`0ee4fe7`） |
 | 2026-11-26 | CR-002 | 分数线按 confidence 自动收录；移除复核 / 人工导入；计划唯一键补 major_name；国家线 A/B 区校验 | 分数线 / 后台 / 数据库 | `LosAngelousDocs/reports/meta-2026-11-26-CR-002-分数线自动收录.md`（G4 有条件通过，`fdf0acf`） |
 | 2026-11-26 | CR-001 | 移除 `zxg/` 126 份真实咨询稿入库；`.gitignore` 拦截；版本同步 v2.05 | 隐私 / 文档 / 版本 | `LosAngelousDocs/reports/doc-2026-11-26-CR-001-移除咨询稿入库.md` |

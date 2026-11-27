@@ -3,20 +3,20 @@
 > 维护者：Doc Agent ｜ 最近更新：2026-11-27
 > 本文件只写「现在」；历史看 `WORKLOG.md`，架构看 `PROJECT_BRAIN.md`。
 
-- 当前产品版本：v2.08（`package.json` 2.8.0）；CR-003 G2 Dev 自检完成
-- 当前 CR：CR-003 删除 docs/ 并迁移版本/文档守卫
-- 当前门禁：G2（CR-003 Dev 自检完成，待 Review）
-- G1 已确认：是（CR-003 用户明确要求删除 docs/）
+- 当前产品版本：v2.09（`package.json` 2.9.0）；CR-005 G3 有条件通过，P2/P3 返工完成待复审
+- 当前 CR：CR-005 前端去人工抓取 + 吉林两校服务器导入
+- 当前门禁：G3 复审（P2 院校缺失不再初始化数据库已修复）
+- G1 已确认：是（CR-005 用户 2026-11-27 确认三按钮全删 / 接口一起删 / 两校 dry-run+write / 只删顶部副标题）
 - 通道：完整
 - 并行组：无
 - 记录根：项目根
-- G3 已接受：是（CR-004 Review 最终确认通过，AUTH-20261127-001）
+- G3 已接受：CR-004 是（AUTH-20261127-001）；CR-005 有条件通过（仅待 P2 复审与 CI）
 - G3.5 豁免：是（CR-003 docs/流程变更，无业务模块交互）
-- G4 结果：CR-004 通过（2026-11-27）；CR-003 待总审；CR-002 有条件通过已收尾
-- 进行中任务：T-015 ~ T-017（CR-003）完成
+- G4 结果：CR-004 通过；CR-003 通过（2026-11-27，A2 `AUTH-20261127-003` 已补记）；CR-002 有条件通过已收尾
+- 进行中任务：T-018 ~ T-021（CR-005）DONE
 - 阻塞：无
 - 文档根：`LosAngelousDocs/`（工作流 + 产品口径）；原 `docs/` 已移出工作区（备份 `_vesta-backups/docs-20261126-2010`）
-- 基线：2026-11-27 `npm run verify` EXIT=0；CR-004 `0ee4fe7`、CR-003 `2ace46b` 已提交
+- 基线：2026-11-27 `npm run verify` EXIT=0（含新增 `check:import-jilin`）；CR-004 `0ee4fe7`、CR-003 `2ace46b` 已提交
 - 排队：无
-- 下一步：Review 评审 CR-003（docs 删除 + check-docs/check-version 迁移）；发布走 `bash update.sh`
-- 最近报告：`LosAngelousDocs/reports/dev-2026-11-27-CR-003-删除docs.md`；`LosAngelousDocs/reports/meta-2026-11-27-CR-004-吉林校级线试点.md`（G4 通过）
+- 下一步：CR-005 P2/P3 复审（G3）→ 通过后 commit（A1c）→ Steward push 触发 CI → G4
+- 最近报告：`LosAngelousDocs/reports/dev-2026-11-27-CR-005-前端去人工抓取-返工.md`；`LosAngelousDocs/reports/review-2026-11-27-CR-005-前端去人工抓取.md`

@@ -9,18 +9,12 @@ import type {
   Overview
 } from './types'
 import type {
-  AdminCoverageResponse,
-  AdminCrawlQueueResponse,
-  AdminCrawlResult,
-  AdminCrawlRunDetail,
-  AdminScoreLineSourceInput,
   ReportPayload,
   ReportTemplate,
   SchoolProgram,
   SchoolSearchItem,
   ScoreLineFacets,
   ScoreLineQueryResult,
-  ScoreLineSource,
   Survey
 } from './types'
 import { ApiError, getToken, query, request } from './request'
@@ -129,63 +123,6 @@ export const adminApi = {
       })}`,
       { auth: true }
     )
-  },
-  scoreLineCoverage(params: {
-    exam: string
-    year: number
-    province?: string
-    status?: string
-    page?: number
-  }) {
-    return request<AdminCoverageResponse>(
-      `/api/admin/score-lines/coverage${query({
-        exam: params.exam,
-        year: String(params.year),
-        province: params.province,
-        status: params.status,
-        page: params.page ? String(params.page) : undefined
-      })}`,
-      { auth: true }
-    )
-  },
-  scoreLineCrawl(body: { province: string; years?: number[] }) {
-    return request<AdminCrawlResult>('/api/admin/score-lines/crawl', {
-      method: 'POST',
-      body,
-      auth: true
-    })
-  },
-  scoreLineCrawlQueue() {
-    return request<AdminCrawlQueueResponse>('/api/admin/score-lines/crawl/queue', { auth: true })
-  },
-  scoreLineCrawlRun(id: string) {
-    return request<AdminCrawlRunDetail>(
-      `/api/admin/score-lines/crawl/runs/${encodeURIComponent(id)}`,
-      { auth: true }
-    )
-  },
-  cancelScoreLineCrawl(id: string) {
-    return request<{ ok: true }>(
-      `/api/admin/score-lines/crawl/queue/${encodeURIComponent(id)}`,
-      { method: 'DELETE', auth: true }
-    )
-  },
-  scoreLineSources(params: { exam?: string; province?: string; tier?: string } = {}) {
-    return request<{ sources: ScoreLineSource[] }>(
-      `/api/admin/score-lines/sources${query({
-        exam: params.exam,
-        province: params.province,
-        tier: params.tier
-      })}`,
-      { auth: true }
-    )
-  },
-  saveScoreLineSource(body: AdminScoreLineSourceInput) {
-    return request<{ source: ScoreLineSource }>('/api/admin/score-lines/sources', {
-      method: 'POST',
-      body,
-      auth: true
-    })
   },
   createInvites(body: {
     names?: string[]

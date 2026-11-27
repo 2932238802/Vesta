@@ -1,5 +1,4 @@
 import type { Survey } from '@shared/types'
-import type { CoverageItem, CoverageStatus, CrawlRun, ExamType } from '@shared/score-line'
 
 export type { Answers, Question, ReportPayload, ReportResponse, ReportTemplate, Survey } from '@shared/types'
 export type {
@@ -66,11 +65,7 @@ export type {
   KnowledgeMajorInput
 } from '@shared/knowledge'
 export type {
-  CoverageInfo,
-  CoverageItem,
   CoverageStatus,
-  CrawlRun,
-  CrawlStatus,
   ExamSubject,
   ExamType,
   MinimumPoint,
@@ -90,60 +85,6 @@ export type {
   ScoreLineSource
 } from '@shared/score-line'
 export type { DimensionFacetOption, ScoreLineFacets } from '@shared/score-line-dimension'
-
-export interface AdminCoverageResponse {
-  summary: Record<CoverageStatus, number>
-  items: CoverageItem[]
-  total: number
-  page: number
-  pageSize: number
-}
-
-export interface AdminCrawlResult {
-  runId: string
-  status: string
-  province: string
-  position: number
-  existing: boolean
-}
-
-export interface AdminCrawlQueueResponse {
-  running: CrawlRun | null
-  queue: (CrawlRun & { position: number })[]
-}
-
-export interface AdminCrawlRunDetail {
-  run: CrawlRun
-  documents: {
-    id: string
-    url: string
-    http_status: number
-    content_type: string
-    parse_status: string
-    error: string
-    note: string
-    shape: string
-    fetched_at: string
-  }[]
-}
-
-export interface AdminScoreLineSourceInput {
-  id?: string
-  name: string
-  publisher?: string
-  url: string
-  entryUrl?: string
-  exam: ExamType
-  province?: string
-  schoolId?: string
-  parserId?: string
-  tier?: string
-  intervalHours?: number
-  discoverDepth?: number
-  urlInclude?: string
-  verified?: boolean
-  enabled?: boolean
-}
 
 export interface InvitePayload {
   name: string

@@ -2,7 +2,7 @@
 
 > 注：v2.08 起 `docs/` 已移出工作区；本文件历史条目中的 `docs/reference` 链接仅作历史，备份在 `_vesta-backups/docs-20261126-2010`。
 
-> 维护者：Doc Agent ｜ 状态：CR-003 G2 完成，待 G3 复审（CR-004 G4 已通过） ｜ 最近更新：2026-11-26
+> 维护者：Doc Agent ｜ 状态：CR-005 G3 有条件通过（P2 修复中；CR-003/CR-004 G4 已通过） ｜ 最近更新：2026-11-26
 > 需求变更只升版（`R-xxx v2`），旧版内容保留在「变更历史」，不覆盖。
 
 ### R-001 仓库不再携带真实咨询稿（优先级 P0，版本 v1）
@@ -79,3 +79,20 @@
   - AC-003-6 不改业务代码行为、不新增依赖、不删除 Git 历史、不触碰 `data/`/`.env`/`zxg`。
 - 不在范围内：重写 Git 历史；把 docs 内容迁入 LosAngelousDocs；恢复问卷设计覆盖守卫（已随 docs 删除）。
 - 变更历史：v1 2026-11-27 初始（用户此前已确认直接删除）
+
+### R-005 前端只保留查询，移除人工抓取入口与说明副标题；吉林两校服务器导入（优先级 P1，版本 v1）
+
+- 来源：CR-005
+- 背景：前端仍有三个手动入口和顶部说明；用户要求抓取/导入全部在后台，吉林数据用服务器脚本导入。
+- 描述：删除顶部副标题；删除三个按钮及相关弹窗/组件/API；删除后端手动 crawl/sources/coverage 接口；新增两校导入脚本（默认 dry-run，`--write` 落库，写前备份）。
+- 成功指标：页面上只剩筛选与查询；手动接口 404；脚本可 dry-run/write、幂等；verify/CI 绿。
+- 验收标准：
+  - AC-005-1 `ScoreLines.vue` 顶部副标题删除；筛选栏与空状态的必要提示保留；页面标题/查询功能不变。
+  - AC-005-2 页面无「抓取队列」「覆盖看板」「立即抓取本省」按钮；`CoverageView.vue` 及相关 modal/状态/轮询/队列函数移除；`web/src` 无残留引用；build/typecheck 通过。
+  - AC-005-3 后端 `POST /score-lines/crawl`、`/crawl/queue` GET/DELETE、`/crawl/runs/:id`、`/score-lines/sources` GET/POST、`/score-lines/coverage` 均 404；内部 `startScorelineScheduler` / `enqueueCrawl` / `runNext` 与种子保留，自动调度仍可用。
+  - AC-005-4 前端 API 方法与类型清理；无未使用 import；`npm run check:size` / typecheck 通过。
+  - AC-005-5 新增 `scripts/import-jilin-school-lines.ts`：默认 dry-run 打印两校解析行数/字段；`--write` 先 `VACUUM INTO` 备份，再 upsert `school_programs` + program 批次、刷新覆盖；重复执行幂等、approved 不降级；学校缺失或页面失败时退出非 0 且不写库。
+  - AC-005-6 脚本在隔离 `DATA_DIR` 下用两校官方页面（或本地 HTTP fixture）验证：长春工程学院 2 条、长春师范大学 10 条；写入后查询可见；dry-run 不写库。
+  - AC-005-7 `npm run verify` EXIT=0；CI success；版本 v2.09；文档/STATUS/CHANGELOG 同步。
+- 不在范围内：后台调度器删除；查询返回的 coverage 摘要；解析器规则；人工导入恢复；其他省。
+- 变更历史：v1 2026-11-27 初始（G0 已确认）

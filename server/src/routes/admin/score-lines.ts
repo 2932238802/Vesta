@@ -3,18 +3,13 @@ import type { ExamType } from '../../../../shared/src/score-line'
 import { isExamType } from '../../../../shared/src/score-line'
 import { noStore } from '../../auth'
 import { log } from '../../log'
-import { listCoverage } from '../../score-lines/coverage'
 import { scoreLineFacets } from '../../score-lines/facets'
 import { getProgram, listPrograms } from '../../score-lines/program-store'
 import { queryScoreLines } from '../../score-lines/query'
 import { getSchool, listSchools } from '../../score-lines/store'
 import { clampString } from '../../util'
-import { scoreLineCrawlRouter } from './score-lines-crawl'
 
 export const scoreLinesRouter = Router()
-
-// 抓取的具体路径先挂，避免被院校/查询路由吞掉。
-scoreLinesRouter.use(scoreLineCrawlRouter)
 
 function examOf(value: unknown): ExamType | null {
   const raw = clampString(value, 20)
@@ -136,23 +131,4 @@ scoreLinesRouter.get('/score-lines/facets', (req, res) => {
     trackCount: facets.track.length
   })
   res.json(facets)
-})
-
-scoreLinesRouter.get('/score-lines/coverage', (req, res) => {
-  noStore(res)
-  const exam = examOf(req.query.exam)
-  const year = yearOf(req.query.year) ?? new Date().getFullYear()
-  if (!exam) {
-    res.status(400).json({ error: '请选择考试类型' })
-    return
-  }
-  res.json(
-    listCoverage({
-      exam,
-      year,
-      province: clampString(req.query.province, 20),
-      status: clampString(req.query.status, 20),
-      page: Number(clampString(req.query.page, 6)) || 1
-    })
-  )
 })

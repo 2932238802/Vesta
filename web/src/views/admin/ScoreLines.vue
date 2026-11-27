@@ -1,22 +1,6 @@
 <template>
   <div class="score-page">
-    <AdminPageHeader
-      eyebrow="内部查询"
-      title="升学分数线查询"
-      subtitle="内部查询参考；主线永远显示，校线 / 专业线在选院校后叠加。抓取数据按置信度自动收录，无需人工复核。"
-    >
-      <template #actions>
-        <span v-if="crawlHint" class="quiet tiny">{{ crawlHint }}</span>
-        <button class="btn ghost" type="button" @click="queueOpen = true">抓取队列</button>
-        <button class="btn ghost" type="button" @click="coverageOpen = true">覆盖看板</button>
-        <button
-          class="btn"
-          type="button"
-          :disabled="!filters.province || crawling"
-          @click="triggerCrawl"
-        >{{ crawling ? '抓取中…' : '立即抓取本省' }}</button>
-      </template>
-    </AdminPageHeader>
+    <AdminPageHeader eyebrow="内部查询" title="升学分数线查询" />
 
     <ScoreLineFilters
       v-model="filters"
@@ -165,27 +149,6 @@
       @close="programOpen = false"
       @select="selectProgram"
     />
-    <CoverageView
-      :open="coverageOpen"
-      :exam="filters.exam"
-      :year="filters.year"
-      :province="filters.province"
-      @close="coverageOpen = false"
-    />
-
-    <Modal :open="queueOpen" title="抓取队列" eyebrow="一次只抓一个省" @close="queueOpen = false">
-      <p v-if="!queue.running && !queue.queue.length" class="state-line">当前没有抓取任务。</p>
-      <template v-else>
-        <p v-if="queue.running" class="queue-line">
-          正在抓取：{{ queue.running.province }}
-          <span class="quiet tiny">（已保存 {{ queue.running.saved }} 条）</span>
-        </p>
-        <p v-for="item in queue.queue" :key="item.id" class="queue-line">
-          {{ item.position }}. {{ item.province }}
-          <button class="link-btn" type="button" @click="cancelQueued(item.id)">取消排队</button>
-        </p>
-      </template>
-    </Modal>
   </div>
 </template>
 
@@ -193,7 +156,6 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type {
-  AdminCrawlQueueResponse,
   CoverageStatus,
   SchoolProgram,
   SchoolSearchItem,
@@ -202,10 +164,8 @@ import type {
 } from '@/api'
 import { COVERAGE_LABELS } from '@shared/score-line'
 import AdminPageHeader from '@/components/AdminPageHeader.vue'
-import Modal from '@/components/Modal.vue'
 import { formatDate } from '@/format'
 import ChartCard from './score-lines/ChartCard.vue'
-import CoverageView from './score-lines/CoverageView.vue'
 import LineCard from './score-lines/LineCard.vue'
 import PlanTable from './score-lines/PlanTable.vue'
 import ProgramPicker from './score-lines/ProgramPicker.vue'
@@ -224,11 +184,6 @@ const querying = ref(false)
 const error = ref('')
 const schoolOpen = ref(false)
 const programOpen = ref(false)
-const coverageOpen = ref(false)
-const queueOpen = ref(false)
-const crawling = ref(false)
-const crawlHint = ref('')
-const queue = ref<AdminCrawlQueueResponse>({ running: null, queue: [] })
 let facetsSeq = 0
 
 const schoolList = computed(() =>
@@ -242,7 +197,7 @@ const isJuniorCollege = computed(() => result.value?.school?.level === '专科')
 const emptyMainText = computed(() =>
   result.value?.coverage.status === 'pending'
     ? '主线数据正在自动校验，暂不显示数字。'
-    : '主线未收录；可点右上角「立即抓取本省」补充。'
+    : '主线未收录。'
 )
 const emptySchoolText = '该校当年校线未收录；不拿主线或专业线冒充校线。'
 const emptyProgramText = '该专业当年专业线未收录；校线仍然保留。'
@@ -356,61 +311,6 @@ function selectProgram(program: SchoolProgram) {
   void search()
 }
 
-async function triggerCrawl() {
-  if (!filters.value.province || crawling.value) return
-  crawling.value = true
-  error.value = ''
-  try {
-    const started = await api.scoreLineCrawl({
-      province: filters.value.province,
-      years: [filters.value.year]
-    })
-    crawlHint.value = `已加入队列：${started.province}（第 ${started.position || 1} 位）`
-    await pollRun(started.runId)
-  } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : '触发抓取失败'
-  } finally {
-    crawling.value = false
-    void loadQueue()
-  }
-}
-
-async function pollRun(runId: string) {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    const detail = await api.scoreLineCrawlRun(runId)
-    if (!['queued', 'running'].includes(detail.run.status)) {
-      crawlHint.value =
-        detail.run.status === 'failed'
-          ? `抓取失败：${detail.run.message || '未知原因'}`
-          : detail.run.status === 'index'
-            ? '抓取完成：只发现索引页，没有可写库数据；请补栏目 URL 或调整解析器。'
-            : `抓取完成：保存 ${detail.run.saved} 条，失败 ${detail.run.failed} 条`
-      if (detail.run.status !== 'failed' && result.value) await search()
-      return
-    }
-    crawlHint.value = `正在抓取 ${detail.run.province}…（已保存 ${detail.run.saved}）`
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-  }
-  crawlHint.value = '抓取仍在进行，可稍后在「抓取队列」查看。'
-}
-
-async function loadQueue() {
-  try {
-    queue.value = await api.scoreLineCrawlQueue()
-  } catch {
-    // 队列读取失败不阻塞页面。
-  }
-}
-
-async function cancelQueued(id: string) {
-  try {
-    await api.cancelScoreLineCrawl(id)
-    await loadQueue()
-  } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : '取消失败'
-  }
-}
-
 watch(
   () => `${filters.value.exam}|${filters.value.year}|${filters.value.province}`,
   () => {
@@ -422,7 +322,6 @@ watch(
 )
 
 onMounted(() => {
-  void loadQueue()
   void loadFacets()
 })
 </script>
@@ -523,28 +422,6 @@ onMounted(() => {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-
-.queue-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 13.5px;
-}
-
-.queue-line:last-child {
-  border-bottom: 0;
-}
-
-.link-btn {
-  border: 0;
-  background: transparent;
-  color: var(--danger);
-  font-size: 12px;
-  cursor: pointer;
-  text-decoration: underline;
 }
 
 @media (max-width: 700px) {

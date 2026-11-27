@@ -2,7 +2,7 @@
 
 > 注：v2.08 起 `docs/` 已移出工作区；本文件历史条目中的 `docs/reference` 链接仅作历史，备份在 `_vesta-backups/docs-20261126-2010`。
 
-> 维护者：Doc 建任务；Dev 只更新状态与追溯矩阵 ｜ 状态：CR-003 G2 完成，待 G3 复审（CR-004 已提交） ｜ 最近更新：2026-11-26
+> 维护者：Doc 建任务；Dev 只更新状态与追溯矩阵 ｜ 状态：CR-005 G3 有条件通过，P2/P3 返工完成待复审 ｜ 最近更新：2026-11-27
 > 任务状态只用：TODO / DOING / DONE / BLOCKED / DROPPED
 
 ### T-001 备份并移除 zxg 追踪（状态：DONE）
@@ -284,3 +284,48 @@
 | AC-003-4 | grep 当前文档无必须存在的 docs/ 指针 | T-016 | 已验证 |
 | AC-003-5 | `npm run verify` EXIT=0；CI 由主会话推送后触发 | T-017 | 已验证（本地；CI 待触发） |
 | AC-003-6 | diff 无业务行为变化 | T-015~T-017 | 已验证 |
+
+## CR-005 任务
+
+### T-018 前端删副标题、三按钮与相关 UI（状态：DONE）
+
+- 来源：CR-005 / R-005（v1）
+- 关联需求：R-005 / AC-005-1、AC-005-2、AC-005-4
+- 目标：ScoreLines 顶部只留标题；删三个按钮、CoverageView/队列 modal、crawl/queue/coverage 状态与轮询；清理 API 方法与类型。
+- 验证：build/typecheck；Playwright 页面无按钮/副标题、查询可用。
+- 规模：M
+
+### T-019 后端删除手动 crawl/sources/coverage 接口（状态：DONE）
+
+- 来源：CR-005 / R-005（v1）
+- 关联需求：R-005 / AC-005-3
+- 目标：删除 `score-lines-crawl.ts` 挂载/文件与 `/score-lines/coverage` 路由；保留调度器/内部模块；旧接口 404。
+- 验证：临时服务 404 断言；调度器代码路径不变；verify。
+- 规模：M
+
+### T-020 吉林两校服务器导入脚本（状态：DONE）
+
+- 来源：CR-005 / R-005（v1）
+- 关联需求：R-005 / AC-005-5、AC-005-6
+- 目标：新增 `scripts/import-jilin-school-lines.ts`；dry-run/`--write`；两校官方页；upsert program/批次；VACUUM 备份；幂等；失败不写。
+- 验证：隔离 DATA_DIR + 官方页/fixture；dry-run 不写；write 后查询 244/240.51445096；重复写幂等。
+- 规模：M
+
+### T-021 文档、版本与验证（状态：DONE）
+
+- 来源：CR-005 / R-005（v1）
+- 关联需求：R-005 / AC-005-7
+- 目标：v2.09；STATUS/CHANGELOG/项目大脑；`npm run verify`；CI。
+- 规模：S
+
+## CR-005 AC ↔ 验证追溯矩阵
+
+| AC | 验证方式 | 对应任务 | 状态 |
+|---|---|---|---|
+| AC-005-1 | Playwright 无副标题；查询正常 | T-018 | 已验证（代码走查：`AdminPageHeader` 仅 title/eyebrow；查询 200） |
+| AC-005-2 | 页面无三按钮；grep 无组件引用；build | T-018 | 已验证（grep 0 引用；`CoverageView.vue` 已删；typecheck/build 通过） |
+| AC-005-3 | 临时服务旧接口全 404；调度器保留 | T-019 | 已验证（7 个旧接口全 404；query/facets 200；调度器与 `crawl.ts` 未改） |
+| AC-005-4 | typecheck/check:size | T-018 | 已验证（typecheck 通过；check:size 通过） |
+| AC-005-5 | 脚本 dry-run/write/备份/幂等 | T-020 | 已验证（dry-run 不建库；write 备份 12 条；二次 0 写 12 跳过且不新增备份；DB 不存在/院校缺失/403 均非 0 且不建库；失败路径无 vesta.db/-wal/-shm） |
+| AC-005-6 | 隔离 DATA_DIR 两校 2+10 行、查询可见 | T-020 | 已验证（`check:import-jilin` 2+10；240.5 / 240.51445096） |
+| AC-005-7 | verify + CI | T-021 | 已验证（本地 `npm run verify` EXIT=0；CI 由主会话推送后触发） |

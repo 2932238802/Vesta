@@ -1,16 +1,18 @@
 # CHANGELOG
 
-> 维护者：Dev ｜ 只写使用者能感知的变化 ｜ 状态：v2.08
+> 维护者：Dev ｜ 只写使用者能感知的变化 ｜ 状态：v2.09
 
 ## [未发布]
 
 ### 新增
 
+- （v2.09）服务器导入脚本 `scripts/import-jilin-school-lines.ts`：默认 dry-run 只抓取并打印长春工程学院 / 长春师范大学录取表，`--write` 才落库；写前自动 `VACUUM INTO` 备份，重复执行幂等，内容全部未变时不生成新备份；数据库不存在或院校未导入时直接失败且不创建 / 迁移数据库；支持 `--ccit-html` / `--ccsfu-html` 用本地另存页面绕过 WAF。
 - （v2.07）吉林校级线试点：新增长春工程学院、长春师范大学两条校级源与 `school-admit@1` 解析器，抓取官方专升本录取表后自动写入招生专业与专业最低投档分；咨询师选「院校 + 专业」即可看到最低分、计划 / 录取人数与来源。
 - 分数线抓取按置信度自动收录：`confidence >= 0.70` 的结果抓完即可查询，无需人工复核。
 
 ### 变更
 
+- （v2.09）分数线页面只保留查询：删除顶部说明副标题，以及「抓取队列」「覆盖看板」「立即抓取本省」三个手动入口；抓取与导入改由后台调度器和服务器脚本完成。
 - （v2.08）文档入口收敛：产品说明文档（原 `docs/`，158 个文件）移出工作区，仓库外备份在 `_vesta-backups/docs-20261126-2010`（含 SHA256 清单）；后续开工先读 `PROJECT_BRAIN.md`，需求 / 设计 / 任务在 `LosAngelousDocs/`。
 - （v2.08）`check:docs` 改为校验 AGENTS / CLAUDE / PROJECT_BRAIN / LosAngelousDocs 核心文件与关键指针；`check:version` 改以 `LosAngelousDocs/STATUS.md`「当前产品版本」为源，必须与 `package.json` 完全相等。原问卷设计覆盖守卫随 `docs/` 一并移除。
 - （v2.07）选专科院校查询时显示「该校为专科院校，不设专升本院校线；请选择接收本科院校」，不再只显示“未收录”。
@@ -33,6 +35,7 @@
 
 ### 移除
 
+- （v2.09）后台手动抓取 / 来源维护 / 覆盖查询接口下线，对应请求返回 404：`POST /api/admin/score-lines/crawl`、`GET /api/admin/score-lines/crawl/queue`、`GET /api/admin/score-lines/crawl/runs/:id`、`DELETE /api/admin/score-lines/crawl/queue/:id`、`GET/POST /api/admin/score-lines/sources`、`GET /api/admin/score-lines/coverage`。内部抓取调度器与自动收录不变。
 - 原 `docs/` 目录整体移出工作区（含 reference / archive / reports）；历史内容保留在仓库外备份 `_vesta-backups/docs-20261126-2010` 与 Git 历史，不再随仓库分发。
 - 后台「复核」队列与「人工导入」入口及其接口已下线（对应请求返回 404）；`scripts/scoreline-data.ts` 仅保留为运维装载脚本。
 - 真实学员咨询稿不再随仓库分发：`zxg/` 下 126 个文件已取消 Git 追踪并从工作区删除，`.gitignore` 增加 `/zxg/`；本地素材需自行保管（仓库外备份位于 `_vesta-backups/zxg-20261126-1815`）。
