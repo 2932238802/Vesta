@@ -38,7 +38,7 @@
 - **提交事务**：校验答案 → 计分 → 事务写 `submissions` + 邀请置 `submitted` → 出队。失败回滚，不留下半份答卷。
 - **AI 队列**：FIFO、并发 2、最多 4 次；启动扫描 `pending/running` 续跑；失败页只给学生可操作提示，内部 key 只进 `ai_error` 与日志。
 - **AI 审计**：数字 / 重复 / 跨模块矛盾 → 先反馈重写一次 → 仍不通过则清洗 + 放行并记 `ai_meta.audit.issues`；不阻断落库，不伪装模板。
-- **分数线复核**：抓取结果默认 `pending`；人工通过后 `approved` 才可查询；失败记 `failed` + 失败码。
+- **分数线自动收录**：抓取结果按 `confidence` 自动写入，`>= 0.70 → approved`、`< 0.70 → rejected`；同一内容重抓保留原状态，低置信度不覆盖旧 `approved`；不再人工复核 / 人工导入。v2.07 校级录取表（`school-admit@1`）先把专业 upsert 进 `school_programs`，再写 `scope='program'` 批次（最低分 `minimum_type='admit'`）。失败记 `failed` + 失败码。
 - **前端发布**：CI 构建 → Release 资产 → `update.sh` 校验 SHA256 与 `dist-info.commit` → 临时目录解压 → 原子替换 `web/dist` → 重启 → L4/L5 验证。
 
 ## 配置项

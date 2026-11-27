@@ -4,6 +4,7 @@ import { htmlCategoryParser } from './category-table'
 import { jsonParser } from './json'
 import { nationalLineParser } from './national-line'
 import { pdfTextParser } from './pdf'
+import { schoolAdmitParser } from './school-admit'
 import { xlsxParser } from './xlsx'
 import { yzTopicParser } from './yz-topic'
 
@@ -15,7 +16,8 @@ const registry = new Map<string, Parser>(
     pdfTextParser,
     jsonParser,
     yzTopicParser,
-    nationalLineParser
+    nationalLineParser,
+    schoolAdmitParser
   ].map((parser) => [parser.id, parser])
 )
 

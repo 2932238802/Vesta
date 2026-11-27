@@ -6,6 +6,8 @@ import {
 } from '../../../shared/src/score-line-region'
 import { db } from '../db/connection'
 import { newId, now } from '../db/core'
+import { log } from '../log'
+import { matchSchoolName } from './normalize'
 
 interface SourceRow {
   id: string
@@ -213,6 +215,25 @@ export function seedScorelineSources(): number {
        updated_at = excluded.updated_at`
   )
   let count = 0
+  // 校级源：school_id 由校名精确匹配 schools 表；找不到就跳过（不写空 school_id）。
+  const insertSchool = db.prepare(
+    `INSERT INTO scoreline_sources
+     (id, name, publisher, url, entry_url, exam, province, school_id, parser_id, tier,
+      interval_hours, discover_depth, url_include, verified, enabled, last_run_at, last_status,
+      last_error, created_at, updated_at)
+     VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, 0, '', 1, 1, '', '', '', ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       name = excluded.name, publisher = excluded.publisher, url = excluded.url,
+       exam = excluded.exam, province = excluded.province,
+       school_id = excluded.school_id, parser_id = excluded.parser_id, tier = excluded.tier,
+       interval_hours = excluded.interval_hours, discover_depth = excluded.discover_depth,
+       url_include = excluded.url_include,
+       -- 校级源：entry_url 以库内为准；verified 无条件保留库内值，
+       -- 管理员改成 false 后重启种子不能改回 1（首次插入仍为 1）。
+       entry_url = CASE WHEN scoreline_sources.entry_url = '' THEN excluded.entry_url ELSE scoreline_sources.entry_url END,
+       verified = scoreline_sources.verified,
+       updated_at = excluded.updated_at`
+  )
   for (const province of provinces) {
     const entry = provinceUpgradeEntry(province.name)
     insert.run(
@@ -262,5 +283,55 @@ export function seedScorelineSources(): number {
     at,
     at
   )
-  return count + 2
+  // 吉林校级线试点（CR-004）：每条源绑定接收本科院校的 school_id。
+  const schoolSources: {
+    id: string
+    name: string
+    publisher: string
+    url: string
+    schoolName: string
+  }[] = [
+    {
+      id: 'src_upgrade_school_ccit',
+      name: '长春工程学院专升本录取分数线',
+      publisher: '长春工程学院招生信息网',
+      url: 'https://zsb.ccit.edu.cn/info/1009/1931.htm',
+      schoolName: '长春工程学院'
+    },
+    {
+      id: 'src_upgrade_school_ccsfu',
+      name: '长春师范大学专升本录取分数线',
+      publisher: '长春师范大学招生网',
+      url: 'https://zhaosheng.ccsfu.edu.cn/info/1171/129250.htm',
+      schoolName: '长春师范大学'
+    }
+  ]
+  let schoolCount = 0
+  for (const source of schoolSources) {
+    const school = matchSchoolName(source.schoolName)
+    if (!school) {
+      // 学校主表还没导入时不写空 school_id，也不让种子插入半成品源。
+      log.warn('scoreline.school_source_skipped', {
+        sourceId: source.id,
+        schoolName: source.schoolName
+      })
+      continue
+    }
+    insertSchool.run(
+      source.id,
+      source.name,
+      source.publisher,
+      source.url,
+      'upgrade',
+      '吉林',
+      school.id,
+      'school-admit@1',
+      'T1',
+      24,
+      at,
+      at
+    )
+    schoolCount += 1
+  }
+  return count + 2 + schoolCount
 }

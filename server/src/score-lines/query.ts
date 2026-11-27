@@ -117,7 +117,11 @@ function buildLine(
   const picked = selection ? preferOnePerYear(batches, selection) : batches
   const byYear = new Map<number, ScoreLineMetric[]>()
   for (const batch of picked) {
-    const metrics = (batch.metrics ?? []).filter((metric) => metric.isMinimum === 0)
+    // 专业线本身就是「录取最低分」：把最低分指标纳入 programLine，页面卡片才不至于显示“未收录”；
+    // 趋势图 / 数据表仍把它们当最低分标记单独渲染（buildSeries 会跳过 isMinimum）。
+    const metrics = (batch.metrics ?? []).filter(
+      (metric) => metric.isMinimum === 0 || scope === 'program'
+    )
     if (metrics.length === 0) continue
     const list = byYear.get(batch.year) ?? []
     list.push(...metrics)
@@ -144,6 +148,8 @@ function buildSeries(
     if (!entry.line) continue
     for (const year of entry.line.years) {
       for (const metric of year.metrics) {
+        // 最低分只走 minimums（空心标记 / 单独行），不画成连续折线。
+        if (metric.isMinimum !== 0) continue
         const key = `${entry.lineType}:${metric.subjectCode}`
         let series = map.get(key)
         if (!series) {
@@ -290,8 +296,10 @@ export function queryScoreLines(input: QueryInput): ScoreLineQueryResult {
           region: '',
           schoolId: school.id,
           programId: program.id,
-          category: selection.category,
-          track: selection.track
+          // 专业线由 programId 唯一定位；category / track 属于主线维度，
+          // 校级录取表把「学制」写进 category，不能被用户选择的批次 / 科类过滤掉。
+          category: '',
+          track: ''
         })
       : []
   const allBatches = [...mainBatches, ...schoolBatches, ...programBatches]

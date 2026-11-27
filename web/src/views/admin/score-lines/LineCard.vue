@@ -11,7 +11,7 @@
 
     <div v-if="line && latest" class="metric-grid">
       <div v-for="metric in latest.metrics" :key="metric.subjectCode" class="metric">
-        <span class="metric-name">{{ metric.subjectName }}</span>
+        <span class="metric-name">{{ metricLabel(metric) }}</span>
         <span class="metric-value">
           {{ metric.value }}
           <span v-if="metric.fullScore" class="metric-full">/ {{ metric.fullScore }}</span>
@@ -29,8 +29,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { QueryLine } from '@/api'
-import { SCOPE_LABELS } from '@shared/score-line'
+import type { QueryLine, ScoreLineMetric } from '@/api'
+import { MINIMUM_TYPE_LABELS, SCOPE_LABELS } from '@shared/score-line'
 
 const props = defineProps<{
   line: QueryLine | null
@@ -50,6 +50,12 @@ const latest = computed(() => {
   if (!props.line?.years.length) return null
   return props.line.years[props.line.years.length - 1]
 })
+
+/** 专业线的指标是录取最低分，不能按学科名显示成「总分」。 */
+function metricLabel(metric: ScoreLineMetric): string {
+  if (props.kind !== 'program' || metric.isMinimum !== 1) return metric.subjectName
+  return MINIMUM_TYPE_LABELS[metric.minimumType as keyof typeof MINIMUM_TYPE_LABELS] ?? '录取最低分'
+}
 </script>
 
 <style scoped>

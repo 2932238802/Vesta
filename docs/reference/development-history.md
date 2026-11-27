@@ -6,6 +6,15 @@
 
 ## 本轮（2026-11-26）
 
+### 吉林校级线试点：接收本科院校的专升本专业最低分（2026-11-26，产品版本 v2.07，已实施）
+
+- 依据：`LosAngelousDocs/00-requirements-intake.md` CR-004、`01-requirements.md` R-004 / AC-004-1~8、`04-tasks.md` T-011~T-014；用户 2026-11-26 确认首批 2 所、最低分 + 人数/最高分备注。
+- **为什么要做**：当前只有省控线 / 国家线源，没有校级源；专科院校没有自己的专升本院校线，缺的是接收本科院校的专业投档最低分。CR-002 移除人工导入后，`school_programs` 没有新增通道。
+- **口径**：首批长春工程学院、长春师范大学官方招生页；`school-admit@1` 解析专业/学制/计划/录取/最高/最低；写 `school_programs` + `scope='program'` 批次；最低分作为 `admit` 最低分指标，最高分/人数写 note；官方页 confidence 0.9 自动 approved；专科院校显示“不设专升本院校线”。
+- **实施记录**：新增 `server/src/score-lines/parsers/school-admit.ts`（注册到 `parsers/index.ts`），识别两类官方表头，每专业输出一条 `ParsedBatch`（`scope='program'`、`category=学制`，附 `programName / programCode / degreeType / planCount / admitCount / maxScore`）；学制优先取表头「学制」列，否则从专业名末尾「（二年制）/（三年制）」提取并去掉后缀，同名专业按学制拆成不同 program；「总计 / 合计 / 共 N 个专业」汇总行跳过，不生成伪 program。`ParsedBatch` 补可选专业字段。`seedScorelineSources()` 按校名 `matchSchoolName()` 写入两条带 `school_id` 的吉林校级源（`src_upgrade_school_ccit` / `src_upgrade_school_ccsfu`，parser `school-admit@1`、T1、24h、verified），找不到学校跳过并 `scoreline.school_source_skipped` warning。`crawl.ts` 在归一化前对 program 行调用 `upsertProgram()` 回填 `programId`，再走 CR-002 自动收录。`query.ts` 让 program 线纳入最低分指标（`buildSeries` 跳过最低分，避免折线重复），`ScoreLines.vue` 对 `level='专科'` 显示说明并隐藏误导性的校线 / 专业线空卡。维度字典把「两年制 / 三年制」登记为已知 category，避免学制被当成认不出而把置信度压到阈值以下。
+- **验证**：`npm run check:score`；`npm run check:scoreline`（新增 `server/src/score-lines/school-admit.cases.ts`：两校 fixture 解析、unsupported_table、隔离 `DATA_DIR` 的 seed / 真实抓取 / 查询 / 幂等）；`npm run verify` 全绿。
+- **状态**：开发完成，待 G3 评审 / 用户验收；工作区改动未提交。
+
 ### 分数线自动收录：高置信度直接入库，移除人工复核与人工导入（2026-11-26，产品版本 v2.06，已实施）
 
 - 依据：`LosAngelousDocs/00-requirements-intake.md` CR-002、`01-requirements.md` R-002 / AC-002-1~10、`04-tasks.md` T-004~T-010；用户 2026-11-26 确认「复核 + 人工导入都去掉 / ≥0.70 / 低置信度拒绝隐藏 / 存量一次性自动通过」。

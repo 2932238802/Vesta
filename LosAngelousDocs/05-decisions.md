@@ -67,3 +67,15 @@
 - 结论：选 A。Vesta 旧 `docs/archive/YYYYMMDD/` 仍只承载产品历史文档，不属于工作流文档树；同时确认 `docs/` 整体保持不动（2026-11-26 用户确认），`reports/archive/` 只归档已完结 CR 的角色报告。
 - 影响：后续 CR 继续写 `LosAngelousDocs/00`–`05`；报告写 `reports/`；已完结报告归档 `reports/archive/`。若要把 `docs/` 迁入单文档根，需单独立 CR 并改 `check-docs` / `AGENTS` / `CLAUDE` / 所有引用，不能直接删除。
 - 可逆性：若以后要改按日归档，需先改文档契约与 `check-docs` 判定，再迁移。
+
+### D-007 校级录取表用「学制」作为 category，专业线最低分同时进入 programLine 与 minimums
+
+- 日期：2026-11-26（产品版本 v2.07）
+- 背景：CR-004 首批吉林两所本科院校的录取表按专业拆行，最低投档分是专业线；表内还带学制（两年 / 三年）。现有数据模型用 `scoreline_batches.category` 承载批次 / 学位类型，`minimums` 承载最低分。
+- 选项：
+  - A. `category=学制`（两年制 / 三年制），最低分指标照旧放 `minimums`，并让 program 线把最低分纳入 `programLine` 供卡片展示（用户 G1 口径，本次选择）。
+  - B. 学制写 note、category 留空；会丢失按学制区分同专业多行的能力。
+  - C. 新增学制维度字段；需要改表与查询契约，超出首批试点范围。
+- 结论：选 A。把「两年制 / 三年制」登记为 `UPGRADE_CATEGORIES` 的已知值，避免维度归一化把学制当「认不出」而降置信度到 0.70 以下；`buildLine('program')` 纳入最低分指标，`buildSeries` 仍跳过最低分，趋势图按空心标记渲染，不画重复折线。学制优先取表头「学制」列，否则从专业名末尾「（二年制）/（三年制）」提取并去掉后缀；「总计 / 合计 / 共 N 个专业」汇总行跳过。
+- 影响：`shared/src/score-line-dimension.ts`、`server/src/score-lines/query.ts`、`web/src/views/admin/ScoreLines.vue`；表结构不变。
+- 可逆性：容易回滚（恢复字典与 buildLine 过滤），已写入的 `category='两年制/三年制'` 数据保留。

@@ -49,6 +49,10 @@
           这个范围有 {{ result.coverage.pendingCount }} 条历史数据尚未通过自动校验，暂不显示数字。
         </p>
 
+        <p v-if="isJuniorCollege" class="card junior-notice">
+          该校为专科院校，不设专升本院校线；请选择接收本科院校。
+        </p>
+
         <div class="line-stack">
           <LineCard
             :line="result.main"
@@ -58,7 +62,7 @@
             :empty-text="emptyMainText"
           />
           <LineCard
-            v-if="result.school"
+            v-if="result.school && !isJuniorCollege"
             :line="result.schoolLine"
             kind="school"
             :title="`${result.school.name} · 校线`"
@@ -67,7 +71,7 @@
             :empty-text="emptySchoolText"
           />
           <LineCard
-            v-if="result.program"
+            v-if="result.program && !isJuniorCollege"
             :line="result.programLine"
             kind="program"
             :title="`${result.program.majorName} · 专业线`"
@@ -77,7 +81,7 @@
           />
         </div>
 
-        <p v-if="result.school && !result.program" class="select-hint">
+        <p v-if="result.school && !result.program && !isJuniorCollege" class="select-hint">
           已选院校；再选一个专业可以看专业线和招生计划。没有专业数据时校线仍保留。
         </p>
 
@@ -115,9 +119,9 @@
           </div>
         </section>
 
-        <ChartCard v-if="result.series.length" :result="result" />
+        <ChartCard v-if="result.series.length || result.minimums.length" :result="result" />
 
-        <section v-if="result.series.length" class="card table-card">
+        <section v-if="result.series.length || result.minimums.length" class="card table-card">
           <header class="table-head">
             <div>
               <p class="eyebrow">数据表</p>
@@ -233,6 +237,8 @@ const schoolList = computed(() =>
 const schoolSubtitle = computed(() =>
   result.value?.school ? [result.value.school.city, result.value.school.nature].filter(Boolean).join(' · ') : ''
 )
+// 专科院校没有自己的专升本院校线；选中时给出说明，不显示误导性的“未收录”。
+const isJuniorCollege = computed(() => result.value?.school?.level === '专科')
 const emptyMainText = computed(() =>
   result.value?.coverage.status === 'pending'
     ? '主线数据正在自动校验，暂不显示数字。'
@@ -443,6 +449,14 @@ onMounted(() => {
 .pending-badge {
   color: var(--amber);
   font-size: 12.5px;
+}
+
+.junior-notice {
+  padding: 14px 18px;
+  border-color: var(--amber);
+  background: #fbf5e9;
+  color: var(--ink-2);
+  font-size: 13px;
 }
 
 .line-stack {

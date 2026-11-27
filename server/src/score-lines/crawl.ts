@@ -15,6 +15,7 @@ import { followTarget, selectCandidates } from './discovery'
 import { mergeNotes, normalizeParsedBatch } from './normalize'
 import { parseContent } from './parsers'
 import type { ParsedBatch, ParserContext } from './parsers/types'
+import { upsertProgram } from './program-store'
 import { markSourceRun, sourcesForProvince } from './sources'
 import { anomalyIssues, batchValueIssues } from './validate'
 
@@ -257,7 +258,50 @@ async function processParsedBatches(
   for (const raw of batches) {
     stats.parsed += 1
     if (years.length && !years.includes(raw.year)) continue
-    const normalized = normalizeParsedBatch(raw, context)
+    let current = raw
+    // 校级录取表：先把专业 upsert 进 school_programs，再回填 programId 写 program 批次。
+    if (current.scope === 'program' && !current.programId && current.programName) {
+      const schoolId = current.schoolId || context.schoolId || ''
+      if (!schoolId) {
+        stats.failed += 1
+        stats.codes.push('parse')
+        stats.details.push(`未写库：专业 ${current.programName} 缺少院校`)
+        continue
+      }
+      // 先按占位 programId 归一化 / 校验，避免校验失败的批次先留下无批次的 approved program。
+      const probe = normalizeParsedBatch({ ...current, programId: '__pending_program__' }, context)
+      const probeIssues = probe.batch ? batchValueIssues(probe.batch) : []
+      if (!probe.batch || probeIssues.length) {
+        stats.failed += 1
+        stats.codes.push('parse')
+        stats.details.push(
+          `未写库：${[...probe.issues, ...probeIssues].join('；') || '专业批次校验未通过'}`
+        )
+        continue
+      }
+      try {
+        const program = upsertProgram({
+          schoolId,
+          year: current.year,
+          exam: current.exam,
+          province: current.province,
+          majorCode: current.programCode ?? '',
+          majorName: current.programName,
+          degreeType: current.degreeType ?? '',
+          studyMode: '',
+          planCount: current.planCount ?? null,
+          sourceUrl: current.sourceUrl,
+          reviewStatus: 'approved'
+        })
+        current = { ...current, programId: program.id }
+      } catch (error) {
+        stats.failed += 1
+        stats.codes.push('parse')
+        stats.details.push(`未写库：专业 ${current.programName} 入库失败（${(error as Error).message}）`)
+        continue
+      }
+    }
+    const normalized = normalizeParsedBatch(current, context)
     if (!normalized.batch) {
       stats.failed += 1
       stats.codes.push('parse')

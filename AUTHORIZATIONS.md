@@ -38,6 +38,36 @@ escalate_when:
 
 <!-- auth:rows -->
 
+## AUTH-20261127-001
+
+- 时间：2026-11-27 15:11:49 +0800
+- CR/T：CR-004 / T-011,T-012,T-013,T-014
+- 动作：commit
+- 级别：A1c
+- 策略条款：G1-envelope + G3 复审有条件通过
+- 证据：本复审报告 + npm run verify EXIT=0 + check:score/check:scoreline EXIT=0 + 两校官方页真实解析 2/10 + 隔离 DATA_DIR seed verified 复现 + UAT 报告
+- 批准：review-agent
+- 范围：D:/PROJECT/Vesta（CR-004 当前工作区，含 P2 返工2 与 UAT；不含 docs/ 删除）
+- 有效期：随 CR 结束
+- 撤销：否
+- 幂等键：CR-004:T-011~T-014:commit-recheck:A1c
+
+
+## AUTH-20261126-002
+
+- 时间：2026-11-26 21:17:20 +0800
+- CR/T：CR-004 / T-011,T-012,T-013,T-014
+- 动作：commit
+- 级别：A1c
+- 策略条款：G1-envelope + G3 有条件通过
+- 证据：本报告 + npm run verify EXIT=0 + check:score/check:scoreline EXIT=0 + 两校官方页真实解析 + 隔离 DATA_DIR 抓取/查询/幂等用例 + seed verified 复现脚本
+- 批准：review-agent
+- 范围：D:/PROJECT/Vesta（CR-004 工作区；不含 docs/ 删除）
+- 有效期：随 CR 结束
+- 撤销：否
+- 幂等键：CR-004:T-011~T-014:commit:A1c
+
+
 ## AUTH-20261126-001
 
 - 时间：2026-11-26 20:38:25 +0800

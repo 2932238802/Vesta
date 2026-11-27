@@ -43,6 +43,16 @@ export interface ParsedBatch {
   publishedAt?: string
   confidence?: number
   metrics: ParsedMetric[]
+  /**
+   * 校级录取表解析出的专业信息；抓取器据此 upsert `school_programs` 并回填 `programId`。
+   * 其它解析器不填，保持既有行为。
+   */
+  programName?: string
+  programCode?: string
+  degreeType?: string
+  planCount?: number | null
+  admitCount?: number | null
+  maxScore?: number | null
 }
 
 export type ParserFailureCode =
