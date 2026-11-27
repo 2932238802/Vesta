@@ -1,6 +1,6 @@
 # CHANGELOG
 
-> 维护者：Dev ｜ 只写使用者能感知的变化 ｜ 状态：v2.07
+> 维护者：Dev ｜ 只写使用者能感知的变化 ｜ 状态：v2.08
 
 ## [未发布]
 
@@ -11,6 +11,8 @@
 
 ### 变更
 
+- （v2.08）文档入口收敛：产品说明文档（原 `docs/`，158 个文件）移出工作区，仓库外备份在 `_vesta-backups/docs-20261126-2010`（含 SHA256 清单）；后续开工先读 `PROJECT_BRAIN.md`，需求 / 设计 / 任务在 `LosAngelousDocs/`。
+- （v2.08）`check:docs` 改为校验 AGENTS / CLAUDE / PROJECT_BRAIN / LosAngelousDocs 核心文件与关键指针；`check:version` 改以 `LosAngelousDocs/STATUS.md`「当前产品版本」为源，必须与 `package.json` 完全相等。原问卷设计覆盖守卫随 `docs/` 一并移除。
 - （v2.07）选专科院校查询时显示「该校为专科院校，不设专升本院校线；请选择接收本科院校」，不再只显示“未收录”。
 - （v2.07）产品版本升至 `2.7.0`（v2.07）；`docs/reference/` 版本快照同步到 2.7.0。
 - 分数线审核口径改为自动：`confidence < 0.70` 自动标记为不展示（保留记录与来源）；同一内容重抓不改变已通过状态，低置信度新内容不会覆盖已通过的旧数据。
@@ -31,5 +33,6 @@
 
 ### 移除
 
+- 原 `docs/` 目录整体移出工作区（含 reference / archive / reports）；历史内容保留在仓库外备份 `_vesta-backups/docs-20261126-2010` 与 Git 历史，不再随仓库分发。
 - 后台「复核」队列与「人工导入」入口及其接口已下线（对应请求返回 404）；`scripts/scoreline-data.ts` 仅保留为运维装载脚本。
 - 真实学员咨询稿不再随仓库分发：`zxg/` 下 126 个文件已取消 Git 追踪并从工作区删除，`.gitignore` 增加 `/zxg/`；本地素材需自行保管（仓库外备份位于 `_vesta-backups/zxg-20261126-1815`）。

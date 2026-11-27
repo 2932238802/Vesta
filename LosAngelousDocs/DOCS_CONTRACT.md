@@ -1,11 +1,11 @@
 # 文档树契约（DOCS_CONTRACT）
 
 > 维护者：Doc Agent ｜ 生成：`scripts/init-docs.sh` ｜ 校验：`scripts/check-docs.sh`
-> 本文件所在目录是**文档根目录**，默认命名为 `LosAngelousDocs/`，不使用 `docs/`（避免与项目自带 docs 重名）。
+> 本文件所在目录是**文档根目录**，默认命名为 `LosAngelousDocs/`，不使用 `docs/`（v2.08 起 `docs/` 已移出工作区，此命名约定继续保留以避免混淆）。
 > 规则：文档根目录下只允许本文件登记的文件/目录。新增路径必须由 Doc 提案、用户批准，并在本文件登记后创建；Agent 不得自建。
 > 本文件由 LosSKILL 的 `scripts/check-docs.sh` 校验；核心条目缺失会直接报 ERROR。
 >
-> **与 Vesta 旧约定的区别（2026-11-26 用户确认）**：本工作流文档树**不按日建 `archive/261126`**；CR / R / AC / T 在根目录 `00`–`05`，角色报告在 `reports/`，已完结报告归档到 `reports/archive/`。仓库既有的 `docs/archive/YYYYMMDD/` 是 Vesta 产品历史文档，不属于本树。
+> **与 Vesta 旧约定的区别（2026-11-26 用户确认）**：本工作流文档树**不按日建 `archive/261126`**；CR / R / AC / T 在根目录 `00`–`05`，角色报告在 `reports/`，已完结报告归档到 `reports/archive/`。仓库既有的 `docs/archive/YYYYMMDD/` 已随 `docs/` 于 v2.08 移出工作区（仓库外备份 `_vesta-backups/docs-20261126-2010`），不属于本树。
 
 ## 1. 单一事实来源（One fact, one home）
 
@@ -26,7 +26,7 @@
 | 角色报告 | `reports/<角色>-<YYYY-MM-DD>-<范围>.md` | — |
 | 评审记忆 | `reports/review-index.md` | — |
 | CI 产物 | `ci/`、`reports/ci/`（MCP 写） | Agent 只读，不手写 |
-| 产品口径（外部） | 仓库既有 `docs/`（问卷 / 报告 / 咨询 / 架构 / 数据 / 部署 / 开发历史） | 本树只引用路径，不复制内容；产品变更仍按 `AGENTS.md` 先改 `docs/` |
+| 产品口径（外部） | 已移出工作区（v2.08）；原 `docs/` 备份在 `_vesta-backups/docs-20261126-2010`，历史见 Git | 本树不复制内容；产品变更按 `AGENTS.md` 更新 `LosAngelousDocs/` 再改代码 |
 
 ## 2. 允许的路径
 

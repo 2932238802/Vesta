@@ -17,7 +17,7 @@
 | `/api/admin/login` | POST | 账号密码 | 会话令牌 | 401 | 每次登录新会话 |
 | `/api/admin/*` | GET/POST/PATCH/DELETE | 各子域 | JSON | 401 / 403 / 400 / 409 | 由具体路由决定 |
 
-管理路由统一在 `adminRouter.use(requireAdmin())` 之后挂载；新增管理接口只要挂在其后即自动鉴权。完整清单见 `docs/reference/05-对外契约.md`。
+管理路由统一在 `adminRouter.use(requireAdmin())` 之后挂载；新增管理接口只要挂在其后即自动鉴权。完整清单以本文件与 `server/src/routes/` 为准（原 `docs/reference/05-对外契约.md` 已移出，备份可查）。
 
 ## 数据模型
 
@@ -31,7 +31,7 @@
 | `scoreline_*` / `schools` / `crawl_*` | 表 | — | 批次 / 指标 / 来源 / 覆盖；启动自动建表 | 见 schema |
 | `search_cache` | 表 | — | 检索词 → 结果 JSON，7 天有效 | 规范化 key |
 
-完整表结构以 `server/src/db/schema.ts` 为准；说明见 `docs/reference/06-数据模型.md`。迁移必须兼容存量库、可重复执行。
+完整表结构以 `server/src/db/schema.ts` 为准；本文件为稳定契约摘要（原 `docs/reference/06-数据模型.md` 已移出，备份可查）。迁移必须兼容存量库、可重复执行。
 
 ## 关键流程
 

@@ -1,6 +1,8 @@
 # 01 — 需求与验收标准
 
-> 维护者：Doc Agent ｜ 状态：CR-004 G3 通过，G4 待确认 ｜ 最近更新：2026-11-26
+> 注：v2.08 起 `docs/` 已移出工作区；本文件历史条目中的 `docs/reference` 链接仅作历史，备份在 `_vesta-backups/docs-20261126-2010`。
+
+> 维护者：Doc Agent ｜ 状态：CR-003 G2 完成，待 G3 复审（CR-004 G4 已通过） ｜ 最近更新：2026-11-26
 > 需求变更只升版（`R-xxx v2`），旧版内容保留在「变更历史」，不覆盖。
 
 ### R-001 仓库不再携带真实咨询稿（优先级 P0，版本 v1）
@@ -61,3 +63,19 @@
 - 影响面：`server/src/score-lines/parsers/*`、`crawl.ts`、`sources.ts`、`program-store.ts`、`shared/src/score-line*`（如需要类型）、`web/src/views/admin/ScoreLines.vue`、`docs/reference/*`、fixtures。
 - 不在范围内：吉林全部本科院校；聚合站数据；专科升学喜报；docx 招生计划；人工导入；其他省。
 - 变更历史：v1 2026-11-26 初始（G0 已确认：2 所 / 最低分 + 人数最高分备注）
+
+### R-003 删除 `docs/` 并把文档/版本守卫迁到 LosAngelousDocs（优先级 P1，版本 v1）
+
+- 来源：CR-003
+- 背景：用户要求删除 `docs/`；当前 `check:docs` / `check:version`、AGENTS/CLAUDE 均硬依赖 docs/reference，必须同步改。
+- 描述：删除 docs/（备份已在仓库外）；重写 check-docs 为工作流文档守卫；重写 check-version 以 STATUS 为版本源；更新所有当前文档指针；版本 v2.08；不改变业务代码行为。
+- 成功指标：docs/ 不在工作区；`npm run check:docs` / `check:version` 通过；`npm run verify` EXIT=0；CI 通过。
+- 验收标准：
+  - AC-003-1 `git ls-files docs` 为 0、工作区无 `docs/`；备份 `_vesta-backups/docs-20261126-2010` 含 158 文件与 SHA256 清单。
+  - AC-003-2 `scripts/check-docs.mjs` 不再读 `docs/reference`；校验 `AGENTS.md` / `CLAUDE.md` / `PROJECT_BRAIN.md` / `LosAngelousDocs/{DOCS_CONTRACT,STATUS,00-requirements-intake,01-requirements,04-tasks}.md` 存在且关键指针存在；`npm run check:docs` EXIT=0。
+  - AC-003-3 `scripts/check-version.mjs` 以 `LosAngelousDocs/STATUS.md`「当前产品版本：vX.Y」为源；`package.json=2.8.0` 与 `v2.08` 相等；不再读 docs/reference。
+  - AC-003-4 `AGENTS.md` / `CLAUDE.md` / `PROJECT_BRAIN.md` / `DOCS_CONTRACT.md` / `00-overview.md` / `03-design.md` 不再把 docs/ 作为当前唯一口径；历史报告中的 docs/ 链接按历史保留。
+  - AC-003-5 `npm run verify` EXIT=0；CI `Build web dist` success。
+  - AC-003-6 不改业务代码行为、不新增依赖、不删除 Git 历史、不触碰 `data/`/`.env`/`zxg`。
+- 不在范围内：重写 Git 历史；把 docs 内容迁入 LosAngelousDocs；恢复问卷设计覆盖守卫（已随 docs 删除）。
+- 变更历史：v1 2026-11-27 初始（用户此前已确认直接删除）

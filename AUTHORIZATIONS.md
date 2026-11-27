@@ -38,6 +38,21 @@ escalate_when:
 
 <!-- auth:rows -->
 
+## AUTH-20261127-002
+
+- 时间：2026-11-27 15:45:52 +0800
+- CR/T：CR-003 / T-015,T-016,T-017
+- 动作：commit
+- 级别：A1c
+- 策略条款：G1-envelope + G3 有条件通过
+- 证据：本报告 + npm run verify EXIT=0 + npm run check:docs/check:version EXIT=0 + 备份 158 文件 SHA256 158 OK + 删除集合与备份清单集合一致 + 守卫错误路径注入
+- 批准：review-agent
+- 范围：D:/PROJECT/Vesta（CR-003 工作区：docs/ 158 删除 + 脚本/文档/版本；不含 data/、.env、zxg/）
+- 有效期：随 CR 结束
+- 撤销：否
+- 幂等键：CR-003:T-015~T-017:commit:A1c
+
+
 ## AUTH-20261127-001
 
 - 时间：2026-11-27 15:11:49 +0800

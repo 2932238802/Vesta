@@ -1,7 +1,7 @@
 # 02 — 架构
 
 > 维护者：Doc Agent ｜ 状态：L2（2026-11-26 初始化） ｜ 最近更新：2026-11-26
-> 本文件是工作流视角的架构索引；产品细节以 `docs/reference/03-系统架构.md` 与代码为准。
+> 本文件是工作流视角的架构索引；产品细节以代码与 `LosAngelousDocs/03-design.md` 为准（原 `docs/` 已移出，备份可查）。
 
 ## 系统上下文
 
@@ -44,9 +44,9 @@ flowchart TB
 
 1. **问卷 → 报告**：`POST /api/invite/:token/submit` 校验并计分 → 事务写 `submissions` → `enqueueReport` → AI 生成 → 审计 / 清洗 → 落库 → `/r/:slug` 轮询。事务边界在提交落库；AI 是异步的，失败可重试。
 2. **咨询稿**：`POST /api/admin/consult/runs` 创建运行 → 后台任务生成 → 章节 `PATCH` / `beats` / `regenerate` → `GET .../export/:format` 导出 `docx|html|txt`。
-3. **分数线**：调度器一次一省 → 按 `Content-Type` 分派 7 个解析器 → 写批次 / 指标 / 来源文档 → 默认 `pending` → 人工复核 `approved` 后查询可见。
+3. **分数线**：调度器一次一省 → 按 `Content-Type` 分派 8 个解析器 → 写批次 / 指标 / 来源文档 → 按 `confidence` 自动 `approved / rejected`（≥0.70 可查）；v2.07 校级录取表先 upsert `school_programs` 再写 `scope='program'` 批次。
 
-失败点：AI 未配置 / 规则为空 / 4 次机会用尽 / JSON 不可解析；抓取网络错误与解析失败；提交校验失败。详见 `docs/reference/README.md`。
+失败点：AI 未配置 / 规则为空 / 4 次机会用尽 / JSON 不可解析；抓取网络错误与解析失败；提交校验失败。详见 `LosAngelousDocs/03-design.md`（原 `docs/README.md` 已移出，备份可查）。
 
 ## 外部依赖
 
@@ -59,7 +59,7 @@ flowchart TB
 
 ## 技术选型
 
-- Node 24 + `node:sqlite`：内置 SQLite、WAL，无需独立数据库服务（代码现状，`docs/reference/README.md`）。
+- Node 24 + `node:sqlite`：内置 SQLite、WAL，无需独立数据库服务（代码现状）。
 - Express + tsx：现有约定，类型检查通过 `tsc --noEmit`。
 - Vue 3 + Vite：后台与公开页共用一套 SPA；前端产物由 CI 构建，服务器只下载替换。
 - 单进程内存队列：按单实例部署设计；重启时扫描数据库 `pending/running` 续跑。

@@ -9,7 +9,7 @@
 - 一句话：邀请制的「大学现状自评」系统——学员填 28 题问卷、AI 生成个性化报告；咨询师在后台看名单、写咨询稿、查分数线与知识库。
 - 入口：`server/src/index.ts`（单 Node 进程同时服务 `/api`、`/api/admin` 和 `web/dist`）。
 - 运行方式：`npm install` → `npm run dev`（后端 `8788` + Vite `5173`）；生产 `bash update.sh`。
-- 产品文档根目录：`docs/`（既有口径，问卷 / 报告 / 咨询 / 部署的唯一事实来源）。
+- 产品文档根目录：已移出工作区（v2.08）；原 `docs/` 备份在 `D:/PROJECT/_vesta-backups/docs-20261126-2010`，历史可从 Git 查看。
 - 工作流文档根目录：`D:/PROJECT/Vesta/LosAngelousDocs`
 - 文档树契约：`LosAngelousDocs/DOCS_CONTRACT.md`
 - LosSKILL 路径（`$LOSSKILL_HOME`）：`D:/PROJECT/LosSKILL`（所有脚本用 `$LOSSKILL_HOME/scripts/...`）
@@ -43,7 +43,7 @@
 
 ## 3. 不变量（改之前先确认）
 
-- [ ] **文档优先**：题目 / 选项 / 跳题 / 报告规则 / 接口 / 数据模型 / 部署流程变更，先改 `docs/`，再改代码；代码与文档冲突按文档修代码。
+- [ ] **文档优先**：题目 / 选项 / 跳题 / 报告规则 / 接口 / 数据模型 / 部署流程变更，先改 `LosAngelousDocs/`（01-requirements / 03-design），再改代码；代码与文档冲突按文档修代码。
 - [ ] **AI 失败不伪装**：不得用模板 / 规则版冒充 AI 成功；失败要给可操作提示并允许重试，保留已完成部分。
 - [ ] **数字由程序算**：分数、比例、时间、排序、岗位门槛由 `shared/src` 计算；AI 只写标题、判断和正文。
 - [ ] **咨询数据不可重置**：不重置 / 清空 `consult_tree`、`consult_runs` 与用户导入的咨询树；导入前预览 + 备份（SQLite WAL 用 `VACUUM INTO`）。
@@ -51,7 +51,7 @@
 - [ ] **不提交敏感物**：`.env`、`data/`、`web/dist/`、`zxg/` 不入库；不在代码 / 文档 / 日志写真实密码、key、联系方式、完整答卷、完整 AI 正文。
 - [ ] **结构化日志**：业务链路用 `server/src/log.ts`，带 `reqId` / `submissionId` / `runId`；禁止 `console.log` 绕过。
 - [ ] **文件规模**：单 `.ts` / `.vue` 600 行软线、800 行硬线；新文件 ≤400 行；基线只能下调。
-- [ ] **版本三处同步**：根 `package.json`（唯一事实源）↔ `docs/reference/README.md`「已完成 + 版本记录」↔ `docs/reference/development-history.md` 本轮小节；`npm run check:version` 把关。
+- [ ] **版本两处同步**：根 `package.json`（唯一事实源）↔ `LosAngelousDocs/STATUS.md`「当前产品版本」；`LosAngelousDocs/CHANGELOG.md` 记用户可见变化；`npm run check:version` 把关。
 - [ ] **单实例假设**：报告队列、咨询生成任务、抓取队列、限流计数都在进程内存；重启清空，数据库是唯一持久真相。
 - [ ] **分数线自动收录**：抓取按 `confidence >= 0.70` 自动 approved、`<0.70` rejected；同一 checksum 重抓不改变状态；低置信度新内容不覆盖已有 approved；后台不再有人工复核 / 人工导入入口。
 - [ ] **部署只走 update.sh**：服务器上不直接改代码；L1–L5 必须全过，前端产物默认来自 GitHub Release `dist`。
@@ -59,7 +59,7 @@
 ## 4. 契约
 
 - 接口分组：`/api/health`、`/api/invite/*`、`/api/report/*`、`/api/events`（公开）；`/api/admin/*`（登录后统一鉴权）；`/api/admin/consult/*`（咨询）。
-- 数据模型：单文件 SQLite，`server/src/db/schema.ts` 为建表事实源；启动迁移必须可重复执行、兼容存量库。明细见 `docs/reference/06-数据模型.md`。
+- 数据模型：单文件 SQLite，`server/src/db/schema.ts` 为建表事实源；启动迁移必须可重复执行、兼容存量库。明细见 `LosAngelousDocs/03-design.md` 与 `server/src/db/schema.ts`（原 `docs/` 说明已移出，备份可查）。
 - 报告模式：`submissions.report_mode` 在提交时固化（`score` 旧版 / `doc` 全文 AI）；列表与导出不再解析问卷 JSON。
 - AI 队列：`server/src/ai/report-queue.ts`，`REPORT_CONCURRENCY = 2`，最多 4 次尝试，启动扫描 `pending/running` 续跑。
 - 检索口径：博查结果按规范化检索词缓存 7 天；单份报告最多 4 次外呼；时效窗口「今天往前 12 个完整月」。
@@ -70,14 +70,14 @@
 
 | 改动 | 命令 | 最后验证 |
 |---|---|---|
-| 默认 / 交付前 | `npm run verify`（docs+size+version+deps+dates+question+score+audit+roster+search+typecheck+build） | 2026-11-26（EXIT=0） |
+| 默认 / 交付前 | `npm run verify`（docs+size+version+deps+dates+question+score+scoreline+audit+roster+search+typecheck+build） | 2026-11-26（EXIT=0） |
 | 后端 | `npm run typecheck` | 2026-11-26 |
 | 前端 | `npm run typecheck && npm run build` | 2026-11-26 |
 | 问卷 / 跳题 | `npm run check:question` | 2026-11-26 |
 | 日期 / 期次 | `npm run check:dates` | 2026-11-26 |
 | 分数线 | `npm run check:score` + `npm run check:scoreline` | 2026-11-26（CR-002 新增） |
 | AI 报告审计 | `npm run check:audit` | 2026-11-26 |
-| 部署脚本 | `bash -n update.sh` + `npm run verify`；CI 产物按 `docs/reference/07-部署与运维.md` §3.1 本地夹具验证 | 2026-11-26 |
+| 部署脚本 | `bash -n update.sh` + `npm run verify`；CI 产物做本地夹具验证（原部署文档已移出，见备份） | 2026-11-26 |
 | 页面手工走查 | `npm run dev` + playwright MCP，`http://127.0.0.1:5173` | 每次前端交付 |
 
 ## 6. 热点与雷区
@@ -91,7 +91,7 @@
 | 大文件 | >600 行加功能风险；>800 行禁止加功能 | `npm run check:size` | 先纯拆分，再加功能；基线只下调 |
 | 部署 | 构建中断清空 `web/dist`；本地 reset 被 L1 覆盖 | 改 `update.sh` / workflow | 构建到临时目录再原子替换；回滚用远端 `git revert` 后 `update.sh` |
 | 隐私 | `zxg/` 下 126 份真实咨询稿曾随 Git 分发（6.7 MB） | 2026-11-26 v2.05 已取消追踪并删除工作区文件 | 备份在 `_vesta-backups/zxg-20261126-1815`；Git 历史仍含旧副本，彻底清除需重写历史 + force push（需用户单独授权）；`.gitignore` 已拦截 `/zxg/` |
-| 文档双轨 | 产品口径在 `docs/`，工作流记录在 `LosAngelousDocs/` | 需求收尾 | Doc 同时回填 `docs/reference/development-history.md` 与本树 `05-decisions.md` |
+| 文档单轨 | 工作流与产品口径统一在 `LosAngelousDocs/` + 本文件；原 `docs/` 已于 v2.08 移出工作区 | 需求收尾 | 更新 `LosAngelousDocs/05-decisions.md`、`CHANGELOG.md` 与本文件；历史产品文档查备份 |
 
 ## 7. 测试地图
 
@@ -110,12 +110,12 @@
 
 | ID | 决策 | 影响 | 文档 |
 |---|---|---|---|
-| D-001 | 工作流文档根用 `LosAngelousDocs/`，与产品口径 `docs/` 分离 | 所有 CR / 报告 / 状态落点 | `LosAngelousDocs/05-decisions.md` |
-| D-002 | v2.03 分支题未命中用通用题面兜底 + 来源题回跳补答 | 问卷 / 报告 / 后台保护 | `docs/reference/development-history.md` 2026-11-20 |
-| D-003 | v2.04 前端改 GitHub Actions 构建，服务器只下载校验原子替换 | 部署 / `update.sh` / CI | `docs/reference/development-history.md` 2026-11-20 |
+| D-001 | 工作流文档根用 `LosAngelousDocs/`（v2.08 起产品口径也收敛到此，原 `docs/` 已移出） | 所有 CR / 报告 / 状态落点 | `LosAngelousDocs/05-decisions.md` |
+| D-002 | v2.03 分支题未命中用通用题面兜底 + 来源题回跳补答 | 问卷 / 报告 / 后台保护 | `_vesta-backups/docs-20261126-2010/reference/development-history.md` 2026-11-20 |
+| D-003 | v2.04 前端改 GitHub Actions 构建，服务器只下载校验原子替换 | 部署 / `update.sh` / CI | `_vesta-backups/docs-20261126-2010/reference/development-history.md` 2026-11-20 |
 | D-004 | v2.05 `zxg/` 真实咨询稿取消 Git 追踪并仓库外备份 | 隐私 / 仓库 | `LosAngelousDocs/05-decisions.md` |
 | D-005 | v2.06 分数线按 confidence 自动收录，移除人工复核 / 人工导入 | 分数线 / 后台 / 数据口径 | `LosAngelousDocs/05-decisions.md` |
-| D-006 | 工作流文档不按日建 archive，`docs/` 与 LosAngelousDocs 分工 | 文档流程 | `LosAngelousDocs/05-decisions.md` |
+| D-006 | 工作流文档不按日建 archive；原 `docs/` 分工已随 v2.08 移出 | 文档流程 | `LosAngelousDocs/05-decisions.md` |
 | D-007 | v2.07 吉林校级线试点：`school-admit@1` + program 最低分，专科院校不设院校线 | 分数线 / 抓取 / 前端 | `LosAngelousDocs/05-decisions.md` |
 
 ## 9. 最近变更（最多 10 条，Steward 维护）
@@ -126,12 +126,12 @@
 | 2026-11-26 | CR-002 | 分数线按 confidence 自动收录；移除复核 / 人工导入；计划唯一键补 major_name；国家线 A/B 区校验 | 分数线 / 后台 / 数据库 | `LosAngelousDocs/reports/meta-2026-11-26-CR-002-分数线自动收录.md`（G4 有条件通过，`fdf0acf`） |
 | 2026-11-26 | CR-001 | 移除 `zxg/` 126 份真实咨询稿入库；`.gitignore` 拦截；版本同步 v2.05 | 隐私 / 文档 / 版本 | `LosAngelousDocs/reports/doc-2026-11-26-CR-001-移除咨询稿入库.md` |
 | 2026-11-26 | 初始化 | 接入 LosSKILL 工作流：`LosAngelousDocs/`、`PROJECT_BRAIN.md`、`WORKLOG.md`、`AUTHORIZATIONS.md` | 流程 / 文档 | `LosAngelousDocs/reports/doc-2026-11-26-工作流初始化.md` |
-| 2026-11-21 | v2.04 | 前端改 GitHub Actions 构建 + Release 产物原子替换 | 部署 / CI | `docs/reports/meta-agent-2026-11-21-GitHubActions构建.md` |
-| 2026-11-20 | v2.03 | 问卷分支题回跳补答与通用兜底 | 问卷 / 报告 / 后台 | `docs/reports/meta-agent-2026-11-20-问卷分支题死路.md` |
+| 2026-11-21 | v2.04 | 前端改 GitHub Actions 构建 + Release 产物原子替换 | 部署 / CI | `_vesta-backups/docs-20261126-2010/reports/meta-agent-2026-11-21-GitHubActions构建.md` |
+| 2026-11-20 | v2.03 | 问卷分支题回跳补答与通用兜底 | 问卷 / 报告 / 后台 | `_vesta-backups/docs-20261126-2010/reports/meta-agent-2026-11-20-问卷分支题死路.md` |
 
 ## 10. 模块卡（大项目按需）
 
-- 暂无 `brain/modules/*.md`；任务涉及某模块时先看第 2 节与 `docs/reference/` 对应篇目。
+- 暂无 `brain/modules/*.md`；任务涉及某模块时先看第 2 节与 `LosAngelousDocs/03-design.md`（原 `docs/reference/` 已移出，备份可查）。
 
 ## 维护规则
 

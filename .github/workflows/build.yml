@@ -1,8 +1,9 @@
 name: Build web dist
 
 # 前端在 GitHub Runner 上构建，产物上传到固定 Release（tag `dist`）。
-# 服务器只下载 web-dist-<sha>.tar.gz 并原子替换 web/dist，见 update.sh 与
-# docs/reference/07-部署与运维.md §3.1。
+# 服务器只下载 web-dist-<sha>.tar.gz 并原子替换 web/dist，见 update.sh。
+# 部署说明（原 docs/reference/07-部署与运维.md）已随 docs/ 于 v2.08 移出工作区，
+# 备份在 _vesta-backups/docs-20261126-2010。
 
 on:
   push:

@@ -78,7 +78,26 @@
   - D. 吉林全部接收本科院校：工作量大，不建议第一步。
 - 推荐：A；跑通后按同一模板扩 B/C。
 - 关联需求/任务：R-004；T-011 ~ T-014（G1 已确认）。
-- 状态：G3 通过并已提交 `0ee4fe7`，G4 待确认
+- 状态：G4 通过；CR-003 G1 已确认，待 Dev
+
+### CR-003 删除 `docs/` 并迁移版本/文档守卫
+
+- 类型：流程 / 文档结构变更
+- 问题与价值：用户要求删除仓库原有 `docs/`（158 个跟踪文件，2.7 MB），改为 LosAngelousDocs 单一工作流文档根。当前 `check-docs` / `check-version` 和 `AGENTS.md` / `CLAUDE.md` 都硬依赖 `docs/reference`，不能裸删。
+- 目标用户与场景：仓库所有者与后续 Agent；文档入口收敛到 `LosAngelousDocs/` + `PROJECT_BRAIN.md`，不再维护 `docs/`。
+- 成功指标：`docs/` 从工作区与索引删除；仓库外备份 158 文件 + SHA256；`npm run check:docs` / `check:version` 不依赖 docs；`npm run verify` EXIT=0；AGENTS/CLAUDE/PROJECT_BRAIN/DOCS_CONTRACT 指向新入口。
+- 范围：
+  - 删除 `docs/`（158 文件），保留仓库外备份 `_vesta-backups/docs-20261126-2010`。
+  - 重写 `scripts/check-docs.mjs`：校验 AGENTS/CLAUDE/PROJECT_BRAIN/LosAngelousDocs 核心文件，不再读 docs/reference。
+  - 重写 `scripts/check-version.mjs`：以 `LosAngelousDocs/STATUS.md` 的「当前产品版本」为版本源，要求与 package.json 相等。
+  - 更新 AGENTS / CLAUDE / PROJECT_BRAIN / DOCS_CONTRACT / 00-overview / 03-design 等当前文档中的 docs/ 指针。
+  - 版本升至 v2.08（产品版本本轮递增），CHANGELOG/STATUS 同步。
+- 非目标：不重写 Git 历史；不把 docs/reference 内容迁移进 LosAngelousDocs（用户选择直接删除，内容只留备份与 Git 历史）；不改业务代码行为。
+- 风险与未知：产品问卷/咨询/部署文档不再在工作区可读；后续 Agent 缺少产品口径，只能查备份/历史；`check:docs` 的问卷设计覆盖守卫会消失；历史报告里指向 docs/ 的链接会成为死链（按历史保留）。
+- 选项：A. 直接删除并改引用（用户已选）；B. 先迁移再删除（未选）；C. 保留 docs/ 不动（未选）。
+- 推荐：A。
+- 关联需求/任务：R-003；T-015 ~ T-017。
+- 状态：G1 已确认（用户 2026-11-26 明确要求删除 docs/）；G2 Dev 自检完成，待 Review（2026-11-27）
 
 ## 假设与待确认
 

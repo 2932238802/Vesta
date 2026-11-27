@@ -79,3 +79,15 @@
 - 结论：选 A。把「两年制 / 三年制」登记为 `UPGRADE_CATEGORIES` 的已知值，避免维度归一化把学制当「认不出」而降置信度到 0.70 以下；`buildLine('program')` 纳入最低分指标，`buildSeries` 仍跳过最低分，趋势图按空心标记渲染，不画重复折线。学制优先取表头「学制」列，否则从专业名末尾「（二年制）/（三年制）」提取并去掉后缀；「总计 / 合计 / 共 N 个专业」汇总行跳过。
 - 影响：`shared/src/score-line-dimension.ts`、`server/src/score-lines/query.ts`、`web/src/views/admin/ScoreLines.vue`；表结构不变。
 - 可逆性：容易回滚（恢复字典与 buildLine 过滤），已写入的 `category='两年制/三年制'` 数据保留。
+
+### D-008 删除 docs/，文档入口收敛到 PROJECT_BRAIN + LosAngelousDocs，版本源改为 STATUS
+
+- 日期：2026-11-27（产品版本 v2.08）
+- 背景：用户明确要求删除仓库原有 `docs/`（158 个跟踪文件），把文档入口收敛到 `PROJECT_BRAIN.md` + `LosAngelousDocs/`。`check-docs` / `check-version` 与 AGENTS / CLAUDE 原先硬依赖 `docs/reference`。
+- 选项：
+  - A. 直接删除并改引用（用户选择）：备份后 `git rm -r docs`，重写守卫与入口文档；不在工作区保留产品文档。
+  - B. 先把 docs/reference 迁入 LosAngelousDocs 再删除（未选）：内容保留但文档树职责混杂，迁移量大。
+  - C. 保留 docs/ 不动（未选）：与用户「单一文档根」目标冲突。
+- 结论：选 A。`docs/` 与其 158 个文件已移出工作区，仓库外备份 `D:/PROJECT/_vesta-backups/docs-20261126-2010`（SHA256 清单 158 条全部校验通过），历史仍可从 Git 查看。`check-docs` 只校验工作流文档入口与关键指针；`check-version` 以 `LosAngelousDocs/STATUS.md`「当前产品版本」为唯一版本源，要求与根 `package.json` 的 `<major>.<minor>.0` 完全相等。原「问卷设计文档覆盖」守卫随 docs 删除而移除（用户已知并接受）。
+- 影响：所有 Agent 开工入口改为 `PROJECT_BRAIN.md`；产品问卷 / 咨询 / 部署说明只能查备份或 Git 历史；历史 `LosAngelousDocs/reports/` 中指向 docs 的链接按历史保留，不改写。后续若需要恢复产品文档，应新建 CR，而不是直接重建未登记目录。
+- 可逆性：可从备份拷回 `docs/` 并恢复旧脚本，但需同时改回 AGENTS / CLAUDE / PROJECT_BRAIN 与 `check-docs` / `check-version`。

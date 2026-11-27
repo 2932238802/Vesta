@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 依赖版本不变量守卫：只校验本地口径，不联网、不追 latest。
-// 规则见 docs/archive/20261114/5-依赖版本漂移-修复方案.md §2.4。
+// 规则源自历史文档（docs/ 已于 v2.08 移除，原文见 _vesta-backups/docs-20261126-2010）。
 // 用法：npm run check:deps（也包含在 npm run verify 里）
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'

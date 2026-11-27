@@ -1,32 +1,29 @@
 # Vesta · Agent 开工规则
 
-> 所有在本仓库工作的 Agent（Codex / Claude Code / DSH / Cursor / 其他）**先读本文件，再读 `docs/reference/agent-rules.md`**。
-> 规则优先级：用户当次明确要求 > 本文件 > `docs/reference/agent-rules.md` > `docs/` 其他文档 > 代码现状。
-> 核心约定：**文档优先**——要改题目、选项、跳题、报告规则、接口、数据模型或部署流程，先改 `docs/`，再改代码；代码与文档冲突时，按文档修正代码。
+> 所有在本仓库工作的 Agent（Codex / Claude Code / DSH / Cursor / 其他）**先读本文件，再读 `PROJECT_BRAIN.md`**。
+> 规则优先级：用户当次明确要求 > 本文件 > `PROJECT_BRAIN.md` > `LosAngelousDocs/` 的 00–05 > 代码现状。
+> 核心约定：**文档优先**——要改题目、选项、跳题、报告规则、接口、数据模型或部署流程，先改文档（工作流文档在 `LosAngelousDocs/`），再改代码；代码与文档冲突时，按文档修正代码。
 >
-> **工作流（2026-11-26 接入 LosSKILL）**：开工第 0 步先读 `PROJECT_BRAIN.md`；工作流文档根为 `LosAngelousDocs/`（CR / R / AC / T、STATUS、评审报告、决策），产品口径仍在 `docs/`。门禁与脚本按 `dev-workflow` 技能执行。
+> **工作流（2026-11-26 接入 LosSKILL）**：开工第 0 步先读 `PROJECT_BRAIN.md`；工作流文档根为 `LosAngelousDocs/`（CR / R / AC / T、STATUS、评审报告、决策）。门禁与脚本按 `dev-workflow` 技能执行。
+> **产品说明文档**（原 `docs/`：问卷 / 咨询 / 架构 / 数据 / 部署 / 开发历史）已于 v2.08 移出工作区，只留仓库外备份 `D:/PROJECT/_vesta-backups/docs-20261126-2010` 与 Git 历史；需要查阅时用备份，不要假设工作区还有 `docs/`。
 
 ## 0. 开工前（缺一不可）
 
-1. 先读 `docs/README.md`（入口索引），再读 `docs/reference/agent-rules.md`（硬约束）和 `docs/reference/README.md`（工程全貌）。
-2. 按任务类型补读：
-   - 问卷 / 报告 / 评分 → `docs/reference/规划自测问卷-设计文档.md`（唯一口径）
-   - 咨询树 / 咨询稿生成 / 收藏栏 → `docs/reference/consult-system.md`
-   - 部署 / `update.sh` / 环境变量 → `docs/reference/README.md` 对应章节
-   - 为什么要这样做 → `docs/reference/development-history.md` 最近两轮
+1. 先读 `PROJECT_BRAIN.md`（一分钟地图、不变量、契约与验证命令），再按任务需要读 `LosAngelousDocs/` 的 `STATUS.md`、`01-requirements.md`、`03-design.md`、`04-tasks.md`。
+2. 产品说明文档（问卷 / 报告 / 评分、咨询系统、部署、开发历史）已于 v2.08 移出工作区；需要时查仓库外备份 `D:/PROJECT/_vesta-backups/docs-20261126-2010/` 或 Git 历史，不要按旧路径 `docs/` 找。
 3. 先跑一遍基线，确认开工前是绿的：`npm run typecheck`（要改前端再加 `npm run build`）。
 4. 用 todo 写下计划：改哪些文件、对应文档哪一节、怎么验证。
 5. 本地环境变量已经配好（AI 在 WSL 全局 `~/.profile`，项目变量在仓库 `.env`），见文末「附：本地环境变量」——别重复配、别提交、别打印 key。
 
 ## 1. 文档优先（硬性）
 
-- 需求变了：**先改 `docs/`**，在 `docs/reference/development-history.md` 记「何时、改了什么、为什么」，再动代码。
+- 需求变了：**先改 `LosAngelousDocs/` 的 `01-requirements.md` / `03-design.md`**，在 `05-decisions.md` 或 `CHANGELOG.md` 记「何时、改了什么、为什么」，再动代码。
 - 不允许「先改代码、文档回头再说」，也不允许只改代码不改文档。
 - 判断文档过期时，也要先改文档并说明原因，再改代码；不能直接按代码现状覆盖文档。
-- 已作废的方案放 `docs/archive/`，正文里不留会误导人的旧口径。
+- 已作废的方案留在历史报告或决策记录中，正文里不留会误导人的旧口径；原 `docs/` 内容只在仓库外备份与 Git 历史中可查。
 - 服务器 `/opt/vesta` 上只 `git pull` / `bash update.sh`，**不要在服务器上直接改代码**——改在本地仓库，推上去再拉。
 
-## 2. 实现纪律（摘自 `docs/reference/agent-rules.md`，必须遵守）
+## 2. 实现纪律（必须遵守；原 `agent-rules` 要点已内联）
 
 - 使用者不是技术从业者：界面简单、直接、少解释；重要动作显眼居中；不堆标题、小标题和重复按钮。
 - AI 失败要给出可操作的真实结论、允许重试、保留已完成部分；面向学生的文案不暴露模块 key / 系统分数口径，真实原因写 `ai_error` 与后台日志；**不许用低质量兜底模板伪装成 AI 成功**。
@@ -45,9 +42,9 @@
 | 后端 `server/` | `npm run typecheck` |
 | 前端 `web/` | `npm run typecheck && npm run build` |
 | 文档 / 问卷口径 | `npm run check:docs` |
-| 部署脚本 / CI（`update.sh`、`.github/workflows/`） | `bash -n update.sh` + `npm run verify`；CI 产物相关改动需按 `docs/reference/07-部署与运维.md` §3.1 做一次本地夹具验证 |
+| 部署脚本 / CI（`update.sh`、`.github/workflows/`） | `bash -n update.sh` + `npm run verify`；CI 产物相关改动需做一次本地夹具验证（原部署文档已移出，见备份） |
 | 版本号 / `package.json` | `npm run check:version` |
-| 以上全部 | `npm run verify`（= check:docs + check:size + check:version + check:deps + check:dates + check:score + check:audit + check:roster + check:search + typecheck + build） |
+| 以上全部 | `npm run verify`（= check:docs + check:size + check:version + check:deps + check:dates + check:question + check:score + check:scoreline + check:audit + check:roster + check:search + typecheck + build） |
 
 - 没有自动化测试套件，关键页面必须手工走查：问卷一整套（含跳题）、报告页、后台列表。
 - **没验证过不要写「完成」**；拿不准就说「不确定」，给出已知信息和可选方案。
@@ -56,11 +53,11 @@
 
 按顺序找证据，不许编 API、编配置、编命令：
 
-1. **仓库内先找**：`docs/`、`server/src`、`shared/src`、`web/src` 里已有的同类实现。
+1. **仓库内先找**：`LosAngelousDocs/`、`PROJECT_BRAIN.md`、`server/src`、`shared/src`、`web/src` 里已有的同类实现；必要时查仓库外备份 `_vesta-backups/docs-20261126-2010/`。
 2. **官方文档**：用 context7 MCP（`mcp__context7__resolve-library-id` → `mcp__context7__get-library-docs`）查 Express / Vue / Vite / SQLite / Node 的现行 API，别凭记忆写。
 3. **真实跑一遍**：要看页面就起 `npm run dev`，用 playwright MCP（`mcp__playwright__*`）打开 `http://127.0.0.1:5173` 走查，不要臆测 DOM 和样式。
 4. **仍然拿不准**：停下来问，给「已知信息 + 可选方案 + 风险」，不要硬编答案。
-5. **需要新能力**：优先找现成 skill（项目 `.dsh/skills/`、用户 `~/.dsh/skills`）或 MCP server；选型理由写进 `docs/reference/development-history.md`，不要为了一个工具大改架构。
+5. **需要新能力**：优先找现成 skill（项目 `.dsh/skills/`、用户 `~/.dsh/skills`）或 MCP server；选型理由写进 `LosAngelousDocs/05-decisions.md`，不要为了一个工具大改架构。
 
 已接入的 MCP（见 `.mcp.json` 与 `.codex/config.toml`）：
 
@@ -74,20 +71,19 @@
 - 涉及部署的改动：说明是否需要 `bash update.sh`，以及回滚方式。
 - 收尾汇报：做了什么、改了哪些文件、对应文档哪一节、跑了什么验证、还剩什么。
 
-**版本动作清单（需求收尾必须依次做，漏了第 1–3 步 `check:version` 会让 `verify` 失败）：**
+**版本动作清单（需求收尾必须依次做，漏了 `check:version` 会让 `verify` 失败）：**
 
-1. 升根 `package.json` 的 `version` 为 `1.<minor+1>.0`（同一轮需求内多次提交不重复升版本，补丁并进下一轮）。
-2. `docs/reference/README.md` 的「已完成：…」追加 `v1.<minor+1> <一句话>`，并在「版本记录」表加一行（日期、commit、摘要）。
-3. `docs/reference/development-history.md` 的「本轮（YYYY-MM-DD）」加小节，标题带产品版本，写「改了 / 为什么 / 验证」。
-4. 对应 `docs/archive/YYYYMMDD/N-xxx.md` 顶部状态改为「已实施并提交（产品版本 vX）」，补「实施记录」。
-5. `docs/archive/YYYYMMDD/README.md` 索引表更新状态、版本、证据。
-6. `npm run verify` 全绿后提交。
+1. 升根 `package.json` 的 `version` 为 `<major>.<minor+1>.0`（同一轮需求内多次提交不重复升版本，补丁并进下一轮）。
+2. 同步 `LosAngelousDocs/STATUS.md` 的「当前产品版本：v<major>.<minor>」，必须与 `package.json` 的 `<major>.<minor>.0` 完全相等。
+3. `LosAngelousDocs/CHANGELOG.md` 追加本轮用户可见变化（新增 / 变更 / 修复 / 移除）。
+4. `LosAngelousDocs/04-tasks.md` 更新任务状态与 AC 追溯矩阵。
+5. `npm run verify` 全绿后提交。
 
 ## 6. 禁止事项（看到就停）
 
 - 未经确认执行 `git reset --hard`、`git checkout -- .`、`git clean -fd`、`rm -rf data/`。
 - 在服务器上直接改文件、`chmod` 仓库文件后不处理（只差文件模式的「脏」也会让 `update.sh` 的 L1 停下）。
-- 删除或重写 `docs/` 里已确认的需求记录。
+- 删除或重写 `LosAngelousDocs/` 里已确认的需求 / 评审记录（历史报告按原样保留）。
 - 为了让检查通过而改 `scripts/check-docs.mjs` 的判定逻辑——要改先说明理由。
 
 ## 附：本地环境变量（2026-11-12 已配好，别重复配、别提交）

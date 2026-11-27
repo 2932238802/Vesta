@@ -1,6 +1,8 @@
 # 04 — 任务与追溯
 
-> 维护者：Doc 建任务；Dev 只更新状态与追溯矩阵 ｜ 状态：CR-004 已提交 `0ee4fe7`，G4 待确认 ｜ 最近更新：2026-11-26
+> 注：v2.08 起 `docs/` 已移出工作区；本文件历史条目中的 `docs/reference` 链接仅作历史，备份在 `_vesta-backups/docs-20261126-2010`。
+
+> 维护者：Doc 建任务；Dev 只更新状态与追溯矩阵 ｜ 状态：CR-003 G2 完成，待 G3 复审（CR-004 已提交） ｜ 最近更新：2026-11-26
 > 任务状态只用：TODO / DOING / DONE / BLOCKED / DROPPED
 
 ### T-001 备份并移除 zxg 追踪（状态：DONE）
@@ -242,3 +244,43 @@
 | AC-004-6 | 学校未导入时 seed 不写校级源；导入后写带 `school_id` 的源 | T-012 | 已验证 |
 | AC-004-7 | 无表头 fixture 返回 `unsupported_table`；重抓 approved 不降级 | T-011 | 已验证 |
 | AC-004-8 | `npm run verify` EXIT=0；`check:scoreline` 新增用例；文档与 v2.07 同步 | T-014 | 已验证 |
+
+## CR-003 任务
+
+### T-015 删除 docs/ 并核验备份（状态：DONE）
+
+- 来源：CR-003 / R-003（v1）
+- 关联需求：R-003 / AC-003-1
+- 目标：确认仓库外备份 158 文件 + SHA256；`git rm -r docs`；复核工作区与索引均为 0。
+- 前置依赖：用户授权（已有）。
+- 验证方式：`find docs -type f`=0；`git ls-files docs`=0；备份计数 158。
+- 规模：S
+
+### T-016 重写 check-docs / check-version 与引用（状态：DONE）
+
+- 来源：CR-003 / R-003（v1）
+- 关联需求：R-003 / AC-003-2~4
+- 目标：重写两个脚本为 LosAngelousDocs 版本；更新 AGENTS/CLAUDE/PROJECT_BRAIN/DOCS_CONTRACT/00-overview/03-design 等当前文档；`grep` 确认当前文档无 docs/ 硬指针（历史报告除外）。
+- 前置依赖：T-015
+- 验证方式：`npm run check:docs` / `check:version`；grep。
+- 规模：M
+
+### T-017 版本、验证与 CI（状态：DONE）
+
+- 来源：CR-003 / R-003（v1）
+- 关联需求：R-003 / AC-003-5、AC-003-6
+- 目标：版本 v2.08；CHANGELOG/STATUS 同步；`npm run verify`；等待 CI success；不提交（由主会话提交）。
+- 前置依赖：T-015、T-016
+- 验证方式：`npm run verify`；CI API。
+- 规模：S
+
+## CR-003 AC ↔ 验证追溯矩阵
+
+| AC | 验证方式 | 对应任务 | 状态 |
+|---|---|---|---|
+| AC-003-1 | `git ls-files docs`=0；备份 158 + SHA256 158 OK | T-015 | 已验证 |
+| AC-003-2 | `check:docs` EXIT=0；脚本不读 docs | T-016 | 已验证 |
+| AC-003-3 | `check:version` 2.8.0↔v2.08 | T-016/T-017 | 已验证 |
+| AC-003-4 | grep 当前文档无必须存在的 docs/ 指针 | T-016 | 已验证 |
+| AC-003-5 | `npm run verify` EXIT=0；CI 由主会话推送后触发 | T-017 | 已验证（本地；CI 待触发） |
+| AC-003-6 | diff 无业务行为变化 | T-015~T-017 | 已验证 |

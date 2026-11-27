@@ -1,5 +1,10 @@
 #!/usr/bin/env node
-// 文档一致性守卫：代码里有的题，设计文档必须写；Agent 规则文件必须存在且保留关键小节。
+// 工作流文档一致性守卫。
+// 说明：v2.08 起仓库不再保留 `docs/`。原先「shared/src/survey.ts 的每一道题都必须能在
+// 问卷设计文档里找到」的问卷覆盖守卫已随 docs/ 一起移除，这是用户明确选择的
+// 「直接删除并改引用」方案；不要把这条守卫再当成回归项。
+// 当前守卫只校验工作流文档入口（AGENTS / CLAUDE / PROJECT_BRAIN / LosAngelousDocs）存在，
+// 且关键指针没有被改丢。
 // 用法：npm run check:docs（也包含在 npm run verify 里）
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
@@ -8,64 +13,52 @@ import { fileURLToPath } from 'node:url'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const problems = []
 const passes = []
+const files = new Map()
 
-function read(rel) {
+function load(rel) {
   const p = resolve(root, rel)
   if (!existsSync(p)) {
     problems.push(`缺少文件：${rel}`)
-    return ''
+    return
   }
-  return readFileSync(p, 'utf8')
+  files.set(rel, readFileSync(p, 'utf8'))
+  passes.push(`存在 ${rel}`)
 }
 
-// 1. 必读文件存在
-for (const f of ['AGENTS.md', 'docs/reference/agent-rules.md', 'docs/README.md', 'docs/reference/规划自测问卷-设计文档.md']) read(f)
+// 1. 工作流文档入口必须存在
+const requiredFiles = [
+  'AGENTS.md',
+  'CLAUDE.md',
+  'PROJECT_BRAIN.md',
+  'LosAngelousDocs/DOCS_CONTRACT.md',
+  'LosAngelousDocs/STATUS.md',
+  'LosAngelousDocs/00-requirements-intake.md',
+  'LosAngelousDocs/01-requirements.md',
+  'LosAngelousDocs/04-tasks.md'
+]
+for (const rel of requiredFiles) load(rel)
 
-const survey = read('shared/src/survey.ts')
-const designDoc = read('docs/reference/规划自测问卷-设计文档.md')
-const rules = read('docs/reference/agent-rules.md')
-const readme = read('docs/README.md')
-
-// 2. 设计文档覆盖代码里的每一道题（题号 + 题干）
-const questionRe = /id:\s*'[^']+'[\s\S]*?code:\s*'(Q\d+a?)'[\s\S]*?title:\s*'([^']*)'/g
-const missing = []
-let count = 0
-let m
-while ((m = questionRe.exec(survey)) !== null) {
-  const [, code, title] = m
-  count += 1
-  if (!designDoc.includes(`**${code} `)) missing.push(`${code} 的题号`)
-  const stem = title.replace(/[？?]$/, '')
-  if (!designDoc.includes(stem)) missing.push(`${code} 的题干「${title}」`)
-}
-if (count === 0) {
-  problems.push('没能从 shared/src/survey.ts 解析出题目，检查解析规则或问卷文件')
-} else if (missing.length === 0) {
-  passes.push(`问卷 ${count} 个题项都能在设计文档里找到`)
-} else {
-  for (const item of missing) problems.push(`设计文档缺 ${item}`)
+// 2. 关键指针不能被改丢：新 Agent 能从入口找到项目大脑与工作流文档树
+function mustInclude(rel, needle, label) {
+  const text = files.get(rel)
+  if (text === undefined) return
+  if (text.includes(needle)) passes.push(`${rel} 含「${label}」`)
+  else problems.push(`${rel} 缺少「${label}」指针（应包含 ${needle}）`)
 }
 
-// 3. agent 规则保留关键小节
-for (const key of ['文档优先', '认证与安全', '数据操作', '运行与验证']) {
-  if (rules.includes(key)) passes.push(`agent-rules 含「${key}」`)
-  else problems.push(`docs/reference/agent-rules.md 缺少「${key}」小节`)
-}
-
-// 4. 设计文档必须声明文档优先
-if (designDoc.includes('文档优先')) passes.push('设计文档声明了文档优先')
-else problems.push('design docs 顶部缺少「文档优先」声明')
-
-// 5. README 必须索引设计文档
-if (readme.includes('规划自测问卷-设计文档')) passes.push('README 已索引设计文档')
-else problems.push('docs/README.md 没有索引「规划自测问卷-设计文档」')
+mustInclude('AGENTS.md', 'PROJECT_BRAIN.md', 'PROJECT_BRAIN.md')
+mustInclude('AGENTS.md', 'LosAngelousDocs', 'LosAngelousDocs')
+mustInclude('CLAUDE.md', 'PROJECT_BRAIN.md', 'PROJECT_BRAIN.md')
+mustInclude('CLAUDE.md', 'LosAngelousDocs', 'LosAngelousDocs')
+mustInclude('PROJECT_BRAIN.md', 'LosAngelousDocs', 'LosAngelousDocs')
+mustInclude('LosAngelousDocs/STATUS.md', '当前产品版本', '当前产品版本')
 
 for (const line of passes) console.log(`✓ ${line}`)
 
 if (problems.length > 0) {
   console.error('\n✗ 文档一致性检查未通过：')
   for (const p of problems) console.error(`  - ${p}`)
-  console.error('\n规则：先改 docs/ 再改代码（见 AGENTS.md「文档优先」）。')
+  console.error('\n规则：工作流文档在 LosAngelousDocs/，开工先读 PROJECT_BRAIN.md（见 AGENTS.md「文档优先」）。')
   process.exit(1)
 }
 
