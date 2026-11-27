@@ -38,7 +38,7 @@
   → /r/:slug 轮询 → 重试 / 领取联系方式（加密）
 
 管理后台 /admin → requireAdmin()（令牌 + 数据库会话）→ 各子路由 → SQLite
-分数线调度器（串行，一次一省）→ 抓取 → 解析器 → 按 confidence 自动 approved / rejected（≥0.70 可查，<0.70 隐藏）→ 覆盖刷新
+分数线调度器（串行，一次一省）→ 抓取 → 解析器（省控线 / 国家线 / 校级录取表）→ 按 confidence 自动 approved / rejected（≥0.70 可查，<0.70 隐藏）→ 覆盖刷新
 ```
 
 ## 3. 不变量（改之前先确认）
@@ -99,7 +99,7 @@
 |---|---|---|
 | 问卷 / 跳题 / 兜底 | `shared/src/question.cases.ts` | `npm run check:question` |
 | 日期 / 期次 | `shared/src/date.cases.ts`、`shared/src/cycle.cases.ts` | `npm run check:dates` |
-| 分数线输入 / 解析 | `shared/src/score-line.cases.ts`、`server/src/score-lines/parsers/cases.ts` | `npm run check:score` |
+| 分数线输入 / 解析 | `shared/src/score-line.cases.ts`、`server/src/score-lines/parsers/cases.ts`、`server/src/score-lines/school-admit.cases.ts` | `npm run check:score` / `check:scoreline` |
 | AI 报告审计 / 清洗 | `server/src/ai/doc-audit.cases.ts` | `npm run check:audit` |
 | 博查检索判定 | `server/src/ai/doc-search.cases.ts` | `npm run check:search` |
 | 名单分组 | `server/src/routes/admin/roster-group-id.cases.ts` | `npm run check:roster` |
@@ -115,11 +115,14 @@
 | D-003 | v2.04 前端改 GitHub Actions 构建，服务器只下载校验原子替换 | 部署 / `update.sh` / CI | `docs/reference/development-history.md` 2026-11-20 |
 | D-004 | v2.05 `zxg/` 真实咨询稿取消 Git 追踪并仓库外备份 | 隐私 / 仓库 | `LosAngelousDocs/05-decisions.md` |
 | D-005 | v2.06 分数线按 confidence 自动收录，移除人工复核 / 人工导入 | 分数线 / 后台 / 数据口径 | `LosAngelousDocs/05-decisions.md` |
+| D-006 | 工作流文档不按日建 archive，`docs/` 与 LosAngelousDocs 分工 | 文档流程 | `LosAngelousDocs/05-decisions.md` |
+| D-007 | v2.07 吉林校级线试点：`school-admit@1` + program 最低分，专科院校不设院校线 | 分数线 / 抓取 / 前端 | `LosAngelousDocs/05-decisions.md` |
 
 ## 9. 最近变更（最多 10 条，Steward 维护）
 
 | 日期 | CR/T | 改了什么 | 影响模块 | 报告 |
 |---|---|---|---|---|
+| 2026-11-27 | CR-004 | 吉林校级线试点：`school-admit@1`、两校校级源、program 批次最低分、专科提示 | 分数线 / 抓取 / 前端 | `LosAngelousDocs/reports/meta-2026-11-27-CR-004-吉林校级线试点.md`（G4 待审，`0ee4fe7`） |
 | 2026-11-26 | CR-002 | 分数线按 confidence 自动收录；移除复核 / 人工导入；计划唯一键补 major_name；国家线 A/B 区校验 | 分数线 / 后台 / 数据库 | `LosAngelousDocs/reports/meta-2026-11-26-CR-002-分数线自动收录.md`（G4 有条件通过，`fdf0acf`） |
 | 2026-11-26 | CR-001 | 移除 `zxg/` 126 份真实咨询稿入库；`.gitignore` 拦截；版本同步 v2.05 | 隐私 / 文档 / 版本 | `LosAngelousDocs/reports/doc-2026-11-26-CR-001-移除咨询稿入库.md` |
 | 2026-11-26 | 初始化 | 接入 LosSKILL 工作流：`LosAngelousDocs/`、`PROJECT_BRAIN.md`、`WORKLOG.md`、`AUTHORIZATIONS.md` | 流程 / 文档 | `LosAngelousDocs/reports/doc-2026-11-26-工作流初始化.md` |
