@@ -7,6 +7,9 @@
 | ID | 时间 | 角色 | 门禁 | CR / T | 做了什么 | 报告 | Commit | AUTH | 状态 |
 |---|---|---|---|---|---|---|---|---|---|
 <!-- worklog:rows -->
+| LOG-20261127-154755-2 | 2026-11-27 15:47:55 +0800 | steward | G3.5 | CR-003 / T-015~T-017 | G3.5 豁免：docs/流程变更，无业务模块交互 | - | - | - | 豁免 |
+| LOG-20261127-154755 | 2026-11-27 15:47:55 +0800 | steward | G2.5 | CR-003 / T-015~T-017 | 合并 CR-003 上下文增量：docs/ 移出、版本源改 STATUS、守卫脚本重写 | - | - | - | 完成 |
+| LOG-20261127-154754 | 2026-11-27 15:47:54 +0800 | steward | G3 | CR-003 / T-015~T-017 | G3 有条件通过；A1c AUTH-20261127-002；提交 2ace46b | [review-2026-11-27-CR-003-删除docs.md](LosAngelousDocs/reports/review-2026-11-27-CR-003-删除docs.md) | 2ace46b | AUTH-20261127-002 | 接受 |
 | LOG-20261127-154552 | 2026-11-27 15:45:52 +0800 | review | G3 | CR-003 / T-015,T-016,T-017 | docs/ 158 文件删除与备份核验、check-docs/check-version 重写均独立复现通过；唯一未闭环项是 CI 需推送后确认 | [review-2026-11-27-CR-003-删除docs.md](LosAngelousDocs/reports/review-2026-11-27-CR-003-删除docs.md) | - | AUTH-20261127-002 | 有条件通过 |
 | LOG-20261127-153430 | 2026-11-27 15:34:30 +0800 | dev | G2 | CR-003 / T-015 ~ T-017 | 删除 docs/ 并把 check-docs / check-version 迁到 LosAngelousDocs，版本升至 v2.08 | [dev-2026-11-27-CR-003-删除docs.md](LosAngelousDocs/reports/dev-2026-11-27-CR-003-删除docs.md) | - | - | 完成 |
 | LOG-20261127-152809 | 2026-11-27 15:28:09 +0800 | meta | G4 | CR-004 / T-011,T-012,T-013,T-014 | 首轮唯一 P1（缺 G3 接受 WORKLOG 行）已由 LOG-20261127-152630 复核闭环、P3 状态行已同步，改判通过 | [meta-2026-11-27-CR-004-吉林校级线试点.md](LosAngelousDocs/reports/meta-2026-11-27-CR-004-吉林校级线试点.md) | 0ee4fe7 | - | 通过 |
