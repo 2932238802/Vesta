@@ -67,7 +67,7 @@ Vesta 是一套面向大学在读学生的问卷、报告与咨询辅助系统�
 | v2.04 | 2026-11-21 | `56c6f14` + `c3f9996` | 前端改为 GitHub Actions 构建（push main 产出 `web-dist-<sha>.tar.gz` + `.sha256` 到固定 Release `dist`，按 commit 成对保留最近 5 组；`update.sh` 默认下载并校验 SHA256 与 `dist-info.commit == HEAD` 后原子替换 `web/dist`，失败保留上一版且不重启；恢复失败保留备份；`--dist=local` 应急本地构建，`--skip-build` 兼容） |
 | v2.05 | 2026-11-26 | 待提交 | 移除真实咨询稿入库：删除 `zxg/` 126 份跟踪文件、加入 `.gitignore`、仓库外备份（`_vesta-backups/zxg-20261126-1815` + SHA256 清单）；`reference/` 版本快照从 1.99.0 同步到 2.5.0 |
 | v2.06 | 2026-11-26 | `fdf0acf` | 分数线按置信度自动收录：`confidence >= 0.70` 自动 `approved`、`< 0.70` 自动 `rejected`；同 checksum 重抓保留原状态、低置信度不覆盖旧 `approved`；移除后台复核 / 人工导入 UI 与 4 个接口（404）；存量 `pending` 一次性迁移并刷新受影响覆盖；招生计划唯一键补 `major_name`；考研国家线校验 A/B 区 |
-| v2.07 | 2026-11-26 | 待提交 | 吉林校级线试点：新增 `school-admit@1` 解析器（长春工程学院 / 长春师范大学官方录取表），抓取时 upsert `school_programs` 并写 `scope='program'` 批次；最低投档分 `minimum_type='admit'`，最高分 / 录取数 / 计划数写 note；官方页 `confidence=0.9` 自动 `approved`；两条校级源按校名匹配 `school_id`，找不到则跳过并 warning；专科院校查询页显示「不设专升本院校线」 |
+| v2.07 | 2026-11-27 | `0ee4fe7` | 吉林校级线试点：新增 `school-admit@1` 解析器（长春工程学院 / 长春师范大学官方录取表），抓取时 upsert `school_programs` 并写 `scope='program'` 批次；最低投档分 `minimum_type='admit'`，最高分 / 录取数 / 计划数写 note；官方页 `confidence=0.9` 自动 `approved`；两条校级源按校名匹配 `school_id`，找不到则跳过并 warning；专科院校查询页显示「不设专升本院校线」 |
 
 （只回填能确认 commit 的版本；`—` 表示基线之前没有单独提交。v1.77 / v1.78 因同一次提交 `2395033` 落库，commit 列相同；v1.82 含中间页索引补丁 `99a2d67`。）
 
