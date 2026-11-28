@@ -2,7 +2,7 @@
 
 > 注：v2.08 起 `docs/` 已移出工作区；本文件历史条目中的 `docs/reference` 链接仅作历史，备份在 `_vesta-backups/docs-20261126-2010`。
 
-> 维护者：Doc 建任务；Dev 只更新状态与追溯矩阵 ｜ 状态：CR-006 G3 返工完成，待复审 ｜ 最近更新：2026-11-28
+> 维护者：Doc 建任务；Dev 只更新状态与追溯矩阵 ｜ 状态：CR-006 G4 通过 ｜ 最近更新：2026-11-28
 > 任务状态只用：TODO / DOING / DONE / BLOCKED / DROPPED
 
 ### T-001 备份并移除 zxg 追踪（状态：DONE）
@@ -382,4 +382,4 @@
 | AC-006-4 | 启动 prune + 24h 定时器；1005 旧文件 + 空路径 + 不可删目录共 1007 行分批清理，新行/文件保留，结构化批次不变（`check:crawl` 第 6 节） | T-024 | 已验证 |
 | AC-006-5 | CLI 只读输出关键字段、主库 hash/mtime 不变、缺库提示（`check:crawl` 第 7 节） | T-024 | 已验证 |
 | AC-006-6 | 用例覆盖自愈/续跑/单源/多源预算/deadline/重试边界/prune/CLI，接入 `check:crawl` 并纳入 `verify` | T-025 | 已验证 |
-| AC-006-7 | `npm run verify` EXIT=0；版本 v2.10（CI 待推送） | T-025 | 已验证（本地；CI 待触发） |
+| AC-006-7 | `npm run verify` EXIT=0；CI 46103081417 success；版本 v2.10 | T-025 | 已验证 |

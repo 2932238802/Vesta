@@ -70,14 +70,14 @@
 
 | 改动 | 命令 | 最后验证 |
 |---|---|---|
-| 默认 / 交付前 | `npm run verify`（docs+size+version+deps+dates+question+score+scoreline+import-jilin+crawl+audit+roster+search+typecheck+build） | 2026-11-27（EXIT=0） |
+| 默认 / 交付前 | `npm run verify`（docs+size+version+deps+dates+question+score+scoreline+import-jilin+crawl+audit+roster+search+typecheck+build） | 2026-11-28（EXIT=0） |
 | 后端 | `npm run typecheck` | 2026-11-26 |
 | 前端 | `npm run typecheck && npm run build` | 2026-11-26 |
 | 问卷 / 跳题 | `npm run check:question` | 2026-11-26 |
 | 日期 / 期次 | `npm run check:dates` | 2026-11-26 |
 | 分数线 | `npm run check:score` + `npm run check:scoreline` | 2026-11-26（CR-002 新增） |
 | 吉林两校导入 | `npm run check:import-jilin`（隔离 `DATA_DIR` + 本地 fixture） | 2026-11-27（CR-005 新增） |
-| 抓取可靠性 | `npm run check:crawl`（隔离 `DATA_DIR` + 本地 HTTP 夹具：自愈 / 页数 / deadline / 重试 / CLI） | 2026-11-27（CR-006 新增） |
+| 抓取可靠性 | `npm run check:crawl`（隔离 `DATA_DIR` + 本地 HTTP 夹具：自愈 / 页数 / deadline / 重试 / CLI） | 2026-11-28（CR-006 新增） |
 | 吉林两校脚本（服务器） | `npx tsx scripts/import-jilin-school-lines.ts` dry-run；`--write` 落库（要求 DB 已初始化且两校存在；写前备份，全量未变不备份，幂等） | 2026-11-27 |
 | AI 报告审计 | `npm run check:audit` | 2026-11-26 |
 | 部署脚本 | `bash -n update.sh` + `npm run verify`；CI 产物做本地夹具验证（原部署文档已移出，见备份） | 2026-11-26 |
@@ -129,7 +129,7 @@
 
 | 日期 | CR/T | 改了什么 | 影响模块 | 报告 |
 |---|---|---|---|---|
-| 2026-11-27 | CR-006 | 抓取启动自愈（running→failed/stale + queued 续跑）、单源 10 页、多源预算不误标、deadline 每页且约束重试、网络/429/5xx 退避重试、快照分批清理、只读状态 CLI；版本 v2.10 | 分数线 / 运维脚本 | `LosAngelousDocs/reports/dev-2026-11-27-CR-006-抓取调度可靠性-返工.md`（G3 返工完成，待复审） |
+| 2026-11-28 | CR-006 | 抓取启动自愈（running→failed/stale + queued 续跑）、单源 10 页、多源预算不误标、deadline 每页且约束重试、网络/429/5xx 退避重试、快照分批清理、只读状态 CLI；版本 v2.10 | 分数线 / 运维脚本 | `LosAngelousDocs/reports/meta-2026-11-28-CR-006-抓取调度可靠性.md`（G4 通过，`d0cff71`） |
 | 2026-11-27 | CR-005 | 分数线前端只留查询（删副标题 + 三按钮 / 覆盖看板）；后端手动 crawl/sources/coverage 接口下线（404）；新增吉林两校服务器导入脚本（dry-run / `--write` / 备份 / 幂等），版本 v2.09 | 分数线 / 前端 / 运维脚本 | `LosAngelousDocs/reports/meta-2026-11-27-CR-005-前端去人工抓取.md`（G4 通过，`6ae6f9a`） |
 | 2026-11-27 | CR-004 | 吉林校级线试点：`school-admit@1`、两校校级源、program 批次最低分、专科提示 | 分数线 / 抓取 / 前端 | `LosAngelousDocs/reports/meta-2026-11-27-CR-004-吉林校级线试点.md`（G4 通过，`0ee4fe7`） |
 | 2026-11-26 | CR-002 | 分数线按 confidence 自动收录；移除复核 / 人工导入；计划唯一键补 major_name；国家线 A/B 区校验 | 分数线 / 后台 / 数据库 | `LosAngelousDocs/reports/meta-2026-11-26-CR-002-分数线自动收录.md`（G4 有条件通过，`fdf0acf`） |
