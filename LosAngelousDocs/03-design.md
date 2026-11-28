@@ -1,6 +1,6 @@
 # 03 — 设计
 
-> 维护者：Doc Agent；实现期变更由 Dev 提议 ｜ 状态：L2（2026-11-26 初始化，稳定契约） ｜ 最近更新：2026-11-26
+> 维护者：Doc Agent；实现期变更由 Dev 提议 ｜ 状态：L2（2026-11-26 初始化，稳定契约） ｜ 最近更新：2026-11-28
 > 需求级设计（新接口 / 新表 / 新流程）在对应 CR 的 G1 后追加到本文件；本文件只放当前稳定契约。
 
 ## 接口契约
@@ -66,3 +66,12 @@
 - **日志**：`server/src/log.ts` 单行结构化；带 `reqId` / `submissionId` / `runId`；不记录密码、密钥、联系方式、完整答卷、完整 AI 正文。
 - **时间**：所有时间距离走 `shared/src/date.ts`，按日历差输出粗粒度中文；期次按周三起算。
 - **金额 / 精度**：当前无金额计算；分数与比例由 shared 纯函数计算。
+
+## 抓取调度可靠性（CR-006，v2.10）
+
+- **启动自愈**：服务启动后、调度器开始前，`recoverCrawlRuns()` 把所有遗留 `running` 标 `failed`，message 以 `stale:` 开头并写 `finished_at`；若存在 `queued` 且 `SCORELINE_CRAWL` 开启，立即 `runNext()` 续跑。单实例假设，不处理多实例租约；恢复后调度器不会被残留状态永久阻塞。数据库异常只记 `scoreline.crawl_recover_failed`，不阻断服务启动；`SCORELINE_CRAWL=off` 时只清理残留、不续跑。
+- **预算**：整轮 `MAX_PAGES_PER_RUN=30` 不变；新增单源 `MAX_PAGES_PER_SOURCE=10`；`SCORELINE_CRAWL_PROVINCE_MINUTES` 为整轮 deadline，逐页检查，超时只停当前源并记以 `budget:` 开头的 detail，其他源按剩余时间继续尝试。整轮预算用尽后，未开始的来源不写 `last_status` / 不刷新 `last_run_at`（避免被误标 failed 并饿死）。
+- **重试**：`fetchResource` 对网络错误 / 429 / 5xx 退避重试 2 次（1s / 3s，最多 3 次尝试）；429 尊重 `Retry-After`（秒或 HTTP 日期，上限 60s）；403/404 与其他确定性 4xx 不重试；每次尝试独立超时，且单次尝试与退避都不越过整轮 deadline（页内也检查）；重试写 `scoreline.fetch_retry` 日志（只记站点路径与状态，不记 query / 密钥）。
+- **快照清理**：启动执行一次 + 每 24h 执行 `pruneCrawlDocuments(90)`；按批「取行 → 删文件 → 删对应行」，行与文件一一对应；只删 `data/crawl` 与 `crawl_documents` 行，不删结构化分数线。
+- **状态 CLI**：`scripts/scoreline-crawl-status.ts` 只读打开 `DATA_DIR/vesta.db`，输出 running/queued/疑似卡住（running 超过整轮时限，默认 30 分钟）、各源 last_status/last_error/last_run_at/interval/下次到期、最近 10 条 run；消息中的 URL 去掉 query/hash；不迁移、不写库、不打印正文/密钥；数据库不存在时非 0 退出并提示。
+- **测试入口**：`npm run check:crawl`（`server/src/score-lines/crawl-reliability.cases.ts`，本地 HTTP 夹具 + 隔离 `DATA_DIR`），已纳入 `npm run verify`。

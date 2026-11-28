@@ -1,7 +1,7 @@
 # Vesta — 项目大脑
 
 > 所有 Agent 开工第 0 步读本文件；只读与任务相关的模块卡，不要通读全仓库。
-> 状态：L2（2026-11-26 初始化；2026-11-27 v2.09 `npm run verify` EXIT=0）
+> 状态：L2（2026-11-26 初始化；2026-11-28 v2.10 `npm run verify` EXIT=0）
 > 维护：稳定事实由 Doc 更新；增量由 Steward 在 G2.5 合并；代码级细节不写进来。
 
 ## 1. 一分钟地图
@@ -70,13 +70,14 @@
 
 | 改动 | 命令 | 最后验证 |
 |---|---|---|
-| 默认 / 交付前 | `npm run verify`（docs+size+version+deps+dates+question+score+scoreline+audit+roster+search+typecheck+build） | 2026-11-26（EXIT=0） |
+| 默认 / 交付前 | `npm run verify`（docs+size+version+deps+dates+question+score+scoreline+import-jilin+crawl+audit+roster+search+typecheck+build） | 2026-11-27（EXIT=0） |
 | 后端 | `npm run typecheck` | 2026-11-26 |
 | 前端 | `npm run typecheck && npm run build` | 2026-11-26 |
 | 问卷 / 跳题 | `npm run check:question` | 2026-11-26 |
 | 日期 / 期次 | `npm run check:dates` | 2026-11-26 |
 | 分数线 | `npm run check:score` + `npm run check:scoreline` | 2026-11-26（CR-002 新增） |
 | 吉林两校导入 | `npm run check:import-jilin`（隔离 `DATA_DIR` + 本地 fixture） | 2026-11-27（CR-005 新增） |
+| 抓取可靠性 | `npm run check:crawl`（隔离 `DATA_DIR` + 本地 HTTP 夹具：自愈 / 页数 / deadline / 重试 / CLI） | 2026-11-27（CR-006 新增） |
 | 吉林两校脚本（服务器） | `npx tsx scripts/import-jilin-school-lines.ts` dry-run；`--write` 落库（要求 DB 已初始化且两校存在；写前备份，全量未变不备份，幂等） | 2026-11-27 |
 | AI 报告审计 | `npm run check:audit` | 2026-11-26 |
 | 部署脚本 | `bash -n update.sh` + `npm run verify`；CI 产物做本地夹具验证（原部署文档已移出，见备份） | 2026-11-26 |
@@ -89,7 +90,7 @@
 | 问卷跳题 | 分支来源题缺失 / 非单选 / 无映射导致 0 选项死路 | 改动 `shared/src/question.ts`、`Quiz.vue` | 保留 `resolveQuestion()` 通用兜底 + 后台 `validateSurvey()` 保护 |
 | AI 报告审计 | 数字 / 重复 / 跨模块矛盾；清洗过度会删正文 | 改动 `server/src/ai/doc-audit.ts`、prompt | 先反馈重写一次，仍不通过记 `ai_meta.audit.issues` 后放行 |
 | 咨询树导入 | 覆盖用户已导入路线 | 运行 `scripts/import-consult-docx.mjs --write` | 必须先 `--list` 预览；只替换同名树；先备份 |
-| 分数线抓取 | 站点结构差异、误把导航页当数据、维度误标；低置信度覆盖旧 approved | 改动 `score-lines/parsers/*`、`crawl.ts`、自动收录判定 | 用 `check:score` / `check:scoreline`；解析失败标 `failed` + 失败码；低置信度新内容不覆盖旧 approved |
+| 分数线抓取 | 站点结构差异、误把导航页当数据、维度误标；低置信度覆盖旧 approved；重启残留 `running` 阻塞调度；单源吃满预算；瞬时网络失败；整轮预算用尽误标后续来源；快照清理留孤儿 | 改动 `score-lines/parsers/*`、`crawl.ts`、`crawl-fetch.ts`、`crawl-recovery.ts`、`crawl-scheduler.ts`、自动收录判定 | 用 `check:score` / `check:scoreline` / `check:crawl`；启动自愈 + 单源 10 页 + deadline 每页 + 退避重试；预算用尽不写未尝试来源；prune 分批删文件+行；解析失败标 `failed` + 失败码；低置信度新内容不覆盖旧 approved |
 | 大文件 | >600 行加功能风险；>800 行禁止加功能 | `npm run check:size` | 先纯拆分，再加功能；基线只下调 |
 | 部署 | 构建中断清空 `web/dist`；本地 reset 被 L1 覆盖 | 改 `update.sh` / workflow | 构建到临时目录再原子替换；回滚用远端 `git revert` 后 `update.sh` |
 | 隐私 | `zxg/` 下 126 份真实咨询稿曾随 Git 分发（6.7 MB） | 2026-11-26 v2.05 已取消追踪并删除工作区文件 | 备份在 `_vesta-backups/zxg-20261126-1815`；Git 历史仍含旧副本，彻底清除需重写历史 + force push（需用户单独授权）；`.gitignore` 已拦截 `/zxg/` |
@@ -103,6 +104,7 @@
 | 日期 / 期次 | `shared/src/date.cases.ts`、`shared/src/cycle.cases.ts` | `npm run check:dates` |
 | 分数线输入 / 解析 | `shared/src/score-line.cases.ts`、`server/src/score-lines/parsers/cases.ts`、`server/src/score-lines/school-admit.cases.ts` | `npm run check:score` / `check:scoreline` |
 | 吉林两校导入脚本 | `server/src/score-lines/school-import.cases.ts` | `npm run check:import-jilin` |
+| 抓取可靠性（自愈 / 页数 / deadline / 重试 / CLI） | `server/src/score-lines/crawl-reliability.cases.ts` | `npm run check:crawl` |
 | AI 报告审计 / 清洗 | `server/src/ai/doc-audit.cases.ts` | `npm run check:audit` |
 | 博查检索判定 | `server/src/ai/doc-search.cases.ts` | `npm run check:search` |
 | 名单分组 | `server/src/routes/admin/roster-group-id.cases.ts` | `npm run check:roster` |
@@ -120,11 +122,14 @@
 | D-005 | v2.06 分数线按 confidence 自动收录，移除人工复核 / 人工导入 | 分数线 / 后台 / 数据口径 | `LosAngelousDocs/05-decisions.md` |
 | D-006 | 工作流文档不按日建 archive；原 `docs/` 分工已随 v2.08 移出 | 文档流程 | `LosAngelousDocs/05-decisions.md` |
 | D-007 | v2.07 吉林校级线试点：`school-admit@1` + program 最低分，专科院校不设院校线 | 分数线 / 抓取 / 前端 | `LosAngelousDocs/05-decisions.md` |
+| D-008 | v2.08 删除 `docs/`，文档入口收敛到 PROJECT_BRAIN + LosAngelousDocs，版本源改为 STATUS | 文档流程 / 版本 / 守卫 | `LosAngelousDocs/05-decisions.md` |
+| D-009 | v2.10 抓取可靠性：单实例启动自愈 + 单源 10 页 + deadline 每页 + 有限退避重试 + 每日清理 + 只读 CLI | 分数线 / 运维脚本 | `LosAngelousDocs/05-decisions.md` |
 
 ## 9. 最近变更（最多 10 条，Steward 维护）
 
 | 日期 | CR/T | 改了什么 | 影响模块 | 报告 |
 |---|---|---|---|---|
+| 2026-11-27 | CR-006 | 抓取启动自愈（running→failed/stale + queued 续跑）、单源 10 页、多源预算不误标、deadline 每页且约束重试、网络/429/5xx 退避重试、快照分批清理、只读状态 CLI；版本 v2.10 | 分数线 / 运维脚本 | `LosAngelousDocs/reports/dev-2026-11-27-CR-006-抓取调度可靠性-返工.md`（G3 返工完成，待复审） |
 | 2026-11-27 | CR-005 | 分数线前端只留查询（删副标题 + 三按钮 / 覆盖看板）；后端手动 crawl/sources/coverage 接口下线（404）；新增吉林两校服务器导入脚本（dry-run / `--write` / 备份 / 幂等），版本 v2.09 | 分数线 / 前端 / 运维脚本 | `LosAngelousDocs/reports/meta-2026-11-27-CR-005-前端去人工抓取.md`（G4 通过，`6ae6f9a`） |
 | 2026-11-27 | CR-004 | 吉林校级线试点：`school-admit@1`、两校校级源、program 批次最低分、专科提示 | 分数线 / 抓取 / 前端 | `LosAngelousDocs/reports/meta-2026-11-27-CR-004-吉林校级线试点.md`（G4 通过，`0ee4fe7`） |
 | 2026-11-26 | CR-002 | 分数线按 confidence 自动收录；移除复核 / 人工导入；计划唯一键补 major_name；国家线 A/B 区校验 | 分数线 / 后台 / 数据库 | `LosAngelousDocs/reports/meta-2026-11-26-CR-002-分数线自动收录.md`（G4 有条件通过，`fdf0acf`） |

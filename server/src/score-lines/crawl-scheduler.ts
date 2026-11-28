@@ -46,17 +46,30 @@ export function startScorelineScheduler(): void {
 /** 清 90 天外的原始快照；分数线数据不自动删。 */
 export function pruneCrawlDocuments(days = 90): number {
   const cutoff = new Date(Date.now() - days * 24 * 3600_000).toISOString()
-  const rows = db
-    .prepare('SELECT storage_path FROM crawl_documents WHERE fetched_at < ? LIMIT 1000')
-    .all(cutoff) as unknown as { storage_path: string }[]
-  for (const row of rows) {
-    if (!row.storage_path) continue
-    try {
-      fs.unlinkSync(row.storage_path)
-    } catch {
-      // 文件已不存在时继续删数据库行。
+  const batchSize = 500
+  let pruned = 0
+  // 分批「取行 → 删文件 → 删这批行」，保证行与文件一一对应；
+  // 避免旧实现 SELECT LIMIT 1000 + 无 LIMIT DELETE 导致 1000 行之后的快照变成孤儿文件。
+  for (;;) {
+    const rows = db
+      .prepare('SELECT id, storage_path FROM crawl_documents WHERE fetched_at < ? LIMIT ?')
+      .all(cutoff, batchSize) as unknown as { id: string; storage_path: string }[]
+    if (rows.length === 0) break
+    for (const row of rows) {
+      if (!row.storage_path) continue
+      try {
+        fs.unlinkSync(row.storage_path)
+      } catch {
+        // 文件已不存在时继续删数据库行。
+      }
     }
+    const placeholders = rows.map(() => '?').join(',')
+    const result = db
+      .prepare(`DELETE FROM crawl_documents WHERE id IN (${placeholders})`)
+      .run(...rows.map((row) => row.id))
+    const deleted = Number(result.changes)
+    pruned += deleted
+    if (deleted === 0) break
   }
-  const result = db.prepare('DELETE FROM crawl_documents WHERE fetched_at < ?').run(cutoff)
-  return Number(result.changes)
+  return pruned
 }

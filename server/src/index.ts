@@ -16,6 +16,7 @@ import { resumeUnfinishedReports, startReportQueue } from './ai/report-queue'
 import { adminRouter } from './routes/admin/index'
 import { publicRouter } from './routes/public'
 import { pruneCrawlDocuments, startScorelineScheduler } from './score-lines/crawl-scheduler'
+import { recoverCrawlRuns } from './score-lines/crawl-recovery'
 
 const app = express()
 app.disable('x-powered-by')
@@ -188,6 +189,9 @@ const server = app.listen(config.port, () => {
   })
   pruneEventLogs()
   pruneCrawlSnapshot()
+  // 抓取自愈必须在 scheduler 之前：残留 running 先落 failed，queued 立刻续跑，
+  // 否则 scheduler 的「有在途任务就不排队」判断会被残留永久挡住。
+  recoverCrawlRuns()
   startScorelineScheduler()
   // 报告队列：端口起来之后才注册 runner 和续跑，避免端口占用时还在花钱跑 AI。
   startReportQueue(generateSubmission)
@@ -201,6 +205,8 @@ const server = app.listen(config.port, () => {
   }
   // 单进程部署，不需要文件锁；unref 让定时器不阻止进程退出。
   setInterval(pruneEventLogs, 24 * 60 * 60 * 1000).unref()
+  // 原始抓取快照每日清理一次；结构化分数线不在这里删。
+  setInterval(pruneCrawlSnapshot, 24 * 60 * 60 * 1000).unref()
 })
 
 function pruneEventLogs(): void {

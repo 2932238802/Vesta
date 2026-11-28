@@ -38,6 +38,21 @@ escalate_when:
 
 <!-- auth:rows -->
 
+## AUTH-20261128-001
+
+- 时间：2026-11-28 11:26:45 +0800
+- CR/T：CR-006 / T-022 ~ T-025
+- 动作：commit CR-006 工作区（抓取可靠性返工后，T-022~T-025 + v2.10 文档）
+- 级别：A1c
+- 策略条款：G3 复审结论为有条件通过；Review 批准当前分支 commit，不含 push / 部署
+- 证据：本复审报告 + check:crawl 7 节 EXIT=0 + npm run verify 连续 2 次 EXIT=0 + check:score 3 次 EXIT=0 + check-docs --gate g3 0 ERROR（warn 除外）+ 隔离复现 attempted/deadline 边界
+- 批准：review-agent
+- 范围：CR-006 工作区当前变更（T-022~T-025；不含 data/、.env、zxg/）
+- 有效期：随 CR 结束
+- 撤销：否
+- 幂等键：CR-006:commit:A1c
+
+
 ## AUTH-20261127-005
 
 - 时间：2026-11-27 16:53:32 +0800

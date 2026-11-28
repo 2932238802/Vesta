@@ -2,7 +2,7 @@
 
 > 注：v2.08 起 `docs/` 已移出工作区；本文件历史条目中的 `docs/reference` 链接仅作历史，备份在 `_vesta-backups/docs-20261126-2010`。
 
-> 维护者：Doc 建任务；Dev 只更新状态与追溯矩阵 ｜ 状态：CR-005 G3 有条件通过，P2/P3 返工完成待复审 ｜ 最近更新：2026-11-27
+> 维护者：Doc 建任务；Dev 只更新状态与追溯矩阵 ｜ 状态：CR-006 G3 返工完成，待复审 ｜ 最近更新：2026-11-28
 > 任务状态只用：TODO / DOING / DONE / BLOCKED / DROPPED
 
 ### T-001 备份并移除 zxg 追踪（状态：DONE）
@@ -329,3 +329,57 @@
 | AC-005-5 | 脚本 dry-run/write/备份/幂等 | T-020 | 已验证（dry-run 不建库；write 备份 12 条；二次 0 写 12 跳过且不新增备份；DB 不存在/院校缺失/403 均非 0 且不建库；失败路径无 vesta.db/-wal/-shm） |
 | AC-005-6 | 隔离 DATA_DIR 两校 2+10 行、查询可见 | T-020 | 已验证（`check:import-jilin` 2+10；240.5 / 240.51445096） |
 | AC-005-7 | verify + CI | T-021 | 已验证（本地 `npm run verify` EXIT=0；CI 由主会话推送后触发） |
+
+## CR-006 任务
+
+### T-022 启动自愈与 queued 续跑（状态：DONE）
+
+- 来源：CR-006 / R-006（v1）
+- 关联需求：R-006 / AC-006-1
+- 目标：新增 recover 模块；启动时 running→failed（stale），queued 自动 runNext；scheduler 顺序调整。
+- 涉及文件/模块：`server/src/score-lines/crawl-recovery.ts`、`server/src/index.ts`
+- 验证：临时库构造 running/queued，启动恢复断言；调度器可继续排队（`check:crawl`）。
+- 结果：running→failed 且 message 以 `stale:` 开头；queued 续跑 success/saved=1；恢复后无 queued/running 残留。
+- 规模：M
+
+### T-023 单源预算、deadline 与重试（状态：DONE）
+
+- 来源：CR-006 / R-006（v1）
+- 关联需求：R-006 / AC-006-2、AC-006-3
+- 目标：单源 10 页上限；deadline 每页检查；fetch 网络/429/5xx 退避重试，403/404 不重试，Retry-After 上限。
+- 涉及文件/模块：`server/src/score-lines/crawl.ts`、`server/src/score-lines/crawl-fetch.ts`
+- 验证：本地 HTTP 夹具延迟/500/429；页数/时限断言（`check:crawl`）。
+- 结果：入口 + 9 链接停在 10 页并写单源 detail；注入 500ms deadline 时入口取完即停、写 `budget:` detail，单页超时受剩余时间约束；多源预算用尽后第 4 个来源保持未尝试（不写 failed / 不刷新 `last_run_at`）；500→200、429 Retry-After（秒/HTTP 日期/无头默认/60s 上限）、网络错误各重试；403/404 与 `assertSafeUrl` 失败不重试。
+- 规模：M
+
+### T-024 快照每日清理与状态 CLI（状态：DONE）
+
+- 来源：CR-006 / R-006（v1）
+- 关联需求：R-006 / AC-006-4、AC-006-5
+- 目标：24h prune；新增只读 `scripts/scoreline-crawl-status.ts`。
+- 涉及文件/模块：`server/src/index.ts`、`server/src/score-lines/crawl-scheduler.ts`、`scripts/scoreline-crawl-status.ts`
+- 验证：prune 行为用例 + CLI 输出断言（只读）（`check:crawl`）。
+- 结果：启动 prune + 24h `setInterval(...).unref()`；`pruneCrawlDocuments` 改分批「删文件 → 删对应行」；用例覆盖 1005 个旧文件 + 空路径 + 不可删目录（共 1007 行）全删、新行/新文件保留、结构化批次数不变；CLI 输出 running/queued/stale、来源状态与下次到期、最近 run；主库 hash/mtime 不变；缺库非 0 且提示清晰。
+- 规模：S
+
+### T-025 测试、文档与版本（状态：DONE）
+
+- 来源：CR-006 / R-006（v1）
+- 关联需求：R-006 / AC-006-6、AC-006-7
+- 目标：用例接入 check；v2.10；STATUS/CHANGELOG/大脑。
+- 涉及文件/模块：`server/src/score-lines/crawl-reliability.cases.ts`、`package.json`、`LosAngelousDocs/*`、`PROJECT_BRAIN.md`
+- 验证：`npm run check:crawl`；`npm run verify`；CI。
+- 结果：新增 `check:crawl` 并接入 `verify`；7 节用例（自愈、单源预算、多源预算、deadline、重试边界、prune、CLI）；版本 2.10.0 / v2.10；文档与大脑同步；本地 verify EXIT=0（CI 待推送后触发）。
+- 规模：S
+
+## CR-006 AC ↔ 验证追溯矩阵
+
+| AC | 验证方式 | 对应任务 | 状态 |
+|---|---|---|---|
+| AC-006-1 | 临时库 running/queued 启动恢复（`check:crawl` 第 1 节） | T-022 | 已验证 |
+| AC-006-2 | 本地 HTTP 多页/延迟：10 页上限、多源 30 页后第 4 源未尝试、deadline 每页检查（`check:crawl` 第 2/3/4 节） | T-023 | 已验证 |
+| AC-006-3 | 500→200、429 Retry-After（秒/HTTP 日期/无头默认/60s 上限/非法值）、网络错误重试 2 次、403/404 与 assertSafeUrl 不重试（`check:crawl` 第 5 节） | T-023 | 已验证 |
+| AC-006-4 | 启动 prune + 24h 定时器；1005 旧文件 + 空路径 + 不可删目录共 1007 行分批清理，新行/文件保留，结构化批次不变（`check:crawl` 第 6 节） | T-024 | 已验证 |
+| AC-006-5 | CLI 只读输出关键字段、主库 hash/mtime 不变、缺库提示（`check:crawl` 第 7 节） | T-024 | 已验证 |
+| AC-006-6 | 用例覆盖自愈/续跑/单源/多源预算/deadline/重试边界/prune/CLI，接入 `check:crawl` 并纳入 `verify` | T-025 | 已验证 |
+| AC-006-7 | `npm run verify` EXIT=0；版本 v2.10（CI 待推送） | T-025 | 已验证（本地；CI 待触发） |

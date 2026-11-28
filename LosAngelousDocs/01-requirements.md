@@ -2,7 +2,7 @@
 
 > 注：v2.08 起 `docs/` 已移出工作区；本文件历史条目中的 `docs/reference` 链接仅作历史，备份在 `_vesta-backups/docs-20261126-2010`。
 
-> 维护者：Doc Agent ｜ 状态：CR-005 G4 通过（CR-003/CR-004 G4 已通过） ｜ 最近更新：2026-11-26
+> 维护者：Doc Agent ｜ 状态：CR-006 G3 不通过，Dev 返工完成待复审（CR-005 G4 已通过） ｜ 最近更新：2026-11-28
 > 需求变更只升版（`R-xxx v2`），旧版内容保留在「变更历史」，不覆盖。
 
 ### R-001 仓库不再携带真实咨询稿（优先级 P0，版本 v1）
@@ -95,4 +95,21 @@
   - AC-005-6 脚本在隔离 `DATA_DIR` 下用两校官方页面（或本地 HTTP fixture）验证：长春工程学院 2 条、长春师范大学 10 条；写入后查询可见；dry-run 不写库。
   - AC-005-7 `npm run verify` EXIT=0；CI success；版本 v2.09；文档/STATUS/CHANGELOG 同步。
 - 不在范围内：后台调度器删除；查询返回的 coverage 摘要；解析器规则；人工导入恢复；其他省。
+- 变更历史：v1 2026-11-27 初始（G0 已确认）
+
+### R-006 抓取调度可靠性（优先级 P0，版本 v1）
+
+- 来源：CR-006
+- 背景：自动调度是唯一入口；running/queued 残留、单源吃满预算、无重试、快照只在启动清理，都会导致停抓或抓不完。
+- 描述：启动自愈 + 按源预算 + 瞬时重试 + 每日快照清理 + 只读状态 CLI；不改变解析/自动收录口径。
+- 成功指标：重启后自动续跑；单源不超 10 页；瞬时错误重试；快照每日清理；CLI 可看状态。
+- 验收标准：
+  - AC-006-1 启动时 `running` 遗留标 `failed`（message 以 `stale:` 开头），`queued` 存在时自动 `runNext()`；scheduler 不再被残留永久阻塞。
+  - AC-006-2 单源页数上限 10；整轮仍 30；deadline 在每页检查，超时停止当前源并写 `budget` detail；其他源仍按剩余时间尝试。
+  - AC-006-3 `fetchResource` 对网络错误/429/5xx 重试 2 次（1s/3s），429 尊重 `Retry-After` ≤60s；403/404 不重试；重试写结构化日志。
+  - AC-006-4 `pruneCrawlDocuments(90)` 启动执行一次，并每 24h 执行；只删快照与文档行，不删结构化分数线。
+  - AC-006-5 `scripts/scoreline-crawl-status.ts` 只读输出 running/queued/stale、各源 last_status/last_error/next due、最近 run；不写库、不打印正文/密钥。
+  - AC-006-6 新增用例覆盖：启动恢复、queued 续跑、单源页数上限、deadline、重试/不重试、prune；接入 `check:scoreline` 或新 `check:crawl`。
+  - AC-006-7 `npm run verify` EXIT=0；版本 v2.10；CI success。
+- 不在范围内：按源独立队列、多实例、代理/验证码、校级源扩展、解析器改造、前端覆盖看板。
 - 变更历史：v1 2026-11-27 初始（G0 已确认）

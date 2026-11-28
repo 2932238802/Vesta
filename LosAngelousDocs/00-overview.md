@@ -1,6 +1,6 @@
 # 00 — 项目总览
 
-> 维护者：Doc Agent ｜ 状态：L2（2026-11-26 初始化） ｜ 最近更新：2026-11-26
+> 维护者：Doc Agent ｜ 状态：L2（2026-11-26 初始化） ｜ 最近更新：2026-11-28
 > 本文件是工作流视角的总览；产品说明文档（原 `docs/`：问卷 / 报告 / 咨询 / 部署）已于 v2.08 移出工作区，只留仓库外备份 `_vesta-backups/docs-20261126-2010` 与 Git 历史。
 
 ## 一句话定位
@@ -20,7 +20,7 @@ Vesta 是面向大学在读学生的**邀请制「大学现状自评」系统**�
 | `npm run dev` | 后端 `8788` + Vite `5173` | 2026-11-26（需 `npm run dev` 手工确认） |
 | `npm run typecheck` | server + web 类型检查 | 2026-11-26（`verify` 内） |
 | `npm run build` | 构建前端到 `web/dist` | 2026-11-26（`verify` 内，5.37s） |
-| `npm run verify` | 交付前全量守卫 + 类型 + 构建 | 2026-11-27（v2.09，EXIT=0） |
+| `npm run verify` | 交付前全量守卫 + 类型 + 构建 | 2026-11-28（v2.10，EXIT=0） |
 | `npm start` | 生产启动（默认 `8787`） | 以部署环境为准 |
 | `bash update.sh` | 服务器更新（L1–L5） | 2026-11-21 生产验证（v2.04） |
 
@@ -40,8 +40,8 @@ Vesta 是面向大学在读学生的**邀请制「大学现状自评」系统**�
 
 ## 构建与测试基线
 
-- 能否构建：能。2026-11-26 `npm run verify` EXIT=0。
-- 测试是否通过：无统一测试框架；`check:question` / `check:dates` / `check:score` / `check:audit` / `check:roster` / `check:search` 全绿。
+- 能否构建：能。2026-11-28 `npm run verify` EXIT=0（v2.10）。
+- 测试是否通过：无统一测试框架；`check:question` / `check:dates` / `check:score` / `check:crawl` / `check:audit` / `check:roster` / `check:search` 全绿。
 - 已知限制：页面与路由无自动化覆盖，依赖 playwright MCP 手工走查；文件规模有 10 条基线，只能下调。
 
 ## 术语

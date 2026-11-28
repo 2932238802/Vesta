@@ -1,7 +1,7 @@
 {
   "name": "vesta",
   "private": true,
-  "version": "2.9.0",
+  "version": "2.10.0",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"
@@ -25,9 +25,10 @@
     "check:score": "tsx shared/src/score-line.cases.ts && tsx server/src/score-lines/parsers/cases.ts",
     "check:scoreline": "tsx server/src/score-lines/auto-review.cases.ts && tsx server/src/score-lines/crawl-orchestration.cases.ts && tsx server/src/db/migrations/scoreline-auto-review.cases.ts && tsx server/src/score-lines/school-admit.cases.ts",
     "check:import-jilin": "tsx server/src/score-lines/school-import.cases.ts",
+    "check:crawl": "tsx server/src/score-lines/crawl-reliability.cases.ts",
     "check:audit": "tsx server/src/ai/doc-audit.cases.ts",
     "check:roster": "tsx server/src/routes/admin/roster-group-id.cases.ts",
-    "verify": "npm run check:docs && npm run check:size && npm run check:version && npm run check:deps && npm run check:dates && npm run check:question && npm run check:score && npm run check:scoreline && npm run check:import-jilin && npm run check:audit && npm run check:roster && npm run check:search && npm run typecheck && npm run build",
+    "verify": "npm run check:docs && npm run check:size && npm run check:version && npm run check:deps && npm run check:dates && npm run check:question && npm run check:score && npm run check:scoreline && npm run check:import-jilin && npm run check:crawl && npm run check:audit && npm run check:roster && npm run check:search && npm run typecheck && npm run build",
     "start": "npm --workspace server run start",
     "update": "bash update.sh",
     "check:search": "tsx server/src/ai/doc-search.cases.ts"

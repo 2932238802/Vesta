@@ -153,6 +153,8 @@ export function cancelQueuedRun(id: string): boolean {
 }
 
 interface SourceStats {
+  /** 本来源是否真正抓过至少一页；整轮预算/时限在开始前用尽时为 false。 */
+  attempted: boolean
   fetched: number
   parsed: number
   saved: number
@@ -173,6 +175,7 @@ interface SourceStats {
 
 function emptyStats(): SourceStats {
   return {
+    attempted: false,
     fetched: 0,
     parsed: 0,
     saved: 0,
@@ -363,6 +366,8 @@ async function processParsedBatches(
 }
 
 const MAX_PAGES_PER_RUN = 30
+/** 单源页数上限：防止一个来源吃满整轮 30 页预算，其他省 / 校级源长时间排队。 */
+const MAX_PAGES_PER_SOURCE = 10
 const REQUEST_INTERVAL_MS = 2000
 
 interface CrawlCandidate {
@@ -376,16 +381,22 @@ interface PageInput {
   url: string
   years: number[]
   stats: SourceStats
+  deadline: number
 }
 
 /** 取一页 → 跟引导页 → 解析 → 落 document → 写批次；返回下一层候选链接。 */
 async function processPage(input: PageInput): Promise<string[]> {
-  const { source, runId, url, years, stats } = input
+  const { source, runId, url, years, stats, deadline } = input
+  // 循环顶部已检查一次；这里再兜底，避免 deadline 在进入本页前刚好过期。
+  if (Date.now() > deadline) {
+    stats.details.push('budget: 达到本省运行时限，停止当前源')
+    return []
+  }
   const sourceParserId = source.parserId || 'html-table@1'
   let actualParserId = sourceParserId
   let fetched: Awaited<ReturnType<typeof fetchResource>> | null = null
   try {
-    fetched = await fetchResource(url)
+    fetched = await fetchResource(url, { deadline })
     stats.fetched += 1
     let content = fetched.content
     let finalUrl = url
@@ -409,7 +420,7 @@ async function processPage(input: PageInput): Promise<string[]> {
         result.failure = { code: 'entry_redirect', detail: '引导页跳转到非同域地址' }
       } else {
         try {
-          const second = await fetchResource(target)
+          const second = await fetchResource(target, { deadline })
           stats.fetched += 1
           content = second.content
           finalUrl = target
@@ -495,30 +506,49 @@ async function processSource(
   source: ScoreLineSource,
   runId: string,
   years: number[],
-  budget: { pages: number }
+  budget: { pages: number },
+  deadline: number,
+  requestIntervalMs: number
 ): Promise<SourceStats> {
   const stats = emptyStats()
   const maxDepth = Math.min(5, Math.max(0, source.discoverDepth ?? 2))
   const startUrl = source.entryUrl || source.url
   const queue: CrawlCandidate[] = [{ url: startUrl, depth: 0 }]
   const visited = new Set<string>()
+  let sourcePages = 0
   if (budget.pages >= MAX_PAGES_PER_RUN) {
     stats.details.push('budget: 本 run 已达到 30 页上限，剩余来源下次继续')
     return stats
   }
 
-  while (queue.length && budget.pages < MAX_PAGES_PER_RUN) {
+  while (queue.length) {
+    if (budget.pages >= MAX_PAGES_PER_RUN) {
+      stats.details.push('budget: 本 run 已达到 30 页上限，剩余来源下次继续')
+      break
+    }
+    if (sourcePages >= MAX_PAGES_PER_SOURCE) {
+      stats.details.push(`budget: 达到单源 ${MAX_PAGES_PER_SOURCE} 页上限，剩余链接本次不再抓取`)
+      break
+    }
+    // deadline 每页检查：超时只停当前源，其他源由 runNext 按剩余时间继续尝试。
+    if (Date.now() > deadline) {
+      stats.details.push('budget: 达到本省运行时限，停止当前源')
+      break
+    }
     const current = queue.shift() as CrawlCandidate
     if (visited.has(current.url)) continue
     visited.add(current.url)
+    stats.attempted = true
+    sourcePages += 1
     budget.pages += 1
-    if (budget.pages > 1) await sleep(REQUEST_INTERVAL_MS)
+    if (budget.pages > 1) await sleep(requestIntervalMs)
     const found = await processPage({
       source,
       runId,
       url: current.url,
       years,
-      stats
+      stats,
+      deadline
     })
     const nextDepth = current.depth + 1
     if (nextDepth <= maxDepth && found.length) {
@@ -529,9 +559,6 @@ async function processSource(
     }
   }
 
-  if (queue.length && budget.pages >= MAX_PAGES_PER_RUN) {
-    stats.details.push('budget: 本 run 已达到 30 页上限，剩余来源下次继续')
-  }
   // 内容未变（autoSkipped）或只看到索引页时，入口是通的；不能误报「未核验」。
   const indexOnly = stats.indexPages > 0 && stats.failed === 0
   if (
@@ -569,7 +596,10 @@ function refreshRunCoverage(
 
 let running = false
 
-export async function runNext(): Promise<void> {
+/** `deadline` / `requestIntervalMs` 仅供用例注入；生产使用配置与 REQUEST_INTERVAL_MS。 */
+export async function runNext(
+  options: { deadline?: number; requestIntervalMs?: number } = {}
+): Promise<void> {
   if (running) return
   const next = db
     .prepare(
@@ -596,7 +626,9 @@ export async function runNext(): Promise<void> {
   const sources = sourcesForProvince(next.province)
   const total = emptyStats()
   const budget = { pages: 0 }
-  const deadline = started + Math.max(1, config.scorelineCrawlProvinceMinutes) * 60_000
+  const deadline =
+    options.deadline ?? started + Math.max(1, config.scorelineCrawlProvinceMinutes) * 60_000
+  const requestIntervalMs = options.requestIntervalMs ?? REQUEST_INTERVAL_MS
   log.info('scoreline.crawl_started', {
     runId: next.id,
     province: next.province,
@@ -605,10 +637,21 @@ export async function runNext(): Promise<void> {
   try {
     for (const source of sources) {
       if (Date.now() > deadline) {
-        total.details.push('达到本省运行时限，剩余来源下次继续')
+        total.details.push('budget: 达到本省运行时限，剩余来源下次继续')
         break
       }
-      const stats = await processSource(source, next.id, years, budget)
+      const stats = await processSource(source, next.id, years, budget, deadline, requestIntervalMs)
+      if (!stats.attempted) {
+        // 整轮预算在来源开始前已用尽：本轮没有抓过这个来源，
+        // 不能写 last_status=failed / last_run_at，否则该来源会被推迟一整个间隔（饿死）。
+        total.details.push(...stats.details)
+        log.info('scoreline.source_skipped', {
+          runId: next.id,
+          sourceId: source.id,
+          reason: 'budget'
+        })
+        break
+      }
       total.fetched += stats.fetched
       total.parsed += stats.parsed
       total.saved += stats.saved

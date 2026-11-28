@@ -91,3 +91,16 @@
 - 结论：选 A。`docs/` 与其 158 个文件已移出工作区，仓库外备份 `D:/PROJECT/_vesta-backups/docs-20261126-2010`（SHA256 清单 158 条全部校验通过），历史仍可从 Git 查看。`check-docs` 只校验工作流文档入口与关键指针；`check-version` 以 `LosAngelousDocs/STATUS.md`「当前产品版本」为唯一版本源，要求与根 `package.json` 的 `<major>.<minor>.0` 完全相等。原「问卷设计文档覆盖」守卫随 docs 删除而移除（用户已知并接受）。
 - 影响：所有 Agent 开工入口改为 `PROJECT_BRAIN.md`；产品问卷 / 咨询 / 部署说明只能查备份或 Git 历史；历史 `LosAngelousDocs/reports/` 中指向 docs 的链接按历史保留，不改写。后续若需要恢复产品文档，应新建 CR，而不是直接重建未登记目录。
 - 可逆性：可从备份拷回 `docs/` 并恢复旧脚本，但需同时改回 AGENTS / CLAUDE / PROJECT_BRAIN 与 `check-docs` / `check-version`。
+
+### D-009 抓取可靠性：单实例启动自愈 + 单源页数上限 + 有限退避重试
+
+- 日期：2026-11-27（产品版本 v2.10）
+- 背景：前端手动抓取下线后自动调度成为唯一入口。崩溃 / 重启后数据库残留 `running` 会让 scheduler 的「有在途任务就不排队」判断永久成立；单源可吃满整轮 30 页 / 30 分钟；瞬时网络失败直接判失败。
+- 选项：
+  - A. 自愈 + 单源 10 页 + deadline 每页检查 + 网络/429/5xx 退避重试 2 次 + 每日快照清理 + 只读状态 CLI（用户 G1 选择）。
+  - B. 只做启动自愈：其余停抓诱因仍在。
+  - C. 只做重试 / 超时：无法解决残留阻塞与单源吃满预算。
+  - D. 改成按源独立调度队列：架构改动大，本轮不做。
+- 结论：选 A。启动时把所有 `running` 标 `failed`（message 以 `stale:` 开头）并续跑 `queued`；单源最多 10 页（整轮仍 30）；deadline 每页检查，超时只停当前源；网络错误 / 429 / 5xx 重试 2 次（1s/3s），429 尊重 `Retry-After` ≤60s，403/404 不重试；快照启动 + 每 24h 清理；新增只读 `scripts/scoreline-crawl-status.ts`。
+- 影响：`server/src/score-lines/{crawl,crawl-fetch,crawl-recovery,crawl-scheduler}.ts`、`server/src/index.ts`、`scripts/scoreline-crawl-status.ts`、`package.json`（`check:crawl`）；解析、自动收录、查询口径不变。
+- 可逆性：全部为代码与常量级改动，可整体回滚；回滚后残留 `running` 会重新变成永久阻塞（需人工清库），已写入的抓取结果不受影响。单实例假设不变，多实例部署下自愈会误判其他实例的运行中任务。
