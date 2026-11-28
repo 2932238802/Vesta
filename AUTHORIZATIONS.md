@@ -51,6 +51,7 @@ escalate_when:
 - 有效期：随 CR 结束
 - 撤销：否
 - 幂等键：CR-007:commit:A1c
+- Commit：8330a9e
 
 
 ## AUTH-20261128-002
