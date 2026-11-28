@@ -75,3 +75,12 @@
 - **快照清理**：启动执行一次 + 每 24h 执行 `pruneCrawlDocuments(90)`；按批「取行 → 删文件 → 删对应行」，行与文件一一对应；只删 `data/crawl` 与 `crawl_documents` 行，不删结构化分数线。
 - **状态 CLI**：`scripts/scoreline-crawl-status.ts` 只读打开 `DATA_DIR/vesta.db`，输出 running/queued/疑似卡住（running 超过整轮时限，默认 30 分钟）、各源 last_status/last_error/last_run_at/interval/下次到期、最近 10 条 run；消息中的 URL 去掉 query/hash；不迁移、不写库、不打印正文/密钥；数据库不存在时非 0 退出并提示。
 - **测试入口**：`npm run check:crawl`（`server/src/score-lines/crawl-reliability.cases.ts`，本地 HTTP 夹具 + 隔离 `DATA_DIR`），已纳入 `npm run verify`。
+
+## 抓取安全与解析去重（CR-007，v2.11）
+
+- **重定向**：`fetchResource` 改手动逐跳（≤5），每一跳先 `assertSafeUrl`；处理相对 `Location`、循环、超跳；HTTPS→HTTP 仅测试环境允许；`SCORELINE_CRAWL_ALLOW_PRIVATE=1` 只用于本地 fixture。内网判定统一走 `isPrivateHostname()`：IPv4 回环 / RFC1918 / 链路本地 / CGNAT / `0.0.0.0` / 组播，IPv6 `::` / `::1` / `fc00::/7` / `fe80::/10` / `ff00::/8`、IPv4-mapped（`::ffff:0:0/96`）、IPv4-compatible（`::/96`）与 NAT64（`64:ff9b::/96`、`64:ff9b:1::/48`）均按内网处理。
+- **大小**：先看 `Content-Length`，>10MB 直接拒绝；无长度时流式读取，累计 >10MB 中止；不把整包读进内存。
+- **403**：HTTP 401/403 映射 `blocked` 失败码，不重试；`CRAWL_FAILURE_HINTS` 提示换官方 JSON / 本地 HTML / 人工核验入口；`crawl_documents.http_status` 记真实 401/403（含引导页第二跳）。
+- **多表去重**：`html-table@1` 跨表按 `subjectCode|isMinimum|minimumType` 去重；重复保留第一条并记 `duplicate_table_metric`，避免指标唯一键异常；不同值不静默覆盖。成功抓取时 issues 合并进 `crawl_documents.note`（截断 500 字符）并写 `scoreline.parse_issue` 结构化日志（runId / sourceId / url / issue），不改变 run 成功 / 失败判定。
+- **返回字段**：`fetchResource` 在 `content` / `contentType` / `httpStatus` 之外新增 `finalUrl`（最后一跳实际地址）；`crawl_documents.url` 记实际拿到正文的最终地址，失败路径仍记入口 URL。
+- **残留（本轮不做）**：DNS rebinding（域名首次解析后才指向内网）未处理；测试放行模式下仍允许 HTTPS→HTTP。压缩响应的 `Content-Length` 语义依服务端而定，流式上限以实际收到字节为准。

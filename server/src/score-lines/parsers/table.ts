@@ -156,6 +156,43 @@ export function rowsToMetrics(rows: unknown[][]): { metrics: ParsedMetric[]; iss
   return { metrics, issues }
 }
 
+/**
+ * 跨表合并指标去重：按 `subjectCode|isMinimum|minimumType` 保留第一条。
+ * 重复（含同名不同值）不静默覆盖，返回可追溯的 `duplicate_table_metric` issue。
+ */
+export function dedupeTableMetrics(metrics: ParsedMetric[]): {
+  metrics: ParsedMetric[]
+  issues: string[]
+} {
+  const seen = new Map<string, ParsedMetric>()
+  const output: ParsedMetric[] = []
+  const issues: string[] = []
+  for (const metric of metrics) {
+    const subject = resolveSubject(metric.subjectCode) ?? resolveSubject(metric.subjectName)
+    const subjectCode = subject?.code ?? metric.subjectCode ?? metric.subjectName
+    const isMinimum = metric.isMinimum === true
+    const minimumType = isMinimum ? metric.minimumType ?? 'other' : ''
+    const key = `${subjectCode}|${isMinimum ? 1 : 0}|${minimumType}`
+    const first = seen.get(key)
+    if (first) {
+      issues.push(
+        `duplicate_table_metric: ${subject?.name ?? metric.subjectName} ${minimumType || '分数'} 在多张表中重复（${first.value} / ${metric.value}），保留第一条`
+      )
+      continue
+    }
+    const normalized: ParsedMetric = {
+      ...metric,
+      subjectCode,
+      subjectName: subject?.name ?? metric.subjectName,
+      isMinimum,
+      minimumType
+    }
+    seen.set(key, normalized)
+    output.push(normalized)
+  }
+  return { metrics: output, issues }
+}
+
 export function scopeForContext(context: ParserContext): ScoreLineScope {
   if (context.scopeHint) return context.scopeHint
   if (context.exam === 'postgrad' && (context.province === '全国' || context.province === '')) {

@@ -38,6 +38,21 @@ escalate_when:
 
 <!-- auth:rows -->
 
+## AUTH-20261128-003
+
+- 时间：2026-11-28 12:28:09 +0800
+- CR/T：CR-007 / T-026 ~ T-029
+- 动作：commit CR-007 工作区（T-026 ~ T-029 + v2.11 文档），不含 push / 部署
+- 级别：A1c
+- 策略条款：G3 结论为有条件通过；Review 批准当前分支 commit（A1c），不构成自证
+- 证据：本报告 + npm run verify EXIT=0 + npm run check:crawl EXIT=0（11 节）+ check:score / check:scoreline EXIT=0 + check-docs --gate g3 0 ERROR/0 WARN + 纯函数地址覆盖独立复现
+- 批准：review-agent
+- 范围：CR-007 工作区当前变更（server/src/score-lines/*、shared/src/score-line.ts、测试、LosAngelousDocs/*、PROJECT_BRAIN.md、WORKLOG.md；不含 data/、.env、zxg/、_vesta-backups）
+- 有效期：随 CR 结束
+- 撤销：否
+- 幂等键：CR-007:commit:A1c
+
+
 ## AUTH-20261128-002
 
 - 时间：2026-11-28 11:29:14 +0800

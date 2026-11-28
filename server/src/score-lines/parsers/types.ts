@@ -62,6 +62,7 @@ export type ParserFailureCode =
   | 'parse'
   | 'decode'
   | 'entry_redirect'
+  | 'blocked'
 
 export interface ParserResult {
   batches: ParsedBatch[]

@@ -2,7 +2,7 @@
 
 > 注：v2.08 起 `docs/` 已移出工作区；本文件历史条目中的 `docs/reference` 链接仅作历史，备份在 `_vesta-backups/docs-20261126-2010`。
 
-> 维护者：Doc Agent ｜ 状态：CR-006 G4 通过（CR-005 G4 已通过） ｜ 最近更新：2026-11-28
+> 维护者：Doc Agent ｜ 状态：CR-007 G3 通过（待提交） ｜ 最近更新：2026-11-28
 > 需求变更只升版（`R-xxx v2`），旧版内容保留在「变更历史」，不覆盖。
 
 ### R-001 仓库不再携带真实咨询稿（优先级 P0，版本 v1）
@@ -113,3 +113,20 @@
   - AC-006-7 `npm run verify` EXIT=0；版本 v2.10；CI success。
 - 不在范围内：按源独立队列、多实例、代理/验证码、校级源扩展、解析器改造、前端覆盖看板。
 - 变更历史：v1 2026-11-27 初始（G0 已确认）
+
+### R-007 抓取安全与解析去重（优先级 P1，版本 v1）
+
+- 来源：CR-007
+- 背景：重定向未逐跳校验、10MB 后置检查、403 无专用失败码、多表重复科目可能撞唯一键。
+- 描述：逐跳重定向校验、Content-Length/流式限长、`blocked` 失败码、跨表指标去重；不改解析规则与调度预算。
+- 成功指标：SSRF/超大响应被中止；403 可操作；多表不抛库错误；verify/CI 绿。
+- 验收标准：
+  - AC-007-1 `fetchResource` 手动处理最多 5 跳重定向，每一跳先 `assertSafeUrl`；跳转到 127.0.0.1/10.x/192.168/169.254/.local 被拒绝，且**不发出对内网的请求**；循环/超 5 跳/非法 Location 明确失败。
+  - AC-007-2 `Content-Length > 10MB` 直接拒绝；无 Content-Length 或长度不实时流式读取，累计 >10MB 立即中止；不把整包读完。
+  - AC-007-3 HTTP 401/403 映射失败码 `blocked`（不重试），错误文案给出「换官方 JSON/本地 HTML/人工核验入口」；`CRAWL_FAILURE_HINTS` 同步；`crawl_documents.error`/source last_error 记 `blocked:`。
+  - AC-007-4 多表页面跨表重复 `subjectCode|isMinimum|minimumType` 只保留第一条，记录 `duplicate_table_metric` issue；同一页面不再因指标唯一键抛错/误报 network；不同值不静默覆盖。
+  - AC-007-5 现有 301/302 正常公开跳转、PDF/Excel/JSON 分派、重试/预算/deadline 行为不回归。
+  - AC-007-6 用例覆盖私网跳转、>10MB、403、多表重复；接入 `check:crawl`/`check:score`。
+  - AC-007-7 `npm run verify` EXIT=0；版本 v2.11；CI success。
+- 不在范围内：docx 表格、发现回退、每源 UA/Referer/代理、验证码、多实例。
+- 变更历史：v1 2026-11-28 初始（G0 已确认）

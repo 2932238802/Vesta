@@ -10,7 +10,7 @@ import {
   refreshNationalCoverage,
   refreshProvinceCoverage
 } from './coverage'
-import { fetchResource, insertDocument, saveSnapshot } from './crawl-fetch'
+import { blockedStatusOf, fetchResource, insertDocument, saveSnapshot } from './crawl-fetch'
 import { followTarget, selectCandidates } from './discovery'
 import { mergeNotes, normalizeParsedBatch } from './normalize'
 import { parseContent } from './parsers'
@@ -211,7 +211,7 @@ function codedError(result: Awaited<ReturnType<typeof parseContent>>): string {
 
 function failureCodeOf(error: string): string {
   const match =
-    /^(network|entry_redirect|no_table|unsupported_table|no_text_layer|parse|decode|needs_seed)\s*[:：]/.exec(
+    /^(network|blocked|entry_redirect|no_table|unsupported_table|no_text_layer|parse|decode|needs_seed)\s*[:：]/.exec(
       error.trim()
     )
   return match?.[1] ?? 'parse'
@@ -399,7 +399,7 @@ async function processPage(input: PageInput): Promise<string[]> {
     fetched = await fetchResource(url, { deadline })
     stats.fetched += 1
     let content = fetched.content
-    let finalUrl = url
+    let finalUrl = fetched.finalUrl
     let finalStatus = fetched.httpStatus
     let finalType = fetched.contentType
     let pageContext = pageContextFor(source, url)
@@ -423,7 +423,7 @@ async function processPage(input: PageInput): Promise<string[]> {
           const second = await fetchResource(target, { deadline })
           stats.fetched += 1
           content = second.content
-          finalUrl = target
+          finalUrl = second.finalUrl
           finalStatus = second.httpStatus
           finalType = second.contentType
           pageContext = pageContextFor(source, target)
@@ -443,12 +443,36 @@ async function processPage(input: PageInput): Promise<string[]> {
             }
           }
         } catch (error) {
-          result.failure = {
-            code: 'entry_redirect',
-            detail: `引导页 ${url} → ${target} 打不开：${(error as Error).message}`
-          }
+          const blockedStatus = blockedStatusOf(error)
+          // document 状态列记录真实拒绝码，便于排障（不再一律记 0 / 200）。
+          if (blockedStatus !== null) finalStatus = blockedStatus
+          result.failure =
+            blockedStatus === null
+              ? {
+                  code: 'entry_redirect',
+                  detail: `引导页 ${url} → ${target} 打不开：${(error as Error).message}`
+                }
+              : {
+                  code: 'blocked',
+                  detail: `引导页 ${url} → ${target} 站点拒绝非浏览器请求（HTTP ${blockedStatus}）`
+                }
         }
       }
+    }
+
+    // 解析 issue 不阻断成功，但必须可追溯：写结构化日志并合并进 document.note（截断）。
+    for (const issue of result.issues.slice(0, 5)) {
+      log.info('scoreline.parse_issue', {
+        runId,
+        sourceId: source.id,
+        url: finalUrl,
+        issue: issue.slice(0, 300)
+      })
+    }
+    if (result.issues.length) {
+      const summary = result.issues.slice(0, 5).join('；')
+      note = note ? `${note}；${summary}` : summary
+      if (note.length > 500) note = `${note.slice(0, 497)}...`
     }
 
     // 快照与 document 元数据用实际拿到正文的那一跳，避免首跳 HTML + 第二跳 PDF 时错位。
@@ -459,7 +483,8 @@ async function processPage(input: PageInput): Promise<string[]> {
     insertDocument({
       runId,
       sourceId: source.id,
-      url,
+      // 记录实际拿到正文的最终地址；失败路径仍记入口 URL。
+      url: finalUrl,
       httpStatus: finalStatus,
       contentType: finalType,
       checksum: snapshot.checksum,
@@ -481,14 +506,20 @@ async function processPage(input: PageInput): Promise<string[]> {
     return result.linkItems?.length ? selectCandidates(result.linkItems) : []
   } catch (error) {
     stats.failed += 1
-    stats.codes.push('network')
-    const coded = `network: ${(error as Error).message}`
+    // 401/403 是站点拒绝而非网络故障：映射 blocked，不重试，提示换入口。
+    const blockedStatus = blockedStatusOf(error)
+    const code = blockedStatus === null ? 'network' : 'blocked'
+    const coded =
+      blockedStatus === null
+        ? `network: ${(error as Error).message}`
+        : `blocked: 站点拒绝非浏览器请求（HTTP ${blockedStatus}），请换官方 JSON / 本地 HTML / 人工核验入口`
+    stats.codes.push(code)
     stats.details.push(`${url}：${coded}`)
     insertDocument({
       runId,
       sourceId: source.id,
       url,
-      httpStatus: fetched?.httpStatus ?? 0,
+      httpStatus: fetched?.httpStatus ?? blockedStatus ?? 0,
       contentType: fetched?.contentType ?? '',
       checksum: '',
       storagePath: '',

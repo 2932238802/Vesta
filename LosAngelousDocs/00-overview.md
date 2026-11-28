@@ -20,7 +20,7 @@ Vesta 是面向大学在读学生的**邀请制「大学现状自评」系统**�
 | `npm run dev` | 后端 `8788` + Vite `5173` | 2026-11-26（需 `npm run dev` 手工确认） |
 | `npm run typecheck` | server + web 类型检查 | 2026-11-26（`verify` 内） |
 | `npm run build` | 构建前端到 `web/dist` | 2026-11-26（`verify` 内，5.37s） |
-| `npm run verify` | 交付前全量守卫 + 类型 + 构建 | 2026-11-28（v2.10，EXIT=0） |
+| `npm run verify` | 交付前全量守卫 + 类型 + 构建 | 2026-11-28（v2.11，EXIT=0） |
 | `npm start` | 生产启动（默认 `8787`） | 以部署环境为准 |
 | `bash update.sh` | 服务器更新（L1–L5） | 2026-11-21 生产验证（v2.04） |
 

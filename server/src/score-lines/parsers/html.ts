@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio'
 import type { Parser, ParsedMetric } from './types'
-import { batchFromMetrics, rowsToMetrics } from './table'
+import { batchFromMetrics, dedupeTableMetrics, rowsToMetrics } from './table'
 import { categoryBatchesFromRows } from './category-table'
 import { candidateLinks, decodeHtml, extractRedirect, pageShape } from './html-shape'
 
@@ -73,9 +73,10 @@ export const htmlTableParser: Parser = {
         ...base
       }
     }
+    const deduped = dedupeTableMetrics(metrics)
     return {
-      batches: [batchFromMetrics(metrics, context, { title: title || undefined })],
-      issues: [],
+      batches: [batchFromMetrics(deduped.metrics, context, { title: title || undefined })],
+      issues: deduped.issues,
       ...base
     }
   }

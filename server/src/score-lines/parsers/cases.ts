@@ -75,6 +75,29 @@ assert.ok(minimum, '录取最低分应单独标记')
 assert.equal(minimum?.minimumType, 'admit')
 console.log('✓ HTML 格式变化 + 最低分标记')
 
+// 跨表重复指标：保留第一张表的值，记 duplicate_table_metric，不抛唯一键错误
+const duplicateTables = await htmlTableParser.parse({
+  parserId: 'html-table@1',
+  content: `<html><body><title>2025年浙江省专升本最低控制分数线</title>
+    <table><tr><th>科目</th><th>分数</th></tr><tr><td>总分</td><td>180</td></tr><tr><td>英语</td><td>60</td></tr></table>
+    <table><tr><th>科目</th><th>分数</th></tr><tr><td>总分</td><td>200</td></tr></table>
+  </body></html>`,
+  contentType: 'text/html',
+  url: context.sourceUrl,
+  context
+})
+assert.equal(duplicateTables.batches.length, 1)
+const totalMetrics = duplicateTables.batches[0].metrics.filter((item) => item.subjectCode === 'total')
+assert.equal(totalMetrics.length, 1, '跨表重复科目只保留 1 条')
+assert.equal(totalMetrics[0].value, 180, '重复时保留第一张表的值')
+assert.ok(
+  duplicateTables.issues.some(
+    (issue) => issue.includes('duplicate_table_metric') && issue.includes('200')
+  ),
+  `应记录重复指标 issue，实际：${duplicateTables.issues.join(' / ')}`
+)
+console.log('✓ 多表重复指标：保留第一条 + duplicate_table_metric issue')
+
 assert.deepEqual(parseScore('320/500'), { value: 320, fullScore: 500 })
 assert.deepEqual(parseScore('３２０ 分'), { value: 320, fullScore: null })
 assert.equal(parseScore('—'), null)

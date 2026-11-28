@@ -275,6 +275,7 @@ export interface ScoreLineSource {
 /** 抓取失败码：写进 crawl_documents.error / 来源 last_error，覆盖页据此给下一步。 */
 export type CrawlFailureCode =
   | 'network'
+  | 'blocked'
   | 'entry_redirect'
   | 'no_table'
   | 'unsupported_table'
@@ -285,6 +286,10 @@ export type CrawlFailureCode =
 
 export const CRAWL_FAILURE_HINTS: Record<CrawlFailureCode, { label: string; next: string }> = {
   network: { label: '站点不可达', next: '稍后重试；连续失败时检查 URL 是否变更' },
+  blocked: {
+    label: '站点拒绝非浏览器请求',
+    next: '换官方 JSON / 本地 HTML / 人工核验入口，不要重试'
+  },
   entry_redirect: { label: '入口是引导页', next: '请补该省专升本栏目 URL，再重新抓取' },
   no_table: { label: '没有可解析的表格', next: '疑似前端渲染或入口错，需人工补源' },
   unsupported_table: { label: '表格形状未适配', next: '需补解析器（类别 × 分数）后重新抓取' },
@@ -299,7 +304,7 @@ export function crawlFailureHint(
   error: string
 ): { code: CrawlFailureCode; label: string; next: string } | null {
   const match =
-    /^(network|entry_redirect|no_table|unsupported_table|no_text_layer|parse|decode|needs_seed)\s*[:：]/.exec(
+    /^(network|blocked|entry_redirect|no_table|unsupported_table|no_text_layer|parse|decode|needs_seed)\s*[:：]/.exec(
       String(error ?? '').trim()
     )
   if (!match) return null

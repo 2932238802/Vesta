@@ -2,7 +2,7 @@
 
 > 注：v2.08 起 `docs/` 已移出工作区；本文件历史条目中的 `docs/reference` 链接仅作历史，备份在 `_vesta-backups/docs-20261126-2010`。
 
-> 维护者：Doc 建任务；Dev 只更新状态与追溯矩阵 ｜ 状态：CR-006 G4 通过 ｜ 最近更新：2026-11-28
+> 维护者：Doc 建任务；Dev 只更新状态与追溯矩阵 ｜ 状态：CR-007 G2 开发完成（待评审） ｜ 最近更新：2026-11-28
 > 任务状态只用：TODO / DOING / DONE / BLOCKED / DROPPED
 
 ### T-001 备份并移除 zxg 追踪（状态：DONE）
@@ -383,3 +383,55 @@
 | AC-006-5 | CLI 只读输出关键字段、主库 hash/mtime 不变、缺库提示（`check:crawl` 第 7 节） | T-024 | 已验证 |
 | AC-006-6 | 用例覆盖自愈/续跑/单源/多源预算/deadline/重试边界/prune/CLI，接入 `check:crawl` 并纳入 `verify` | T-025 | 已验证 |
 | AC-006-7 | `npm run verify` EXIT=0；CI 46103081417 success；版本 v2.10 | T-025 | 已验证 |
+
+## CR-007 任务
+
+> 返工记录：2026-11-28 第 1 轮（G3 有条件通过，P2-1 / P2-2 + P3）。补齐内网判定编码变体（IPv4-mapped / `0.0.0.0` / `::` / NAT64）；多表重复 issue 写入 `crawl_documents.note` + `scoreline.parse_issue` 日志；补非法/缺失 Location、HTTPS→HTTP 拒绝、引导页第二跳 403 用例；document 记最终 URL 与真实 401/403。见 `reports/dev-2026-11-28-CR-007-抓取安全与解析去重-返工.md`。
+
+### T-026 逐跳重定向与下载限流（状态：DONE）
+
+- 来源：CR-007 / R-007（v1）
+- 关联需求：R-007 / AC-007-1、AC-007-2
+- 目标：fetchResource 手动 redirect ≤5，每跳 assertSafeUrl；Content-Length 预检 + 流式 10MB 中止；循环/非法 Location 明确失败。
+- 验证：本地 HTTP 重定向/私网/超大流夹具；请求次数断言。
+- 结果：`redirect:'manual'` + 最多 5 跳；每跳先 `assertSafeUrl`（抽出纯函数 `isPrivateHostname`，覆盖 IPv4 回环 / RFC1918 / CGNAT / `0.0.0.0`，IPv6 `::` / `::1` / `fc00::/7` / `fe80::/10` / 组播、IPv4-mapped / IPv4-compatible / NAT64）；私网 Location 在第二次请求前拒绝（`/ssrf/internal` 命中 0 次，含 `[::ffff:127.0.0.1]` 变体）；循环 / 超 5 跳 / 缺失或非法 Location / 生产 HTTPS→HTTP 降级均明确失败；相对 Location 解析与正常 301/302 跳转可用；`Content-Length > 10MB` 直接拒绝，无长度时流式累计 >10MB 中止（`/size/stream` 不等待整包）。返回新增 `finalUrl`，`crawl_documents.url` 记实际最终地址，不破坏现有调用方。
+- 规模：M
+
+### T-027 403 失败码与提示（状态：DONE）
+
+- 来源：CR-007 / R-007（v1）
+- 关联需求：R-007 / AC-007-3
+- 目标：401/403 → `blocked`，不重试；共享 hints 与 source/run 错误一致。
+- 验证：本地 403 夹具；失败码/hints 断言。
+- 结果：`CrawlFailureCode` / `CRAWL_FAILURE_HINTS` / `crawlFailureHint` 增加 `blocked`；`blockedStatusOf()` 把 401/403 映射 `blocked`（含引导页第二跳），不重试；`crawl_documents.error`、run message、来源 `last_error` 均以 `blocked:` 开头，提示换官方 JSON / 本地 HTML / 人工核验入口；`crawl_documents.http_status` 记真实 401/403。
+- 规模：S
+
+### T-028 多表指标去重（状态：DONE）
+
+- 来源：CR-007 / R-007（v1）
+- 关联需求：R-007 / AC-007-4
+- 目标：html 解析跨表按唯一键去重，保留第一条并记 issue；不抛唯一键错误。
+- 验证：多表重复/不同值 fixture；批次写入断言。
+- 结果：`dedupeTableMetrics()` 按 `subjectCode|isMinimum|minimumType` 跨表去重，保留第一条并追加 `duplicate_table_metric` issue（含两条值）；成功抓取时 issues 合并进 `crawl_documents.note`（截断）并写 `scoreline.parse_issue` 结构化日志；真实抓取重复总分行写入成功、指标仅 1 条、`parse_status=parsed`、note 含 duplicate issue 且无 network / 唯一键误报。
+- 规模：M
+
+### T-029 测试、文档与版本（状态：DONE）
+
+- 来源：CR-007 / R-007（v1）
+- 关联需求：R-007 / AC-007-5~7
+- 目标：用例接入；v2.11；STATUS/CHANGELOG/大脑。
+- 验证：`npm run verify`；CI。
+- 结果：`check:score` 新增多表去重用例；`check:crawl` 新增重定向 / 限流 / blocked / 多表写入 4 节用例；`npm run verify` EXIT=0；版本 2.11.0 / v2.11；CHANGELOG、STATUS、00-overview、03-design、05-decisions、PROJECT_BRAIN 已同步。
+- 规模：S
+
+## CR-007 AC ↔ 验证追溯矩阵
+
+| AC | 验证方式 | 对应任务 | 状态 |
+|---|---|---|---|
+| AC-007-1 | 私网重定向 / IPv4-mapped / 循环 / 超 5 跳 / 非法 Location，0 内网请求（`check:crawl` 5b） | T-026 | 已验证 |
+| AC-007-2 | Content-Length / 流式 >10MB 中止（`check:crawl` 5c） | T-026 | 已验证 |
+| AC-007-3 | 403 → blocked，不重试，hints；含引导页第二跳 403（`check:crawl` 5d） | T-027 | 已验证 |
+| AC-007-4 | 多表重复去重 + issue 写入 note / 日志，无库错误（`check:score` + `check:crawl` 5e） | T-028 | 已验证 |
+| AC-007-5 | 正常跳转 / 分派 / 预算回归（`check:score` / `check:crawl` / `check:scoreline`） | T-026~T-028 | 已验证 |
+| AC-007-6 | 用例接入 `check:score` / `check:crawl` | T-029 | 已验证 |
+| AC-007-7 | `npm run verify` EXIT=0；版本 v2.11；CI 待推送后触发 | T-029 | 已验证（本地；CI 待触发） |

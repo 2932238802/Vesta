@@ -35,6 +35,13 @@ const PROVINCIAL_PAGE = `<!doctype html>
 
 const EMPTY_PAGE = '<!doctype html><html><body><p>空页</p></body></html>'
 
+const DUPLICATE_TABLES_PAGE = `<!doctype html>
+<html><head><meta charset="utf-8"><title>2025年福建省专升本最低控制分数线</title></head>
+<body>
+<table><tr><th>科目</th><th>分数</th></tr><tr><td>总分</td><td>180</td></tr><tr><td>英语</td><td>60</td></tr></table>
+<table><tr><th>科目</th><th>分数</th></tr><tr><td>总分</td><td>200</td></tr></table>
+</body></html>`
+
 function linksPage(prefix: string, count: number): string {
   const links = Array.from(
     { length: count },
@@ -51,6 +58,8 @@ function hit(pathname: string): number {
 }
 
 const server = http.createServer((request, response) => {
+  // 客户端在限流 / 私网拒绝时可能提前断开，吞掉 EPIPE，避免夹具用例被未处理错误打断。
+  response.on('error', () => {})
   const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname
   const count = hit(pathname)
   const send = (status: number, body: string, headers: Record<string, string> = {}): void => {
@@ -113,6 +122,107 @@ const server = http.createServer((request, response) => {
     send(count === 1 ? 429 : 200, count === 1 ? 'slow' : PROVINCIAL_PAGE)
     return
   }
+  if (pathname === '/redirect/relative/start') {
+    send(302, '', { location: '/redirect/relative/target' })
+    return
+  }
+  if (pathname === '/redirect/relative/target') {
+    send(200, PROVINCIAL_PAGE)
+    return
+  }
+  if (pathname === '/redirect/absolute/start') {
+    send(301, '', { location: '/line.html' })
+    return
+  }
+  if (pathname === '/redirect/loop-a') {
+    send(302, '', { location: '/redirect/loop-b' })
+    return
+  }
+  if (pathname === '/redirect/loop-b') {
+    send(302, '', { location: '/redirect/loop-a' })
+    return
+  }
+  if (/^\/redirect\/chain\/\d+$/.test(pathname)) {
+    const index = Number(pathname.slice('/redirect/chain/'.length))
+    send(302, '', { location: `/redirect/chain/${index + 1}` })
+    return
+  }
+  if (pathname === '/ssrf/start') {
+    send(302, '', { location: `${baseUrl}/ssrf/internal` })
+    return
+  }
+  if (pathname === '/ssrf/mapped') {
+    const port = (server.address() as { port: number }).port
+    send(302, '', { location: `http://[::ffff:127.0.0.1]:${port}/ssrf/internal` })
+    return
+  }
+  if (pathname === '/ssrf/internal') {
+    send(200, PROVINCIAL_PAGE)
+    return
+  }
+  if (pathname === '/redirect/no-location') {
+    response.writeHead(302)
+    response.end()
+    return
+  }
+  if (pathname === '/redirect/invalid-location') {
+    send(302, '', { location: 'http://[::1' })
+    return
+  }
+  if (pathname === '/guide/blocked') {
+    send(
+      200,
+      '<!doctype html><html><head><meta http-equiv="refresh" content="0; url=/guide/blocked-target"></head><body></body></html>'
+    )
+    return
+  }
+  if (pathname === '/guide/blocked-target') {
+    send(403, 'no')
+    return
+  }
+  if (pathname === '/blocked/forbidden') {
+    send(403, 'no')
+    return
+  }
+  if (pathname === '/blocked/unauthorized') {
+    send(401, 'no')
+    return
+  }
+  if (pathname === '/duplicate/tables.html') {
+    send(200, DUPLICATE_TABLES_PAGE)
+    return
+  }
+  if (pathname === '/size/declared') {
+    const declared = 11 * 1024 * 1024
+    response.writeHead(200, {
+      'content-type': 'application/octet-stream',
+      'content-length': String(declared)
+    })
+    // 客户端应只凭 Content-Length 就中止，不读正文。
+    response.end(Buffer.alloc(declared, 'a'))
+    return
+  }
+  if (pathname === '/size/stream') {
+    // 无 Content-Length（chunked）：持续推流，客户端必须累计 >10MB 时主动中止；
+    // 若错误地读完整个响应，会一直推到 64MB 或超时。
+    response.writeHead(200, { 'content-type': 'application/octet-stream' })
+    const chunk = Buffer.alloc(1024 * 1024, 'a')
+    let sent = 0
+    const timer = setInterval(() => {
+      if (response.destroyed) {
+        clearInterval(timer)
+        return
+      }
+      response.write(chunk)
+      sent += chunk.length
+      if (sent > 64 * 1024 * 1024) {
+        clearInterval(timer)
+        response.end()
+      }
+    }, 2)
+    response.on('close', () => clearInterval(timer))
+    return
+  }
   send(404, 'not found')
 })
 await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()))
@@ -139,7 +249,9 @@ const { initSchema } = await import('../db/schema')
 const { db } = await import('../db/connection')
 const { enqueueCrawl, runNext } = await import('./crawl')
 const { recoverCrawlRuns } = await import('./crawl-recovery')
-const { assertSafeUrl, fetchResource, parseRetryAfter } = await import('./crawl-fetch')
+const { assertSafeUrl, fetchResource, isPrivateHostname, parseRetryAfter, resolveRedirectTarget } =
+  await import('./crawl-fetch')
+const { CRAWL_FAILURE_HINTS, crawlFailureHint } = await import('../../../shared/src/score-line')
 const { pruneCrawlDocuments } = await import('./crawl-scheduler')
 const { upsertSource } = await import('./sources')
 const { log } = await import('../log')
@@ -384,6 +496,275 @@ try {
   assert.ok(statusRetry && Number(statusRetry.delayMs) === 1000, '5xx 首轮退避应为 1s')
   log.info = originalInfo
   console.log('✓ 重试：500/429/网络错误按退避重试，403/404 不重试，Retry-After 边界与 assertSafeUrl 已覆盖')
+
+  // ---------- 5b. 重定向安全：逐跳校验 / 循环 / 超跳 / 相对 Location / 正常跳转 ----------
+  assert.equal(isPrivateHostname('127.0.0.1'), true)
+  assert.equal(isPrivateHostname('10.1.2.3'), true)
+  assert.equal(isPrivateHostname('192.168.1.1'), true)
+  assert.equal(isPrivateHostname('169.254.1.1'), true)
+  assert.equal(isPrivateHostname('172.16.0.1'), true)
+  assert.equal(isPrivateHostname('172.31.255.1'), true)
+  assert.equal(isPrivateHostname('172.32.0.1'), false)
+  assert.equal(isPrivateHostname('[::1]'), true)
+  assert.equal(isPrivateHostname('printer.local'), true)
+  // P2-1：编码变体与特殊地址（WHATWG URL 会把 ::ffff:127.0.0.1 规范化为 [::ffff:7f00:1]）。
+  for (const host of [
+    '0',
+    '0.0.0.0',
+    '::',
+    '[::]',
+    '::ffff:127.0.0.1',
+    '[::ffff:7f00:1]',
+    '[::ffff:10.0.0.1]',
+    '[::ffff:a00:1]',
+    '[64:ff9b::7f00:1]',
+    '[64:ff9b::a00:1]',
+    '[64:ff9b:1::1]',
+    '[::7f00:1]',
+    '[fc00::1]',
+    '[fe80::1]',
+    '[ff02::1]'
+  ]) {
+    assert.equal(isPrivateHostname(host), true, `${host} 应判为内网`)
+  }
+  // 公网地址与域名仍放行。
+  for (const host of [
+    '8.8.8.8',
+    '223.5.5.5',
+    '[2400:3200::1]',
+    '[64:ff9b::808:808]',
+    'www.zjzs.net',
+    'example.com'
+  ]) {
+    assert.equal(isPrivateHostname(host), false, `${host} 不应判为内网`)
+  }
+
+  // 重定向目标解析：非法 / 缺失由 fetchOnce 与用例共同覆盖；HTTPS→HTTP 生产拒绝。
+  assert.throws(
+    () => resolveRedirectTarget('https://www.zjzs.net/a', 'http://www.zjzs.net/b'),
+    /HTTPS→HTTP/
+  )
+  assert.doesNotThrow(() =>
+    resolveRedirectTarget('https://www.zjzs.net/a', 'http://www.zjzs.net/b', {
+      allowDowngrade: true
+    })
+  )
+  assert.throws(
+    () =>
+      resolveRedirectTarget('http://www.zjzs.net/a', 'http://[::1]/', {
+        allowPrivate: () => false
+      }),
+    /不允许抓取内网地址/
+  )
+  assert.throws(
+    () => resolveRedirectTarget('http://www.zjzs.net/a', 'http://[::1', {}),
+    /Location 不是合法 URL/
+  )
+
+  const internalBefore = hits.get('/ssrf/internal') ?? 0
+  await assert.rejects(
+    // 只允许入口这一跳；重定向到内网地址必须在发起第二次请求前被拒绝。
+    fetchResource(`${baseUrl}/ssrf/start`, {
+      allowPrivate: (target) => target.pathname === '/ssrf/start'
+    }),
+    /不允许抓取内网地址/
+  )
+  assert.equal(hits.get('/ssrf/start'), 1, '入口只应请求 1 次')
+  assert.equal(hits.get('/ssrf/internal') ?? 0, internalBefore, '私网 Location 不应发出第二次请求')
+
+  const mappedBefore = hits.get('/ssrf/internal') ?? 0
+  await assert.rejects(
+    // IPv4-mapped IPv6（[::ffff:127.0.0.1]）同样必须在第二次请求前拒绝。
+    fetchResource(`${baseUrl}/ssrf/mapped`, {
+      allowPrivate: (target) => target.pathname === '/ssrf/mapped'
+    }),
+    /不允许抓取内网地址/
+  )
+  assert.equal(hits.get('/ssrf/mapped'), 1, '入口只应请求 1 次')
+  assert.equal(
+    hits.get('/ssrf/internal') ?? 0,
+    mappedBefore,
+    'IPv4-mapped IPv6 私网 Location 不应发出第二次请求'
+  )
+
+  await assert.rejects(fetchResource(`${baseUrl}/redirect/no-location`), /缺少 Location/)
+  assert.equal(hits.get('/redirect/no-location'), 1, '缺失 Location 不应重试')
+  await assert.rejects(
+    fetchResource(`${baseUrl}/redirect/invalid-location`),
+    /Location 不是合法 URL/
+  )
+  assert.equal(hits.get('/redirect/invalid-location'), 1, '非法 Location 不应重试')
+
+  await assert.rejects(fetchResource(`${baseUrl}/redirect/loop-a`), /循环重定向/)
+  assert.equal(hits.get('/redirect/loop-a'), 1)
+  assert.equal(hits.get('/redirect/loop-b'), 1, '循环只应跟到发现重复为止')
+
+  await assert.rejects(fetchResource(`${baseUrl}/redirect/chain/0`), /超过 5 跳重定向/)
+  assert.equal(hits.get('/redirect/chain/5'), 1, '最多请求到第 5 跳')
+  assert.equal(hits.get('/redirect/chain/6') ?? 0, 0, '超 5 跳后不再请求下一跳')
+
+  const relative = await fetchResource(`${baseUrl}/redirect/relative/start`)
+  assert.equal(relative.httpStatus, 200)
+  assert.equal(
+    relative.finalUrl,
+    `${baseUrl}/redirect/relative/target`,
+    '相对 Location 应解析为绝对 URL'
+  )
+  assert.match(relative.contentType, /text\/html/)
+  assert.ok(new TextDecoder().decode(relative.content).includes('最低控制分数线'))
+
+  const absolute = await fetchResource(`${baseUrl}/redirect/absolute/start`)
+  assert.equal(absolute.httpStatus, 200, '正常 301 跳转应成功')
+  assert.equal(absolute.finalUrl, `${baseUrl}/line.html`)
+  console.log(
+    '✓ 重定向：逐跳校验拒私网（0 次内网请求）、循环 / 超 5 跳明确失败、相对 Location 与正常跳转可用'
+  )
+
+  // ---------- 5c. 下载限流：Content-Length / 流式累计 >10MB 立即中止 ----------
+  const declaredStarted = Date.now()
+  await assert.rejects(fetchResource(`${baseUrl}/size/declared`), /超过 10MB/)
+  assert.ok(Date.now() - declaredStarted < 5000, '有 Content-Length 时应在读正文前拒绝')
+  assert.equal(hits.get('/size/declared'), 1, '超大响应不应重试')
+
+  const streamStarted = Date.now()
+  await assert.rejects(fetchResource(`${baseUrl}/size/stream`), /超过 10MB/)
+  assert.ok(Date.now() - streamStarted < 10000, '无 Content-Length 时应边读边中止，而不是等整包')
+  assert.equal(hits.get('/size/stream'), 1, '超大流式响应不应重试')
+  console.log('✓ 下载限流：Content-Length 预检 + 流式累计 >10MB 中止，均不重试')
+
+  // ---------- 5d. 401/403 → blocked，不重试，文档 / 来源错误带机读前缀 ----------
+  for (const scenario of [
+    { province: '辽宁', path: '/blocked/forbidden', status: 403 },
+    { province: '黑龙江', path: '/blocked/unauthorized', status: 401 }
+  ]) {
+    upsertSource({
+      name: `可靠性夹具-${scenario.province}`,
+      url: `${baseUrl}${scenario.path}`,
+      exam: 'upgrade',
+      province: scenario.province,
+      parserId: 'html-table@1',
+      discoverDepth: 0,
+      verified: true,
+      enabled: true
+    })
+    const blockedRun = enqueueCrawl({
+      province: scenario.province,
+      years: [2025],
+      trigger: 'manual'
+    })
+    assert.ok(!blockedRun.code, `${scenario.province} 应能入队：${blockedRun.code ?? ''}`)
+    await runNext({ requestIntervalMs: 0 })
+    const blockedRow = runRow(blockedRun.run.id)
+    assert.equal(blockedRow.status, 'failed', `${scenario.status} 应判失败`)
+    assert.match(blockedRow.message, /^blocked:/, 'run 失败信息应以 blocked: 开头')
+    const blockedDoc = db
+      .prepare(
+        'SELECT http_status, error FROM crawl_documents WHERE run_id = ? ORDER BY fetched_at DESC LIMIT 1'
+      )
+      .get(blockedRun.run.id) as { http_status: number; error: string }
+    assert.equal(Number(blockedDoc.http_status), scenario.status, '应记录真实 401/403 状态码')
+    assert.match(blockedDoc.error, /^blocked:/, 'crawl_documents.error 应以 blocked: 开头')
+    const blockedSource = db
+      .prepare('SELECT last_error FROM scoreline_sources WHERE province = ?')
+      .get(scenario.province) as { last_error: string }
+    assert.match(blockedSource.last_error, /^blocked:/, '来源 last_error 应以 blocked: 开头')
+    assert.equal(hits.get(scenario.path), 1, `${scenario.status} 不应重试`)
+  }
+
+  // 引导页第二跳 403：入口 200 → meta refresh 目标 403，也应映射 blocked、不重试。
+  upsertSource({
+    name: '可靠性夹具-广西',
+    url: `${baseUrl}/guide/blocked`,
+    exam: 'upgrade',
+    province: '广西',
+    parserId: 'html-table@1',
+    discoverDepth: 0,
+    verified: true,
+    enabled: true
+  })
+  const guideRun = enqueueCrawl({ province: '广西', years: [2025], trigger: 'manual' })
+  assert.ok(!guideRun.code, `引导页 blocked 用例应能入队：${guideRun.code ?? ''}`)
+  await runNext({ requestIntervalMs: 0 })
+  const guideRow = runRow(guideRun.run.id)
+  assert.equal(guideRow.status, 'failed', '引导页第二跳 403 应判失败')
+  assert.match(guideRow.message, /^blocked:/, '引导页 blocked 的 run 信息应以 blocked: 开头')
+  const guideDoc = db
+    .prepare('SELECT parse_status, http_status, error FROM crawl_documents WHERE run_id = ?')
+    .get(guideRun.run.id) as { parse_status: string; http_status: number; error: string }
+  assert.equal(guideDoc.parse_status, 'failed')
+  assert.equal(Number(guideDoc.http_status), 403, '引导页第二跳应记录真实 403')
+  assert.match(guideDoc.error, /^blocked:/, '引导页第二跳 document.error 应以 blocked: 开头')
+  const guideSource = db
+    .prepare('SELECT last_error FROM scoreline_sources WHERE province = ?')
+    .get('广西') as { last_error: string }
+  assert.match(guideSource.last_error, /^blocked:/, '引导页来源 last_error 应以 blocked: 开头')
+  assert.equal(hits.get('/guide/blocked-target'), 1, '引导页第二跳 403 不应重试')
+
+  assert.deepEqual(crawlFailureHint('blocked: HTTP 403'), {
+    code: 'blocked',
+    ...CRAWL_FAILURE_HINTS.blocked
+  })
+  assert.match(CRAWL_FAILURE_HINTS.blocked.next, /官方 JSON/)
+  console.log('✓ 403/401：映射 blocked、请求 1 次、不重试，run / document / 来源错误一致')
+
+  // ---------- 5e. 多表重复指标：去重后写入成功，不误报 network ----------
+  upsertSource({
+    name: '可靠性夹具-福建',
+    url: `${baseUrl}/duplicate/tables.html`,
+    exam: 'upgrade',
+    province: '福建',
+    parserId: 'html-table@1',
+    discoverDepth: 0,
+    verified: true,
+    enabled: true
+  })
+  const duplicateRun = enqueueCrawl({ province: '福建', years: [2025], trigger: 'manual' })
+  assert.ok(!duplicateRun.code, `多表去重用例应能入队：${duplicateRun.code ?? ''}`)
+  const parseIssues: Record<string, unknown>[] = []
+  const originalParseInfo = log.info
+  log.info = (message, fields) => {
+    if (message === 'scoreline.parse_issue') parseIssues.push(fields ?? {})
+    originalParseInfo(message, fields)
+  }
+  await runNext({ requestIntervalMs: 0 })
+  log.info = originalParseInfo
+  const duplicateRow = runRow(duplicateRun.run.id)
+  assert.equal(duplicateRow.status, 'success', '多表重复科目不应让整页失败')
+  assert.equal(Number(duplicateRow.saved), 1)
+  const duplicateDoc = db
+    .prepare('SELECT parse_status, error, note, url FROM crawl_documents WHERE run_id = ?')
+    .get(duplicateRun.run.id) as {
+    parse_status: string
+    error: string
+    note: string
+    url: string
+  }
+  assert.equal(duplicateDoc.parse_status, 'parsed')
+  assert.equal(duplicateDoc.error, '', '不应误报 network / 唯一键错误')
+  assert.match(
+    duplicateDoc.note,
+    /duplicate_table_metric/,
+    'document.note 应保留 duplicate_table_metric issue'
+  )
+  assert.equal(
+    duplicateDoc.url,
+    `${baseUrl}/duplicate/tables.html`,
+    '无重定向时应记录实际抓取地址'
+  )
+  assert.ok(
+    parseIssues.some((event) => String(event.issue).includes('duplicate_table_metric')),
+    '成功路径应写 scoreline.parse_issue 结构化日志'
+  )
+  const duplicateMetrics = db
+    .prepare(
+      `SELECT m.subject_code, m.value FROM scoreline_metrics m
+       JOIN scoreline_batches b ON b.id = m.batch_id
+       WHERE b.source_name = '可靠性夹具-福建' AND m.subject_code = 'total'`
+    )
+    .all() as unknown as { subject_code: string; value: number }[]
+  assert.equal(duplicateMetrics.length, 1, '写入后该科目只应有 1 条指标')
+  assert.equal(Number(duplicateMetrics[0].value), 180, '保留第一张表的值')
+  console.log('✓ 多表重复：写入成功、指标只 1 条、无唯一键 / network 误报')
 
   // ---------- 6. prune 90 天快照：旧行 + 旧文件删除，新行 + 新文件保留，结构化分数线不动 ----------
   const pruneDir = path.join(tempDir, 'prune-fixture')

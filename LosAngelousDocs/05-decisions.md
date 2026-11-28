@@ -104,3 +104,18 @@
 - 结论：选 A。启动时把所有 `running` 标 `failed`（message 以 `stale:` 开头）并续跑 `queued`；单源最多 10 页（整轮仍 30）；deadline 每页检查，超时只停当前源；网络错误 / 429 / 5xx 重试 2 次（1s/3s），429 尊重 `Retry-After` ≤60s，403/404 不重试；快照启动 + 每 24h 清理；新增只读 `scripts/scoreline-crawl-status.ts`。
 - 影响：`server/src/score-lines/{crawl,crawl-fetch,crawl-recovery,crawl-scheduler}.ts`、`server/src/index.ts`、`scripts/scoreline-crawl-status.ts`、`package.json`（`check:crawl`）；解析、自动收录、查询口径不变。
 - 可逆性：全部为代码与常量级改动，可整体回滚；回滚后残留 `running` 会重新变成永久阻塞（需人工清库），已写入的抓取结果不受影响。单实例假设不变，多实例部署下自愈会误判其他实例的运行中任务。
+
+### D-010 抓取安全：逐跳重定向校验 + 流式限长 + `blocked` 失败码 + 多表去重
+
+- 日期：2026-11-28（产品版本 v2.11）
+- 背景：`fetchResource` 使用 `redirect:'follow'` 只校验初始 URL，公开站点可 302 到内网（SSRF）；10MB 限制在整包下载后才检查；多表页面跨表重复科目会撞 `scoreline_metrics` 唯一键并被误报成 `network`；403/WAF 只有通用 HTTP 错误，缺可操作结论。
+- 选项：
+  - A. 逐跳重定向 + 每跳校验 + 流式限长 + `blocked` 失败码 + 跨表去重（用户 G1 选择）。
+  - B. 只做 SSRF / 限流：多表与 403 问题仍在。
+  - C. 先做多表 / docx：安全风险继续暴露。
+  - D. 引入代理 / 每源 UA / 绕 WAF：范围过大，本轮不做。
+- 结论：选 A。`fetchResource` 改 `redirect:'manual'`，最多 5 跳，每跳先 `assertSafeUrl`；相对 `Location` 按当前 URL 解析；循环 / 超跳 / 非法 `Location` 明确失败；生产拒绝 HTTPS→HTTP（`SCORELINE_CRAWL_ALLOW_PRIVATE=1` 仅测试放行）。先看 `Content-Length`，>10MB 直接拒绝；否则流式读取，累计 >10MB 中止。HTTP 401/403 映射 `blocked`、不重试，`CRAWL_FAILURE_HINTS` 提示换官方 JSON / 本地 HTML / 人工核验入口。`html-table@1` 跨表按 `subjectCode|isMinimum|minimumType` 保留第一条并记 `duplicate_table_metric`。
+- 影响：`server/src/score-lines/crawl-fetch.ts`、`crawl.ts`、`parsers/{html,table,types}.ts`、`shared/src/score-line.ts`；新增 `check:crawl` 4 节与 `check:score` 1 节用例；解析规则、自动收录、查询、前端、调度预算不变。
+- 可逆性：代码与常量级改动，可整体回滚。已知残留：DNS rebinding（域名解析后才指向内网）本轮未处理；HTTPS→HTTP 降级在测试放行模式下仍允许。
+- 复核补强（2026-11-28 G3 返工）：`isPrivateHostname` 改用 `node:net.isIP` + 规范化解码，补齐 IPv4-mapped IPv6（`::ffff:0:0/96`）、IPv4-compatible（`::/96`）、`0.0.0.0` / `::` / `fc00::/7` / `fe80::/10` / 组播与 NAT64（`64:ff9b::/96`、`64:ff9b:1::/48`）；多表重复 issue 写入 `crawl_documents.note` 与 `scoreline.parse_issue` 日志；`crawl_documents.http_status` 记真实 401/403，`url` 记最终跳转地址。
+- 已知限制：压缩响应下 `Content-Length` 是压缩前 / 后大小依服务端而定，流式上限以实际收到的字节为准。

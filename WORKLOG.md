@@ -7,6 +7,12 @@
 | ID | 时间 | 角色 | 门禁 | CR / T | 做了什么 | 报告 | Commit | AUTH | 状态 |
 |---|---|---|---|---|---|---|---|---|---|
 <!-- worklog:rows -->
+| LOG-20261128-124722-2 | 2026-11-28 12:47:22 +0800 | steward | G3.5 | CR-007 / T-026~T-029 | G3.5 豁免：抓取安全单模块，G3 已覆盖 | - | - | - | 豁免 |
+| LOG-20261128-124722 | 2026-11-28 12:47:22 +0800 | steward | G2.5 | CR-007 / T-026~T-029 | 合并 CR-007 上下文增量（SSRF/限流/blocked/多表去重）到大脑 | - | - | - | 完成 |
+| LOG-20261128-124443 | 2026-11-28 12:44:43 +0800 | review | G3 | CR-007 / T-026 ~ T-029（G3 返工复审） | P2-1/P2-2 已闭环、P3-1~4 补测有效；check:crawl / verify / check-docs g3 独立复跑全绿，无新增 P0/P1 | [review-2026-11-28-CR-007-抓取安全与解析去重-复审.md](LosAngelousDocs/reports/review-2026-11-28-CR-007-抓取安全与解析去重-复审.md) | - | - | 通过 |
+| LOG-20261128-123641 | 2026-11-28 12:36:41 +0800 | dev | G2 | CR-007 / T-026 ~ T-029（G3 返工） | 修复 P2-1 内网地址编码变体、P2-2 duplicate issue 可追溯；补 P3 非法/缺失 Location、HTTPS→HTTP、引导页第二跳 403、finalUrl 与 blocked 状态码用例 | [dev-2026-11-28-CR-007-抓取安全与解析去重-返工.md](LosAngelousDocs/reports/dev-2026-11-28-CR-007-抓取安全与解析去重-返工.md) | - | - | 完成 |
+| LOG-20261128-122810 | 2026-11-28 12:28:10 +0800 | review | G3 | CR-007 / T-026 ~ T-029 | SSRF 逐跳校验 / 10MB 流式限长 / blocked 失败码 / 多表去重主体实现与回归均通过；仅 2 项 P2（内网地址覆盖不全、重复 issue 未持久化）与若干 P3，需后续小改 | [review-2026-11-28-CR-007-抓取安全与解析去重.md](LosAngelousDocs/reports/review-2026-11-28-CR-007-抓取安全与解析去重.md) | - | AUTH-20261128-003 | 有条件通过 |
+| LOG-20261128-121423 | 2026-11-28 12:14:22 +0800 | dev | G2 | CR-007 / T-026 ~ T-029 | 实现逐跳重定向 SSRF 校验、10MB 流式限长、401/403 blocked 失败码、多表指标去重，接入 check:score / check:crawl，版本 v2.11 | [dev-2026-11-28-CR-007-抓取安全与解析去重.md](LosAngelousDocs/reports/dev-2026-11-28-CR-007-抓取安全与解析去重.md) | - | - | 完成 |
 | LOG-20261128-115352 | 2026-11-28 11:53:52 +0800 | meta | G4 | CR-006 / T-022~T-025 | 独立复跑 check:crawl / verify / check:score，核实 CI 与 A1c/A2 台账；AC-006-1~7 均有证据；无 P0/P1；P2-1R 窄边界与状态文档陈旧作为 G4 附注 | [meta-2026-11-28-CR-006-抓取调度可靠性.md](LosAngelousDocs/reports/meta-2026-11-28-CR-006-抓取调度可靠性.md) | 7dd64fc | - | 通过 |
 | LOG-20261128-112914 | 2026-11-28 11:29:14 +0800 | steward | G4 | CR-006 / T-022~T-025 | 记录 CR-006 远端 push 的 A2 授权与 CI 触发事实 | [steward-2026-11-28-CR-006-push.md](LosAngelousDocs/reports/steward-2026-11-28-CR-006-push.md) | 3c7f130 | AUTH-20261128-002 | 完成 |
 | LOG-20261128-112834 | 2026-11-28 11:28:34 +0800 | steward | G3 | CR-006 / T-022~T-025 | G3 有条件通过；A1c AUTH-20261128-001；提交 d0cff71 | [review-2026-11-28-CR-006-抓取调度可靠性-复审.md](LosAngelousDocs/reports/review-2026-11-28-CR-006-抓取调度可靠性-复审.md) | d0cff71 | AUTH-20261128-001 | 接受 |
