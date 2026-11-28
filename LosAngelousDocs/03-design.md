@@ -83,4 +83,4 @@
 - **403**：HTTP 401/403 映射 `blocked` 失败码，不重试；`CRAWL_FAILURE_HINTS` 提示换官方 JSON / 本地 HTML / 人工核验入口；`crawl_documents.http_status` 记真实 401/403（含引导页第二跳）。
 - **多表去重**：`html-table@1` 跨表按 `subjectCode|isMinimum|minimumType` 去重；重复保留第一条并记 `duplicate_table_metric`，避免指标唯一键异常；不同值不静默覆盖。成功抓取时 issues 合并进 `crawl_documents.note`（截断 500 字符）并写 `scoreline.parse_issue` 结构化日志（runId / sourceId / url / issue），不改变 run 成功 / 失败判定。
 - **返回字段**：`fetchResource` 在 `content` / `contentType` / `httpStatus` 之外新增 `finalUrl`（最后一跳实际地址）；`crawl_documents.url` 记实际拿到正文的最终地址，失败路径仍记入口 URL。
-- **残留（本轮不做）**：DNS rebinding（域名首次解析后才指向内网）未处理；测试放行模式下仍允许 HTTPS→HTTP。压缩响应的 `Content-Length` 语义依服务端而定，流式上限以实际收到字节为准。
+- **残留（本轮不做）**：DNS rebinding 未处理；6to4/Teredo/IPv4-translated 等冷门封装未覆盖；测试放行模式下仍允许 HTTPS→HTTP；压缩响应 Content-Length 依服务端而定，流式上限以实际字节为准。
