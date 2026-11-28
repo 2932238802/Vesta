@@ -38,6 +38,21 @@ escalate_when:
 
 <!-- auth:rows -->
 
+## AUTH-20261128-002
+
+- 时间：2026-11-28 11:29:14 +0800
+- CR/T：CR-006 / T-022~T-025
+- 动作：push origin main（d0cff71 / 3c7f130）
+- 级别：A2
+- 策略条款：user-ratified
+- 证据：用户 2026-11-28 选择「推送并触发 CI」
+- 批准：steward
+- 范围：origin/main CR-006 commits
+- 有效期：随 CR-006 结束
+- 撤销：否
+- 幂等键：CR-006:push:A2
+
+
 ## AUTH-20261128-001
 
 - 时间：2026-11-28 11:26:45 +0800
